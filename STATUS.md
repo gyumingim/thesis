@@ -55,6 +55,16 @@
 
 ## 사용 기술 (확정된 것만)
 
+- 환경 API: **Gymnasium VectorEnv** (사용자 확정 2026-08-18). 자체 API 만들지 않음
+- RL 알고리즘: **PPO, 기존 구현 사용** (사용자 확정 2026-08-18). 자작하지 않음
+- PPO 구현: **CleanRL** 추천 (승인 대기)
+  - 근거: `cleanrl/ppo.py:162`가 `gym.vector.SyncVectorEnv`를 직접 사용 → 어댑터 불필요
+  - SB3는 자체 VecEnv API(공식문서: "not the same as Gym API", reset()이 튜플 아닌 obs만 반환)라
+    gymnasium.vector 지원이 issue #1745로 미해결 → 어댑터 필요하므로 탈락
+  - 라이선스 MIT (LICENSE 파일 직접 확인. GitHub API는 NOASSERTION으로 오표기)
+  - 단일 파일이라 두 시뮬에 동일 구현이 쓰였음을 `diff`로 증명 가능
+- 학습 프레임워크: PyTorch (미설치)
+- 로깅: TensorBoard (CleanRL에 `SummaryWriter` 내장)
 - 비교군: MetaDrive (Apache-2.0, pip 설치, 절차적 생성)
 - 현재 설치됨: gymnasium 1.2.3, numpy 1.26.4, networkx, pydantic
 - 미설치: torch, jax, numba
