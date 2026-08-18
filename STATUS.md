@@ -31,19 +31,21 @@
 
 ## 하고 있는 일
 
-- **스택 검토 (2026-08-18)** — 사용자 제안: Python+NumPy+Numba 자체 시뮬 → Custom RL Env API
-  → PPO/SAC/Custom RL → PyTorch → TensorBoard/W&B
-  - 동의: PyTorch+PPO(PufferLib이 CPU시뮬+PyTorch로 400k~4M SPS 달성), 시뮬 모듈 분해, TensorBoard
-  - **반대: Custom RL Environment API** — gymnasium 1.2.3의 VectorEnv/SyncVectorEnv/AsyncVectorEnv가
-    이미 설치돼 있음(확인 완료). 자체 API는 MetaDrive 어댑터를 추가로 요구하고 기존 PPO 구현 재사용을 막음
-  - **반대: Custom RL(알고리즘 자작)** — 시뮬 비교 논문에 RL 구현 차이가 교란변수로 들어감.
-    두 시뮬에 동일한 PPO 구현 하나(CleanRL 또는 SB3)를 써야 비교 성립
-  - **미해결 리스크: Numba 처리량 미지수.** PufferLib 문서 기준 NumPy벡터+PyTorch ~3,500 SPS /
-    순수파이썬 100k~500k / C 100M+. MetaDrive가 1000~1500 FPS이므로 3,500 SPS면 격차 2~3배에 그쳐
-    "연산량 압도" 전제가 무너짐. Numba가 어디 떨어지는지는 실측 필요
-- 시뮬레이터 스택 최종 확정 대기 (마이크로벤치 승인 대기)
-- RL 알고리즘 미정 (SAC는 리플레이버퍼 기반이라 대량병렬 이점 못 살림 + 연속행동 전용 → 주력 부적합)
-- 주행 과제 미정
+- **과제·행동·관측 확정 (2026-08-18, 사용자 제안 + MetaDrive 소스 대조)**
+  - 메인 과제 = **intersection**, 일반화 검증 = **bottleneck**(2차) — 사용자 확정
+  - 제어 = **연속** — 사용자 확정 → CleanRL `ppo_continuous_action.py` 확정
+  - 관측 = **저차원 벡터, 카메라 없음** — 사용자 확정
+  - 정정 1: 행동공간 3차원(steering/throttle/brake) → **2차원**
+    근거 `metadrive/policy/env_input_policy.py:62` = `Box(-1.0, 1.0, shape=(2,))`,
+    `base_vehicle.py:472` = `action[0]=steering, action[1]=throttle_brake`.
+    분리하면 비교군과 행동공간이 달라 비교 무효 + throttle/brake 동시입력이 정의 불가
+  - 정정 2: 관측의 "다른 차량 relative x/y/speed/heading"(객체 리스트) → **라이다 광선**
+    근거: `metadrive/obs/` 에 객체 리스트 관측이 없음(state_obs/image_obs/top_down_obs 뿐).
+    객체 리스트로 단순화하면 광선 캐스팅 비용이 측정에서 빠져 SPS 우위가 과장됨
+  - 신호등: 1차 실험 제외 (비교군에 없는 정보를 한쪽만 갖게 됨)
+- **마이크로벤치 승인 대기** — 사용자 설계에 다음 2건 보완 제안
+  - PyTorch GPU 텐서 구현을 측정 대상에 추가 (Numba를 버릴 경우의 폴백이 없으면 판단 불가)
+  - 차량 수 1024는 교차로에서 비현실적 → 차량 4/16/64, 환경 수를 주 스케일링 축(1~4096)으로
 
 ## 할 일
 

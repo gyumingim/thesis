@@ -12,11 +12,15 @@
 | 논문 주장 = 동일 wall-clock 비교 | ✅ 확정 (2026-08-18) |
 | 고충실도 비교군 = MetaDrive | 🟡 제안, 승인 대기 |
 | 교차 평가 추가 | 🟡 제안, 승인 대기 |
-| 시뮬 구현 스택 | 🟡 Python+NumPy+Numba 제안, 처리량 실측 대기 |
+| 시뮬 구현 스택 | 🟡 Python+NumPy, Numba는 벤치 후 채택 |
 | 환경 API = Gymnasium VectorEnv | ✅ 확정 (2026-08-18) |
 | RL = PPO, 기존 구현 재사용 | ✅ 확정 (2026-08-18) |
-| PPO 구현체 = CleanRL | 🟡 제안, 승인 대기 |
-| 행동공간(이산/연속) | ❌ 미정 — CleanRL 파일 선택이 여기에 종속 |
+| PPO 구현체 = CleanRL `ppo_continuous_action.py` | ✅ 확정 (연속제어 확정에 따라) |
+| 메인 과제 = intersection | ✅ 확정 (2026-08-18) |
+| 일반화 검증 과제 = bottleneck (2차) | ✅ 확정 (2026-08-18) |
+| 행동공간 = 연속 | ✅ 확정. 단 **3차원(steering/throttle/brake) → 2차원으로 정정** (아래 3.1) |
+| 관측 = 저차원 벡터 (카메라 없음) | ✅ 확정. 단 **객체리스트 → 라이다 광선으로 정정** (아래 3.1) |
+| 마이크로벤치 실행 | 🟡 승인 대기 |
 | 주행 과제 | ❌ 미정 |
 
 ---
@@ -57,7 +61,19 @@
   - ego 6차원: 좌/우 도로경계 거리, 차선 대비 헤딩차, 정규화 속도, 조향, 직전 행동, yaw rate
   - navi 10차원: 체크포인트 2개 × (진행방향 투영거리, 측방 투영거리, 곡률반경, 회전방향, 차선각)
   - 라이다 광선 거리
-- 행동 공간
+  - **주의: MetaDrive `metadrive/obs/` 에는 객체 리스트(다른 차량의 relative x/y/speed/heading)
+    관측이 존재하지 않는다.** state_obs / image_obs / top_down_obs 뿐이다.
+    따라서 우리 시뮬이 라이다 광선을 구현해 맞춘다. 객체 리스트로 단순화하면
+    광선 캐스팅 비용이 측정에서 빠져 처리량 우위가 과장되므로 채택하지 않는다.
+  - 신호등은 1차 실험에서 제외 (비교군 기본 설정에 없는 정보를 한쪽만 갖게 됨)
+- 행동 공간 — MetaDrive `env_input_policy.py:62`가 `gym.spaces.Box(-1.0, 1.0, shape=(2,))`.
+  `action[0]=steering`, `action[1]=throttle_brake`(음수=제동, `base_vehicle.py:472`).
+  **스로틀/브레이크를 별도 축으로 두면 비교군과 행동공간이 달라져 비교가 무효가 되고,
+  throttle=1 & brake=1 이라는 정의되지 않은 입력이 생긴다. 반드시 2차원으로 맞춘다.**
+- 종료조건 8종 (`metadrive_env.py:133`): CRASH_VEHICLE / CRASH_OBJECT / CRASH_BUILDING /
+  CRASH_HUMAN / CRASH_SIDEWALK / OUT_OF_ROAD / SUCCESS / MAX_STEP
+- 보상 상수 (`metadrive_env.py:72`): success_reward=10.0, out_of_road_penalty=5.0,
+  crash_vehicle_penalty=5.0, crash_object_penalty=5.0, crash_sidewalk_penalty=0.0
 - RL 알고리즘 구현 — **양쪽 시뮬에 완전히 동일한 CleanRL PPO 단일 파일**.
   래퍼 스택(`NormalizeObservation`/`NormalizeReward` 등)까지 동일해야 함
 - **양쪽 모두 벡터화** — 경량 시뮬만 병렬화하고 비교군을 단일 환경으로 두면 비교 무효.
