@@ -31,9 +31,19 @@
 
 ## 하고 있는 일
 
-- 시뮬레이터 스택 미정 (사용자 "나중에 말해줄게")
-- RL 알고리즘 미정 (사용자 "나중에 정하자")
-- 주행 과제(하이웨이 / 교차로 / 기타) 미정
+- **스택 검토 (2026-08-18)** — 사용자 제안: Python+NumPy+Numba 자체 시뮬 → Custom RL Env API
+  → PPO/SAC/Custom RL → PyTorch → TensorBoard/W&B
+  - 동의: PyTorch+PPO(PufferLib이 CPU시뮬+PyTorch로 400k~4M SPS 달성), 시뮬 모듈 분해, TensorBoard
+  - **반대: Custom RL Environment API** — gymnasium 1.2.3의 VectorEnv/SyncVectorEnv/AsyncVectorEnv가
+    이미 설치돼 있음(확인 완료). 자체 API는 MetaDrive 어댑터를 추가로 요구하고 기존 PPO 구현 재사용을 막음
+  - **반대: Custom RL(알고리즘 자작)** — 시뮬 비교 논문에 RL 구현 차이가 교란변수로 들어감.
+    두 시뮬에 동일한 PPO 구현 하나(CleanRL 또는 SB3)를 써야 비교 성립
+  - **미해결 리스크: Numba 처리량 미지수.** PufferLib 문서 기준 NumPy벡터+PyTorch ~3,500 SPS /
+    순수파이썬 100k~500k / C 100M+. MetaDrive가 1000~1500 FPS이므로 3,500 SPS면 격차 2~3배에 그쳐
+    "연산량 압도" 전제가 무너짐. Numba가 어디 떨어지는지는 실측 필요
+- 시뮬레이터 스택 최종 확정 대기 (마이크로벤치 승인 대기)
+- RL 알고리즘 미정 (SAC는 리플레이버퍼 기반이라 대량병렬 이점 못 살림 + 연속행동 전용 → 주력 부적합)
+- 주행 과제 미정
 
 ## 할 일
 
