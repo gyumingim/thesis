@@ -61,10 +61,16 @@
   - ego 6차원: 좌/우 도로경계 거리, 차선 대비 헤딩차, 정규화 속도, 조향, 직전 행동, yaw rate
   - navi 10차원: 체크포인트 2개 × (진행방향 투영거리, 측방 투영거리, 곡률반경, 회전방향, 차선각)
   - 라이다 광선 거리
-  - **주의: MetaDrive `metadrive/obs/` 에는 객체 리스트(다른 차량의 relative x/y/speed/heading)
-    관측이 존재하지 않는다.** state_obs / image_obs / top_down_obs 뿐이다.
-    따라서 우리 시뮬이 라이다 광선을 구현해 맞춘다. 객체 리스트로 단순화하면
-    광선 캐스팅 비용이 측정에서 빠져 처리량 우위가 과장되므로 채택하지 않는다.
+  - **관측 방식 = GT 객체 리스트 (사용자 결정, 2026-08-18).** 광선 캐스팅은 쓰지 않는다.
+    MetaDrive는 `lidar=dict(num_lasers=0, distance=50, num_others=N)` 설정만으로 이를 지원한다.
+    `Lidar.get_surrounding_objects()`(`lidar.py:169`)가 broad-phase `contactTest` 기반이라
+    광선과 무관하게 동작하기 때문 — 비교군을 개조하지 않아도 된다.
+    정규화 공식(`lidar.py:110`): `clip((rel_pos / perceive_distance + 1) / 2, 0, 1)`
+  - 이 결정으로 **"센서 시뮬레이션까지 경량화"라는 기여 주장은 포기한다.**
+    양쪽 모두 광선을 쏘지 않으므로 기여 범위가 물리·환경 표현의 경량화로 좁아진다.
+    광선 캐스팅 비교는 후속 확장으로 남긴다.
+  - 근거: 빠른 주행 시뮬의 사실상 표준이 GT 객체 리스트다.
+    HighJax 관측 = `(presence, x, y, vx, vy)`, GPUDrive도 객체 상태 기반.
   - 신호등은 1차 실험에서 제외 (비교군 기본 설정에 없는 정보를 한쪽만 갖게 됨)
 - 행동 공간 — MetaDrive `env_input_policy.py:62`가 `gym.spaces.Box(-1.0, 1.0, shape=(2,))`.
   `action[0]=steering`, `action[1]=throttle_brake`(음수=제동, `base_vehicle.py:472`).
@@ -96,6 +102,23 @@
 - 역전 시점: 경량 쪽이 고충실도 쪽을 넘어서는 시각 (존재한다면)
 - 실패 모드 분류: 경량 정책이 고충실도에서 깨지는 원인
   (후보: 타이어 슬립, 관성, 센서 노이즈, 교통 참여자 반응성 — 미확정)
+
+### 3.4 MetaDrive 실측 파라미터 (소스 확인 완료, 우리 시뮬이 복제할 값)
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| 제어 주기 dt | 0.1 s (`physics_world_step_size=2e-2` × `decision_repeat=5`) | `base_env.py:190-191` |
+| 물리 주기 | 0.02 s (50 Hz) | 동일 |
+| 에피소드 최대 길이 | 1000 스텝 (100초) | `metadrive_env.py:58` |
+| GT 감지 반경 | 50 m | `base_env.py:170` |
+| 관측 차량 수 `num_others` | **미정 — 결정 필요** (기본 0) | `base_env.py:170` |
+| 교통 밀도 / 모드 | 0.1 / `TrafficMode.Trigger` | `metadrive_env.py:37,39` |
+| 행동공간 | `Box(-1, 1, shape=(2,))` | `env_input_policy.py:62` |
+| (미사용) LiDAR | 240개, 50 m, 360° 균등 (`2π/num_lasers`, offset 0) | `base_env.py:170`, `distance_detector.py:177-179` |
+
+**미검증 항목:** `num_lasers=0` + `num_others=N` 조합이 실제로 동작하는지는 설치 후 확인해야 한다.
+`_get_lidar_range()`가 `num_lasers=0`에서 `None`을 반환하는 경로가 있어 호출부 가드에 의존한다.
+소스만 보고 단정하지 않는다.
 
 ## 4. 위협 요인 (미리 적어둔다)
 
