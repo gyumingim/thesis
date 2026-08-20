@@ -13,20 +13,33 @@ NUM_OTHERS = 8          # 사용자 결정 2026-08-18 (base_env.py:170 기본값
 HORIZON = 1000          # metadrive_env.py:58
 
 # --- 차량 물리 상수 ---
-# 주의: max_steering / max_accel 은 MetaDrive 소스에서 아직 확인하지 않은 값이다.
-# SPS(처리량)에는 영향이 없어 벤치에는 무해하나, 실제 시뮬 구현 시 반드시 대조할 것.
-WHEELBASE = 2.8         # m, 자전거 모델 축거 (미확인 — 실제 시뮬에서 대조 필요)
-MAX_STEER = 0.5         # rad (미확인)
-MAX_ACCEL = 5.0         # m/s^2 (미확인)
-MAX_SPEED = 30.0        # m/s
-COLLISION_RADIUS = 2.5  # m, 원-원 충돌 근사 (미확인)
+MAX_SPEED_KMH = 80.0    # pg_space.py:233 max_speed_km_h=ConstantSpace(80)
+MAX_SPEED = MAX_SPEED_KMH / 3.6          # 22.22 m/s
+import numpy as _np
+MAX_STEER = float(_np.deg2rad(40.0))     # pg_space.py:232 max_steering=ConstantSpace(40) [deg]
+WHEELBASE = 2.8         # m, 자전거 모델 축거 (MetaDrive 는 Bullet 강체 — 근사값, 논문에 명시)
+MAX_ACCEL = 5.0         # m/s^2 (근사값 — MetaDrive 는 엔진 힘 곡선. 논문에 명시)
+COLLISION_RADIUS = 2.5  # m, 원-원 충돌 근사 (MetaDrive 는 박스 충돌 — 근사, 논문에 명시)
 
-# --- 관측 차원 ---
-# ego 4 (speed, heading_sin, heading_cos, lane_offset) + navi 4 + 주변차 8대 x 4 (rel x,y,vx,vy)
-EGO_DIM = 4
-NAVI_DIM = 4
+# --- 관측 정규화 상수 (설치된 metadrive 0.4.3 소스 확인) ---
+NAVI_POINT_DIST = 50.0  # base_navigation.py:20
+CURVE_RADIUS_MAX = 60.0 # pg_space.py:286 BoxSpace(min=25, max=60)
+CURVE_ANGLE_MAX = 135.0 # pg_space.py:287 (deg)
+N_LANES = 1             # 편도 차선 수 (우리 맵)
+TOTAL_WIDTH = (N_LANES + 1) * 3.5   # state_obs.py:96 (MAX_LANE_NUM+1)*MAX_LANE_WIDTH
+
+# --- 관측 차원 (MetaDrive 51차원 정합; 벤치 커널의 구 40차원은 kernel_*.py 에만 남음) ---
+EGO_DIM = 9
+NAVI_DIM = 10
 OTHER_DIM = 4
-OBS_DIM = EGO_DIM + NAVI_DIM + NUM_OTHERS * OTHER_DIM   # = 40
+OBS_DIM = EGO_DIM + NAVI_DIM + NUM_OTHERS * OTHER_DIM   # = 51
+
+# --- 보상 (metadrive_env.py:72~78 확인값) ---
+DRIVING_REWARD = 1.0
+SPEED_REWARD = 0.1
+SUCCESS_REWARD = 10.0
+OUT_OF_ROAD_PENALTY = 5.0
+CRASH_VEHICLE_PENALTY = 5.0
 
 # --- 상태 레이아웃 ---
 # ego: (E, 4)  = x, y, heading, speed

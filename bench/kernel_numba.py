@@ -19,6 +19,8 @@ _DR = spec.DETECT_RADIUS
 _NO = spec.NUM_OTHERS
 _ARM = spec.ARM_LENGTH
 _HOR = spec.HORIZON
+# Table 1 벤치 당시의 40차원 레이아웃으로 동결 (env_numba.py 의 51차원과 무관)
+_KEGO, _KNAVI, _KOBS = 4, 4, 40
 
 
 @njit(parallel=True, cache=True)
@@ -91,7 +93,7 @@ def _step(ego, npc, t, action, obs, reward, done):
                     bd = d_ego[i]
                     best = i
             used[best] = 1
-            base = spec.EGO_DIM + spec.NAVI_DIM + s * 4
+            base = _KEGO + _KNAVI + s * 4
             if bd < _DR:
                 dx = npc[e, best, 0] - ego[e, 0]
                 dy = npc[e, best, 1] - ego[e, 1]
@@ -105,7 +107,7 @@ def _step(ego, npc, t, action, obs, reward, done):
                 obs[e, base + 2] = 0.0
                 obs[e, base + 3] = 0.0
         for s in range(k, _NO):
-            base = spec.EGO_DIM + spec.NAVI_DIM + s * 4
+            base = _KEGO + _KNAVI + s * 4
             for q in range(4):
                 obs[e, base + q] = 0.0
 
@@ -150,7 +152,7 @@ class IntersectionNumba:
         self.ego = self._np.ego
         self.npc = self._np.npc
         self.t = self._np.t
-        self.obs = np.zeros((self.E, spec.OBS_DIM), dtype=np.float32)
+        self.obs = np.zeros((self.E, 40), dtype=np.float32)
         self.reward = np.zeros(self.E, dtype=np.float32)
         self.done = np.zeros(self.E, dtype=np.bool_)
 
