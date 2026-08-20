@@ -14,10 +14,12 @@ import numpy as np
 from numba import njit, prange
 
 import spec
-from geometry import build_routes, build_sections, H, EGO_OFF, ROAD_ARM, ENTRY_LEN, IBOX
+from geometry_md import pack_routes, build_sections_md, build_rules
 
-_WPS, _NWP, _CUM, _TANG, _RLEN, _LOFF = build_routes()
-_SES, _SXY, _SINFO = build_sections()
+# 라운드6: MetaDrive X맵 실측 차선 네트워크 — 좌표계까지 MD 그대로.
+_WPS, _NWP, _CUM, _TANG, _RLEN, _LOFF = pack_routes()
+_SES, _SXY, _SINFO = build_sections_md()          # (36,4) 섹션 4개
+_RECTS, _BOX, _CELL, _DGRID = build_rules()
 
 DT_P = np.float32(spec.DT_PHYS)
 REP = spec.DECISION_REPEAT
@@ -38,10 +40,8 @@ NO = spec.NUM_OTHERS
 HOR = spec.HORIZON
 NPC_V = np.float32(8.0)      # NPC 목표 속도 m/s
 LOOKAHEAD = np.float32(6.0)  # 순수추종 전방주시거리 m
-HF = np.float32(H)                # 도로 반폭 10.5 (라운드2: MetaDrive 정합)
-ARMF = np.float32(ROAD_ARM)       # 물리 팔 길이 110
-HRW = np.float32(EGO_OFF)         # 주행차선 중심 ↔ 로드웨이 가장자리 = 5.25
-IBOXF = np.float32(IBOX)          # 교차로 영역 반크기 20.5
+RW = np.float32(10.5)             # 로드웨이 폭 (편도 3차선)
+OFFLANE_TOL = np.float32(1.95)    # 내부 거리장 on_lane 근사 임계
 MARGIN = np.float32(1.852 / 2)    # 차폭 절반 (MD WIDTH=1.852 실측)
 HALF_LEN = np.float32(2.3)        # 전장 절반 — MD는 차체 폴리곤으로 선 접촉 판정 (사망거리 1.26~1.35m 실측)
 LINE_W2 = np.float32(0.15)        # 차선 도색 반폭
@@ -138,7 +138,7 @@ def _spawn_ego(rs, e, ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act,
 
 
 @njit(parallel=True, cache=True)
-def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO,
+def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO, RECTS, BOX, CELL, DGRID,
           ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act, t, rs,
           npc, npc_rid, npc_wp, pending,
           action, obs, reward, term, trunc, flags):
@@ -256,7 +256,7 @@ def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO,
         # 좌측 가장자리(황색 중앙선) = 차선센터에서 lane_off, 우측(백색 실선) = 10.5-lane_off.
         lo = LOFF[rid]
         obs[e, 0] = _clip01((lo - lat) / TW)
-        obs[e, 1] = _clip01((HF - lo + lat) / TW)
+        obs[e, 1] = _clip01((RW - lo + lat) / TW)
         # MetaDrive 부호 규약 (2026-08-20 프로브로 실측 확정):
         #   lateral 은 오른쪽=+ (local_coordinates: 왼쪽 0.5m 이동 시 lat=-0.5)
         #   heading_diff 는 좌회전 시 감소 (정렬 0.500 → 좌 10° 0.413)
@@ -275,16 +275,15 @@ def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO,
 
         # navi 10 (node_network_navigation.py:288~345 공식)
         sec = 0
-        if lng > SES[rid, 0]:
-            sec = 1
-        if lng > SES[rid, 1]:
-            sec = 2
+        for j in range(3):
+            if lng > SES[rid, j]:
+                sec = j + 1
         fx = np.cos(eh)
         fy = np.sin(eh)
         rx = fy
         ry = -fx                                     # 우측 벡터
         for c in range(2):
-            sc = sec if c == 0 else (sec + 1 if sec < 2 else 2)
+            sc = sec if c == 0 else (sec + 1 if sec < 3 else 3)
             dxc = SXY[rid, sc, 0] - ex
             dyc = SXY[rid, sc, 1] - ey
             dn = np.sqrt(dxc * dxc + dyc * dyc)
@@ -346,27 +345,34 @@ def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO,
             trunc[e] = False
             flags[e] = 0
         else:
-            ax = ex if ex > 0 else -ex
-            ay = ey if ey > 0 else -ey
-            on_rd = (ax <= HF and ay <= IBOXF + ARMF) or (ay <= HF and ax <= IBOXF + ARMF) \
-                or (ax <= IBOXF and ay <= IBOXF)
-            # 라운드4: 실선 접촉 종료 (MD on_continuous_line_done=True, metadrive_env.py:88)
-            # 팔 구간에서 황색 중앙선(축距離<차폭/2) 또는 백색 가장자리선(>10.5-차폭/2) 접촉 시 즉사.
-            # 교차로 내부는 실선 없음(MD 커넥터 구간과 동일 취급).
-            # 라운드5: 중심점이 아니라 차체 모서리 기준 (MD 실측 사망거리 1.26~1.35m 재현)
-            # 유효 마진 = 반폭 + 전장절반×|sin(축과의 각)| + 선폭
-            line_kill = False
-            if ay > IBOXF and ax <= HF:          # 세로 팔 (축 = y)
-                dev = np.cos(eh)                 # 축 이탈 성분
-                m_eff = MARGIN + HALF_LEN * (dev if dev > 0 else -dev) + LINE_W2
-                line_kill = ax < m_eff or ax > HF - m_eff
-            elif ax > IBOXF and ay <= HF:        # 가로 팔 (축 = x)
-                dev = np.sin(eh)
-                m_eff = MARGIN + HALF_LEN * (dev if dev > 0 else -dev) + LINE_W2
-                line_kill = ay < m_eff or ay > HF - m_eff
+            # 라운드6: 실측 규칙 — 생존 = (로드웨이 rect 안 & 실선 비접촉) OR (교차로 거리장 합법).
+            # 두 판정을 OR 로 묶어 박스↔rect 이음새 오탐을 제거 (전문가 22회 가짜사망으로 발견).
+            rect_alive = False
+            for rrr in range(RECTS.shape[0]):
+                a0 = RECTS[rrr, 0]
+                a1 = RECTS[rrr, 1]
+                rlo = RECTS[rrr, 2]
+                rhi = RECTS[rrr, 3]
+                ax_ = RECTS[rrr, 4]
+                acoord = ex if ax_ < 0.5 else ey
+                latc = ey if ax_ < 0.5 else ex
+                if a0 - 0.01 <= acoord <= a1 + 0.01 and rlo <= latc <= rhi:
+                    dev = np.sin(eh) if ax_ < 0.5 else np.cos(eh)
+                    dev = dev if dev > 0 else -dev
+                    m_eff = MARGIN + HALF_LEN * dev + LINE_W2
+                    rect_alive = not (latc < rlo + m_eff or latc > rhi - m_eff)
+                    break
+            grid_alive = False
+            if BOX[0] < ex < BOX[1] and BOX[2] < ey < BOX[3]:
+                gi = np.int64((ex - BOX[0]) / CELL)
+                gj = np.int64((ey - BOX[2]) / CELL)
+                gi = 0 if gi < 0 else (DGRID.shape[0] - 1 if gi >= DGRID.shape[0] else gi)
+                gj = 0 if gj < 0 else (DGRID.shape[1] - 1 if gj >= DGRID.shape[1] else gj)
+                grid_alive = DGRID[gi, gj] <= OFFLANE_TOL
+            line_kill = not (rect_alive or grid_alive)
             crashed = min_d < CR
             arrived = lng >= RLEN[rid] - np.float32(2.0)
-            out_road = ((not on_rd) or line_kill) and (not arrived)
+            out_road = line_kill and (not arrived)
             t[e] += 1
             timeout = t[e] >= HOR
 
@@ -429,6 +435,7 @@ class IntersectionEnv:
 
     def step(self, action):
         _step(_WPS, _NWP, _CUM, _TANG, _RLEN, _LOFF, _SES, _SXY, _SINFO,
+              _RECTS, _BOX, _CELL, _DGRID,
               self.ego, self.ego_rid, self.ego_wp, self.ego_long_last, self.ego_prev_h,
               self.last_act, self.t, self.rs,
               self.npc, self.npc_rid, self.npc_wp, self.pending,

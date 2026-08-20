@@ -68,7 +68,7 @@ class Args:
     """the id of the environment (로깅용 라벨)"""
     sim: str = "custom"
     """어느 시뮬레이터로 학습할지: "custom" | "metadrive" (수정 3)"""
-    n_vehicles: int = 4
+    n_vehicles: int = 2
     """custom 시뮬의 NPC 수"""
     density: float = 0.1
     """metadrive 의 traffic_density"""
