@@ -12,6 +12,10 @@
 2. 에피소드 로깅: 원본의 "final_info"(구 gymnasium) → 1.2.3 벡터 API 의
    infos["episode"] + infos["_episode"] 마스크로 교체.
 3. Args 에 sim / n_vehicles / density 추가. 하이퍼파라미터는 원본 기본값 그대로.
+4. wall-clock 실험 지원: --time-budget-s (경과 시 학습 중단), --checkpoint-every-s
+   (주기적으로 agent 가중치 + NormalizeObservation 통계(obs_rms)를 저장 — 교차 평가 시
+   이 통계를 동결 적용해야 정책이 학습 때와 같은 입력 분포를 받는다).
+   알고리즘 로직(GAE·업데이트)은 여전히 무수정.
 
 리셋 의미론: 양쪽 모두 gymnasium 표준 NEXT_STEP (stateful 벡터 래퍼가 SAME_STEP 미지원).
 truncation 부트스트랩은 원본 CleanRL 과 동일하게 생략 — 두 시뮬에 같은 처리라 비교는 공정.
@@ -68,6 +72,10 @@ class Args:
     """custom 시뮬의 NPC 수"""
     density: float = 0.1
     """metadrive 의 traffic_density"""
+    time_budget_s: float = 0.0
+    """0 보다 크면 wall-clock 이 이 값(초)을 넘는 순간 학습 종료 (수정 4)"""
+    checkpoint_every_s: float = 0.0
+    """0 보다 크면 이 주기(초)로 체크포인트 저장 (수정 4)"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
@@ -133,6 +141,29 @@ def make_vector_env(sim, num_envs, seed, gamma, n_vehicles, density):
     envs = wv.NormalizeReward(envs, gamma=gamma)
     envs = wv.TransformReward(envs, lambda reward: np.clip(reward, -10, 10))
     return envs
+
+
+def find_obs_rms(envs):
+    """래퍼 체인에서 NormalizeObservation 의 running 통계를 찾는다 (수정 4)."""
+    import gymnasium.wrappers.vector as wv
+    e = envs
+    while e is not None:
+        if isinstance(e, wv.NormalizeObservation):
+            return e.obs_rms
+        e = getattr(e, "env", None)
+    return None
+
+
+def save_checkpoint(path, agent, envs, global_step, elapsed_s):
+    """agent 가중치 + obs 정규화 통계. 교차 평가는 이 통계를 동결 적용해야 한다 (수정 4)."""
+    rms = find_obs_rms(envs)
+    torch.save(
+        dict(model=agent.state_dict(), global_step=global_step, elapsed_s=elapsed_s,
+             obs_mean=None if rms is None else rms.mean.copy(),
+             obs_var=None if rms is None else rms.var.copy(),
+             obs_count=None if rms is None else float(rms.count)),
+        path,
+    )
 
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
@@ -228,7 +259,19 @@ if __name__ == "__main__":
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
+    ckpt_dir = f"runs/{run_name}/ckpt"
+    os.makedirs(ckpt_dir, exist_ok=True)
+    next_ckpt_at = args.checkpoint_every_s if args.checkpoint_every_s > 0 else float("inf")
+
     for iteration in range(1, args.num_iterations + 1):
+        elapsed = time.time() - start_time                       # 수정 4
+        if args.time_budget_s > 0 and elapsed > args.time_budget_s:
+            print(f"time budget reached: {elapsed:.0f}s @ global_step={global_step}")
+            break
+        if elapsed >= next_ckpt_at:
+            save_checkpoint(f"{ckpt_dir}/t{int(elapsed):06d}.pt", agent, envs, global_step, elapsed)
+            next_ckpt_at += args.checkpoint_every_s
+
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / args.num_iterations
@@ -381,5 +424,6 @@ if __name__ == "__main__":
             repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
             push_to_hub(args, episodic_returns, repo_id, "PPO", f"runs/{run_name}", f"videos/{run_name}-eval")
 
+    save_checkpoint(f"{ckpt_dir}/final.pt", agent, envs, global_step, time.time() - start_time)
     envs.close()
     writer.close()

@@ -31,14 +31,14 @@
 
 ## 하고 있는 일
 
-- **PPO 연결 완료 (2026-08-20)** — `bench/ppo.py` = CleanRL 고정 커밋(fe8d8a0) 최소 수정판
-  - 수정 3곳만 (env 생성/로깅/Args), 알고리즘 본체 원본 그대로, 원본 파일 보존으로 diff 증명 가능
-  - 리셋 의미론: 커널을 NEXT_STEP 으로 전환 (gymnasium 1.2.3 stateful 래퍼가 SAME_STEP 미지원)
-  - 스폰 즉사 버그 수정 (ego 반경 8m 회피)
-  - **학습 확인: 20만 스텝에서 리턴 4.0 → 71.8** (전문가 136, 무작위 −5 기준). MetaDrive 갈래도 구동 확인
-- **본실험 설계 방향**: custom 은 PPO 업데이트가 병목(env 1.35M vs 학습 6k SPS)
-  → num_envs 1024~2048 로 배치 확대 vs MetaDrive num_envs=12(병렬 정점), 동일 wall-clock
-- 다음: 본실험 — 동일 wall-clock 학습 곡선 + 교차 평가(custom 정책 → MetaDrive 평가)
+- **파일럿 본실험 실행 중 (2026-08-20 시작, ~2시간)** — 사용자 승인 (축소판)
+  - 구성: 30분 × 2시드 × {custom(1024env×64step), metadrive(12env×256step)}, **순차 실행**
+    (동시 실행은 CPU 경합으로 wall-clock 공정성 오염 — run_pilot.sh 주석 참조)
+  - PPO 업데이트 하이퍼파라미터는 양쪽 동일(CleanRL 기본). 수집 구성만 각자 처리량 최적
+  - ppo.py 수정 4: --time-budget-s / --checkpoint-every-s (agent + obs_rms 저장)
+  - evaluate.py: 동결 정규화 적용 교차 평가 (custom/metadrive 타깃, 결정론 정책)
+  - 종료 후: 4런 × 7체크포인트를 metadrive 시험장에서 평가 → wall-clock 성공률 곡선
+- 평가 시드(1000+)는 학습 시드(1,2)와 분리
 
 ## 할 일
 
