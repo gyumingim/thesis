@@ -64,3 +64,18 @@
 | Pseudo-LiDAR | depth map→점군→라이다 검출기 재사용 | 비채택 (2단 경로) |
 | DUSt3R/MASt3R/VGGT | 이미지 수 장→단일 패스 3D 복원, MASt3R는 metric ([NAVER](https://europe.naverlabs.com/blog/mast3r-matching-and-stereo-3d-reconstruction/), [VGGT](https://learnopencv.com/vggt-visual-geometry-grounded-transformer-3d-reconstruction/)) | 비채택 (장면 전체 복원은 과잉) |
 | 하드웨어(듀얼픽셀/미러/이벤트/defocus) | 센서 트릭 | 범위 밖 |
+
+## 5. v0 실측 결과 (2026-08-20, CARLA 20프레임/차량 42건, bench/percept_v0.py)
+
+완벽검출 가정(GT 3D박스 투영 = 2D박스) 하의 기하 방식 오차 상한:
+
+| 방법 | 종방향 MAE | 상대오차 중앙값 | p90 |
+|---|---|---|---|
+| 지면평면 (카메라 높이 보정) | 2.76m | **10.9%** | 27.7% |
+| 크기사전 (요각 보정) | 10.17m | 44.7% | 71.5% |
+
+- 지면평면이 문헌치(~12%)를 재현 — **v0 채택.** 단 카메라 높이 캘리브레이션 필수
+  (CARLA 스폰 높이 편차 미보정 시 중앙값 56%로 붕괴 — 1차 평가에서 실측).
+- 크기사전은 차종 혼합(소방차 2.9m vs 승용차 1.85m)에서 붕괴 — 클래스별 사전 없인 부적합.
+- 횡방향 MAE 0.61m.
+- **B4(노이즈 주입) 입력 통계**: 지면평면 σ = 0.89m(4~15m) / 1.00m(15~30) / 1.32m(30~50).
