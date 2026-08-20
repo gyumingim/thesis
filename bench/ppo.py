@@ -72,6 +72,8 @@ class Args:
     """custom 시뮬의 NPC 수"""
     density: float = 0.1
     """metadrive 의 traffic_density"""
+    md_num_scenarios: int = 100
+    """metadrive 학습 워커당 시나리오 수 (수정 5 — 파일럿: 1이면 같은 교통배치 암기)"""
     time_budget_s: float = 0.0
     """0 보다 크면 wall-clock 이 이 값(초)을 넘는 순간 학습 종료 (수정 4)"""
     checkpoint_every_s: float = 0.0
@@ -118,7 +120,7 @@ class Args:
     """the number of iterations (computed in runtime)"""
 
 
-def make_vector_env(sim, num_envs, seed, gamma, n_vehicles, density):
+def make_vector_env(sim, num_envs, seed, gamma, n_vehicles, density, md_num_scenarios=100):
     """수정 1: 두 시뮬 공용 벡터 환경 팩토리. 래퍼 스택은 원본 make_env 와 동일 구성."""
     import gymnasium.wrappers.vector as wv
     from gymnasium.vector import AsyncVectorEnv
@@ -129,7 +131,9 @@ def make_vector_env(sim, num_envs, seed, gamma, n_vehicles, density):
     elif sim == "metadrive":
         from md_env import MetaDriveGT
         def mk(i):
-            return lambda: MetaDriveGT(seed=seed + i, density=density)
+            # 워커별 1000 간격 시드 + 100 시나리오 (평가 시드 500000+ 과 비겹침)
+            return lambda: MetaDriveGT(seed=seed + i * 1000, density=density,
+                                       num_scenarios=md_num_scenarios)
         envs = AsyncVectorEnv([mk(i) for i in range(num_envs)])  # 기본 NEXT_STEP
     else:
         raise ValueError(sim)
@@ -238,7 +242,7 @@ if __name__ == "__main__":
 
     # env setup
     envs = make_vector_env(args.sim, args.num_envs, args.seed, args.gamma,
-                           args.n_vehicles, args.density)
+                           args.n_vehicles, args.density, args.md_num_scenarios)
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     agent = Agent(envs).to(device)
