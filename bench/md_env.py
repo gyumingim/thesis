@@ -46,11 +46,13 @@ class GTStateObservation(LidarStateObservation):
         )
 
 
-def base_config(seed=0, num_others=NUM_OTHERS, density=0.1):
+def base_config(seed=0, num_others=NUM_OTHERS, density=0.1, num_scenarios=1):
+    # 주의: MetaDrive 의 reset(seed=k) 는 난수 시드가 아니라 시나리오 인덱스이며
+    # [start_seed, start_seed+num_scenarios) 범위여야 한다 (base_env.py:921 assert).
     return dict(
         use_render=False, image_observation=False,
         map="X", traffic_density=density, horizon=1000,
-        num_scenarios=1, start_seed=seed, log_level=50,
+        num_scenarios=num_scenarios, start_seed=seed, log_level=50,
         agent_observation=GTStateObservation,
         vehicle_config=dict(lidar=dict(num_lasers=0, distance=50, num_others=num_others)),
     )
@@ -59,8 +61,8 @@ def base_config(seed=0, num_others=NUM_OTHERS, density=0.1):
 class MetaDriveGT(gym.Env):
     """GT 관측 MetaDrive. gymnasium VectorEnv 호환."""
 
-    def __init__(self, seed=0, num_others=NUM_OTHERS, density=0.1):
-        self._env = MetaDriveEnv(base_config(seed, num_others, density))
+    def __init__(self, seed=0, num_others=NUM_OTHERS, density=0.1, num_scenarios=1):
+        self._env = MetaDriveEnv(base_config(seed, num_others, density, num_scenarios))
         self.observation_space = self._env.observation_space
         self.action_space = self._env.action_space
 

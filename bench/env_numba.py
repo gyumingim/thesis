@@ -240,8 +240,12 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
         lat_rc = lat - np.float32(LANE_OFF)          # 도로 중심선 기준 (좌+)
         obs[e, 0] = _clip01((HF - lat_rc) / TW)      # 좌측 경계까지
         obs[e, 1] = _clip01((HF + lat_rc) / TW)      # 우측 경계까지
-        nx = -lty                                    # 차선 좌법선
-        ny = ltx
+        # MetaDrive 부호 규약 (2026-08-20 프로브로 실측 확정):
+        #   lateral 은 오른쪽=+ (local_coordinates: 왼쪽 0.5m 이동 시 lat=-0.5)
+        #   heading_diff 는 좌회전 시 감소 (정렬 0.500 → 좌 10° 0.413)
+        # → 우법선 기준으로 계산해야 전이 시 의미가 일치한다.
+        nx = lty                                     # 차선 우법선
+        ny = -ltx
         obs[e, 2] = _clip01((np.cos(eh) * nx + np.sin(eh) * ny + np.float32(1.0)) / np.float32(2.0))
         obs[e, 3] = _clip01((ev * np.float32(3.6) + np.float32(1.0)) / (VMAX_KMH + np.float32(1.0)))
         obs[e, 4] = _clip01((a0 + np.float32(1.0)) / np.float32(2.0))
@@ -249,7 +253,7 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
         obs[e, 6] = _clip01((a1 + np.float32(1.0)) / np.float32(2.0))
         dh = eh - ego_prev_h[e]
         obs[e, 7] = _clip01((dh if dh > 0 else -dh) / np.float32(0.1))
-        obs[e, 8] = _clip01((lat * np.float32(2.0) / LW + np.float32(1.0)) / np.float32(2.0))
+        obs[e, 8] = _clip01((-lat * np.float32(2.0) / LW + np.float32(1.0)) / np.float32(2.0))  # 우측=+
         ego_prev_h[e] = eh
 
         # navi 10 (node_network_navigation.py:288~345 공식)

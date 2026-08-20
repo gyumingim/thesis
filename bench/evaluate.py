@@ -72,7 +72,8 @@ def eval_custom(agent, mean, std, episodes, seed, device, n_vehicles=16):
 
 def eval_metadrive(agent, mean, std, episodes, seed, device, density=0.1):
     from md_env import MetaDriveGT
-    env = MetaDriveGT(seed=seed, density=density)
+    # 에피소드마다 다른 교통 시나리오 (reset seed = start_seed+ep 가 유효 범위이도록)
+    env = MetaDriveGT(seed=seed, density=density, num_scenarios=episodes)
     counts = np.zeros(5, int)
     rets, lens = [], []
     for ep in range(episodes):
