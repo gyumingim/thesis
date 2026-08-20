@@ -53,3 +53,14 @@
 | 비교/교사 | C. Depth Pro 또는 DA V2 | 제로샷 기준선, 필요 시 distillation |
 
 인지 오차 통계(거리별 σ)는 B4(RL 노이즈 주입 실험)의 입력이 된다.
+
+## 4. 대안적 접근 조사 (2026-08-20 추가)
+
+| 방법 | 발상 | 우리 활용 |
+|---|---|---|
+| 움직임 시차 (자기지도 비디오 depth) | 카메라 이동 = 공짜 스테레오, 스케일은 차속으로 | v2 후보 (연속 프레임 생성 가능) |
+| 크기 사전 | 거리 = f·실제폭/픽셀폭 (차폭 ~1.8m 상수) | **v0 제2 기준선으로 채택 권장** — 지면평면과 독립 단서라 교차검증 |
+| 타우 이론(TTC) | 팽창률에서 충돌시간 직접, 거리 불필요 ([PLOS](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1002625), [arXiv 2607.07885](https://arxiv.org/pdf/2607.07885)) | ablation 아이디어: 정책 관측에 거리 대신 τ |
+| Pseudo-LiDAR | depth map→점군→라이다 검출기 재사용 | 비채택 (2단 경로) |
+| DUSt3R/MASt3R/VGGT | 이미지 수 장→단일 패스 3D 복원, MASt3R는 metric ([NAVER](https://europe.naverlabs.com/blog/mast3r-matching-and-stereo-3d-reconstruction/), [VGGT](https://learnopencv.com/vggt-visual-geometry-grounded-transformer-3d-reconstruction/)) | 비채택 (장면 전체 복원은 과잉) |
+| 하드웨어(듀얼픽셀/미러/이벤트/defocus) | 센서 트릭 | 범위 밖 |
