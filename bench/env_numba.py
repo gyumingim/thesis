@@ -16,7 +16,7 @@ from numba import njit, prange
 import spec
 from geometry import build_routes, build_sections, H, EGO_OFF, ROAD_ARM, ENTRY_LEN, IBOX
 
-_WPS, _NWP, _CUM, _TANG, _RLEN = build_routes()
+_WPS, _NWP, _CUM, _TANG, _RLEN, _LOFF = build_routes()
 _SES, _SXY, _SINFO = build_sections()
 
 DT_P = np.float32(spec.DT_PHYS)
@@ -42,6 +42,8 @@ HF = np.float32(H)                # 도로 반폭 10.5 (라운드2: MetaDrive �
 ARMF = np.float32(ROAD_ARM)       # 물리 팔 길이 110
 HRW = np.float32(EGO_OFF)         # 주행차선 중심 ↔ 로드웨이 가장자리 = 5.25
 IBOXF = np.float32(IBOX)          # 교차로 영역 반크기 20.5
+MARGIN = np.float32(1.852 / 2)    # 차폭 절반 (MD WIDTH=1.852 실측) — 실선 접촉 판정
+N_EGO_ROUTES = 9                  # 남쪽 팔: 기동3 x 차선3
 
 
 @njit(inline="always")
@@ -99,7 +101,7 @@ def _spawn_npc(rs, e, i, npc, npc_rid, npc_wp, RLEN, WPS, NWP, CUM, TANG, ex, ey
     wp = np.int32(0)
     rid = np.int32(0)
     for _try in range(5):
-        rid = np.int32(_rnd(rs, e) * 11.999)
+        rid = np.int32(_rnd(rs, e) * 35.999)
         s = np.float32(2.0) + _rnd(rs, e) * (RLEN[rid] * np.float32(0.7))
         x, y, h, wp = _place_at_s(rid, s, WPS, NWP, CUM, TANG)
         dx = x - ex
@@ -117,7 +119,7 @@ def _spawn_npc(rs, e, i, npc, npc_rid, npc_wp, RLEN, WPS, NWP, CUM, TANG, ex, ey
 @njit(inline="always")
 def _spawn_ego(rs, e, ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act, t,
                WPS, NWP, CUM, TANG):
-    rid = np.int32(_rnd(rs, e) * 2.999)        # 남쪽 팔 진입 고정, 기동 R/S/L 무작위
+    rid = np.int32(_rnd(rs, e) * 8.999)        # 남쪽 팔 고정, 기동 3 x 차선 3 무작위 (MD 스폰차선 랜덤 실측)
     # MetaDrive 스폰 실측: 10m 스폰 차선의 중간(5m 지점), 속도 0
     x, y, h, wp = _place_at_s(rid, np.float32(5.0), WPS, NWP, CUM, TANG)
     ego[e, 0] = x
@@ -134,7 +136,7 @@ def _spawn_ego(rs, e, ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act,
 
 
 @njit(parallel=True, cache=True)
-def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
+def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO,
           ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act, t, rs,
           npc, npc_rid, npc_wp, pending,
           action, obs, reward, term, trunc, flags):
@@ -248,10 +250,11 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
 
         # ---------- 5. 관측 51차원 ----------
         # ego 9 (state_obs.py:86~152 공식)
-        # 라운드2: MetaDrive 는 '현재 방향 로드웨이(3차선, 폭 10.5)' 가장자리까지의 거리를
-        # total_width=18 로 정규화 (실측 대조로 확인). 주행차선이 로드웨이 중앙이므로 ±5.25.
-        obs[e, 0] = _clip01((HRW - lat) / TW)        # 좌측 로드웨이 가장자리까지
-        obs[e, 1] = _clip01((HRW + lat) / TW)        # 우측
+        # 라운드4: 차선별 오프셋 반영. MD 실측 — 우측차선 스폰 시 L/R = 8.75/1.75.
+        # 좌측 가장자리(황색 중앙선) = 차선센터에서 lane_off, 우측(백색 실선) = 10.5-lane_off.
+        lo = LOFF[rid]
+        obs[e, 0] = _clip01((lo - lat) / TW)
+        obs[e, 1] = _clip01((HF - lo + lat) / TW)
         # MetaDrive 부호 규약 (2026-08-20 프로브로 실측 확정):
         #   lateral 은 오른쪽=+ (local_coordinates: 왼쪽 0.5m 이동 시 lat=-0.5)
         #   heading_diff 는 좌회전 시 감소 (정렬 0.500 → 좌 10° 0.413)
@@ -345,9 +348,17 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
             ay = ey if ey > 0 else -ey
             on_rd = (ax <= HF and ay <= IBOXF + ARMF) or (ay <= HF and ax <= IBOXF + ARMF) \
                 or (ax <= IBOXF and ay <= IBOXF)
+            # 라운드4: 실선 접촉 종료 (MD on_continuous_line_done=True, metadrive_env.py:88)
+            # 팔 구간에서 황색 중앙선(축距離<차폭/2) 또는 백색 가장자리선(>10.5-차폭/2) 접촉 시 즉사.
+            # 교차로 내부는 실선 없음(MD 커넥터 구간과 동일 취급).
+            line_kill = False
+            if ay > IBOXF and ax <= HF:          # 세로 팔
+                line_kill = ax < MARGIN or ax > HF - MARGIN
+            elif ax > IBOXF and ay <= HF:        # 가로 팔
+                line_kill = ay < MARGIN or ay > HF - MARGIN
             crashed = min_d < CR
             arrived = lng >= RLEN[rid] - np.float32(2.0)
-            out_road = (not on_rd) and (not arrived)
+            out_road = ((not on_rd) or line_kill) and (not arrived)
             t[e] += 1
             timeout = t[e] >= HOR
 
@@ -409,7 +420,7 @@ class IntersectionEnv:
         return obs.copy()
 
     def step(self, action):
-        _step(_WPS, _NWP, _CUM, _TANG, _RLEN, _SES, _SXY, _SINFO,
+        _step(_WPS, _NWP, _CUM, _TANG, _RLEN, _LOFF, _SES, _SXY, _SINFO,
               self.ego, self.ego_rid, self.ego_wp, self.ego_long_last, self.ego_prev_h,
               self.last_act, self.t, self.rs,
               self.npc, self.npc_rid, self.npc_wp, self.pending,

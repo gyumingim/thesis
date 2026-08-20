@@ -19,7 +19,9 @@ H = 3 * LANE_W                      # 10.5 — 로드웨이 폭(편도 3차선)�
 CORNER_R = 10.0                     # MetaDrive StdInterSection radius=10 (pg_space 실측)
 IBOX = H + CORNER_R                 # 20.5 — 교차로 영역 반크기. 교차 구간 길이 41m
                                     #        (MD 실측: 블록1 끝 x=10 → ck2 x=50, 40m 교차와 일치)
-EGO_OFF = 1.5 * LANE_W              # 5.25 — 주행 차선(가운데) 중심 오프셋
+LANE_OFFSETS = (0.5 * LANE_W, 1.5 * LANE_W, 2.5 * LANE_W)   # 1.75/5.25/8.75 — 황색중앙선 기준
+                                    # (MD 실측: 우측차선 스폰 시 dist L/R=8.75/1.75 → 차선센터 8.75)
+EGO_OFF = LANE_OFFSETS[1]           # 하위호환(가운데 차선)
 ENTRY_LEN = 10.0                    # MetaDrive FirstPGBlock 실측 (스폰 차선 길이 10)
 TOTAL_ROUTE = 122.5                 # MetaDrive navigation.total_length 실측
 ROAD_ARM = 110.0                    # 물리 도로 팔 길이 (최장 진출로 커버, on_road 판정용)
@@ -32,32 +34,30 @@ def _rot(theta):
     return np.array([[c, -s], [s, c]])
 
 
-def _south_route(maneuver):
-    """남쪽 팔 진입 기준 경로 (가운데 차선). 진행방향 +y, 차선중심 x=+5.25."""
+def _south_route(maneuver, lane_off):
+    """남쪽 팔 진입 기준 경로. 진행방향 +y, 차선중심 x=+lane_off (차선별 커넥터)."""
     pts = []
     y0 = -(IBOX + ENTRY_LEN)
     y = np.arange(y0, -IBOX, WP_STEP)
-    pts.append(np.stack([np.full_like(y, EGO_OFF), y], -1))
+    pts.append(np.stack([np.full_like(y, lane_off), y], -1))
 
     if maneuver == "straight":
         mid_len = 2 * IBOX
         y2 = np.arange(-IBOX, IBOX, WP_STEP)
-        pts.append(np.stack([np.full_like(y2, EGO_OFF), y2], -1))
-        exit_dir, exit_start = np.array([0.0, 1.0]), np.array([EGO_OFF, IBOX])
+        pts.append(np.stack([np.full_like(y2, lane_off), y2], -1))
+        exit_dir, exit_start = np.array([0.0, 1.0]), np.array([lane_off, IBOX])
     elif maneuver == "right":
-        # (5.25,-20.5) → (20.5,-5.25), 중심 (20.5,-20.5), 반경 20.5-5.25=15.25
-        r = IBOX - EGO_OFF
+        r = IBOX - lane_off
         mid_len = r * np.pi / 2
-        th = np.linspace(np.pi, np.pi / 2, 14)
+        th = np.linspace(np.pi, np.pi / 2, max(8, int(r)))
         pts.append(np.stack([IBOX + r * np.cos(th), -IBOX + r * np.sin(th)], -1))
-        exit_dir, exit_start = np.array([1.0, 0.0]), np.array([IBOX, -EGO_OFF])
+        exit_dir, exit_start = np.array([1.0, 0.0]), np.array([IBOX, -lane_off])
     elif maneuver == "left":
-        # (5.25,-20.5) → (-20.5, 5.25), 중심 (-20.5,-20.5), 반경 20.5+5.25=25.75
-        r = IBOX + EGO_OFF
+        r = IBOX + lane_off
         mid_len = r * np.pi / 2
-        th = np.linspace(0.0, np.pi / 2, 24)
+        th = np.linspace(0.0, np.pi / 2, max(12, int(r)))
         pts.append(np.stack([-IBOX + r * np.cos(th), -IBOX + r * np.sin(th)], -1))
-        exit_dir, exit_start = np.array([-1.0, 0.0]), np.array([-IBOX, EGO_OFF])
+        exit_dir, exit_start = np.array([-1.0, 0.0]), np.array([-IBOX, lane_off])
     else:
         raise ValueError(maneuver)
 
@@ -77,10 +77,13 @@ def _south_route(maneuver):
 def build_routes():
     """(n_routes, max_wp, 2), 개수, 누적호장, 접선, 총길이. index = arm*3 + maneuver."""
     raw = []
+    lane_offs = []
     for arm in range(4):
         R = _rot(arm * np.pi / 2)
         for m in MANEUVERS:
-            raw.append(_south_route(m) @ R.T)
+            for lo in LANE_OFFSETS:
+                raw.append(_south_route(m, lo) @ R.T)
+                lane_offs.append(lo)
     n = len(raw)
     max_wp = max(len(r) for r in raw)
     wps = np.zeros((n, max_wp, 2), np.float32)
@@ -101,7 +104,7 @@ def build_routes():
         cum[i, k:] = cum[i, k - 1]
         tang[i, k:] = t[-1]
     length = cum[np.arange(n), n_wp - 1]
-    return wps, n_wp, cum, tang, length.astype(np.float32)
+    return wps, n_wp, cum, tang, length.astype(np.float32), np.array(lane_offs, np.float32)
 
 
 def _interp_at_s(r, cum_r, k, s):
@@ -115,7 +118,7 @@ def _interp_at_s(r, cum_r, k, s):
 def build_sections():
     """체크포인트(섹션) 정보. bend 정규화 분모 = CURVE_RADIUS_MAX + lane_num*lane_width
     = 60 + 3*3.5 = 70.5 (node_network_navigation.py:326, 편도 3차선 기준)."""
-    wps, n_wp, cum, tang, length = build_routes()
+    wps, n_wp, cum, tang, length, lane_offs = build_routes()
     n = len(wps)
     sec_end_s = np.zeros((n, 3), np.float32)
     sec_end_xy = np.zeros((n, 3, 2), np.float32)
@@ -124,14 +127,15 @@ def build_sections():
     a90 = (90.0 / spec.CURVE_ANGLE_MAX + 1) / 2
     STRAIGHT = (0.0, 0.5, 0.5)
     for i in range(n):
-        m = i % 3
+        m = (i // 3) % 3
+        lo = lane_offs[i]
         if m == 0:
-            r = IBOX - EGO_OFF
+            r = IBOX - lo
             mid_len, info_mid = r * np.pi / 2, (r / denom, 1.0, a90)
         elif m == 1:
             mid_len, info_mid = 2 * IBOX, STRAIGHT
         else:
-            r = IBOX + EGO_OFF
+            r = IBOX + lo
             mid_len, info_mid = r * np.pi / 2, (r / denom, 0.0, a90)
         s1 = ENTRY_LEN
         s2 = s1 + mid_len
