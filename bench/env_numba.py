@@ -42,7 +42,9 @@ HF = np.float32(H)                # 도로 반폭 10.5 (라운드2: MetaDrive �
 ARMF = np.float32(ROAD_ARM)       # 물리 팔 길이 110
 HRW = np.float32(EGO_OFF)         # 주행차선 중심 ↔ 로드웨이 가장자리 = 5.25
 IBOXF = np.float32(IBOX)          # 교차로 영역 반크기 20.5
-MARGIN = np.float32(1.852 / 2)    # 차폭 절반 (MD WIDTH=1.852 실측) — 실선 접촉 판정
+MARGIN = np.float32(1.852 / 2)    # 차폭 절반 (MD WIDTH=1.852 실측)
+HALF_LEN = np.float32(2.3)        # 전장 절반 — MD는 차체 폴리곤으로 선 접촉 판정 (사망거리 1.26~1.35m 실측)
+LINE_W2 = np.float32(0.15)        # 차선 도색 반폭
 N_EGO_ROUTES = 9                  # 남쪽 팔: 기동3 x 차선3
 
 
@@ -351,11 +353,17 @@ def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO,
             # 라운드4: 실선 접촉 종료 (MD on_continuous_line_done=True, metadrive_env.py:88)
             # 팔 구간에서 황색 중앙선(축距離<차폭/2) 또는 백색 가장자리선(>10.5-차폭/2) 접촉 시 즉사.
             # 교차로 내부는 실선 없음(MD 커넥터 구간과 동일 취급).
+            # 라운드5: 중심점이 아니라 차체 모서리 기준 (MD 실측 사망거리 1.26~1.35m 재현)
+            # 유효 마진 = 반폭 + 전장절반×|sin(축과의 각)| + 선폭
             line_kill = False
-            if ay > IBOXF and ax <= HF:          # 세로 팔
-                line_kill = ax < MARGIN or ax > HF - MARGIN
-            elif ax > IBOXF and ay <= HF:        # 가로 팔
-                line_kill = ay < MARGIN or ay > HF - MARGIN
+            if ay > IBOXF and ax <= HF:          # 세로 팔 (축 = y)
+                dev = np.cos(eh)                 # 축 이탈 성분
+                m_eff = MARGIN + HALF_LEN * (dev if dev > 0 else -dev) + LINE_W2
+                line_kill = ax < m_eff or ax > HF - m_eff
+            elif ax > IBOXF and ay <= HF:        # 가로 팔 (축 = x)
+                dev = np.sin(eh)
+                m_eff = MARGIN + HALF_LEN * (dev if dev > 0 else -dev) + LINE_W2
+                line_kill = ay < m_eff or ay > HF - m_eff
             crashed = min_d < CR
             arrived = lng >= RLEN[rid] - np.float32(2.0)
             out_road = ((not on_rd) or line_kill) and (not arrived)
