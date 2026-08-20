@@ -46,7 +46,7 @@ def _act(agent, obs, mean, std, device):
     return np.clip(a.cpu().numpy(), -1.0, 1.0)
 
 
-def eval_custom(agent, mean, std, episodes, seed, device, n_vehicles=16):
+def eval_custom(agent, mean, std, episodes, seed, device, n_vehicles=4):
     from env_numba import IntersectionEnv
     E = min(64, episodes)
     env = IntersectionEnv(E, n_vehicles, seed=seed)

@@ -14,7 +14,7 @@ import numpy as np
 from numba import njit, prange
 
 import spec
-from geometry import build_routes, build_sections, H, LANE_OFF, ARM
+from geometry import build_routes, build_sections, H, EGO_OFF, ROAD_ARM, ENTRY_LEN
 
 _WPS, _NWP, _CUM, _TANG, _RLEN = build_routes()
 _SES, _SXY, _SINFO = build_sections()
@@ -35,8 +35,9 @@ NO = spec.NUM_OTHERS
 HOR = spec.HORIZON
 NPC_V = np.float32(8.0)      # NPC 목표 속도 m/s
 LOOKAHEAD = np.float32(6.0)  # 순수추종 전방주시거리 m
-HF = np.float32(H)
-ARMF = np.float32(ARM)
+HF = np.float32(H)                # 도로 반폭 10.5 (라운드2: MetaDrive 정합)
+ARMF = np.float32(ROAD_ARM)       # 물리 팔 길이 110
+HRW = np.float32(EGO_OFF)         # 주행차선 중심 ↔ 로드웨이 가장자리 = 5.25
 
 
 @njit(inline="always")
@@ -113,14 +114,15 @@ def _spawn_npc(rs, e, i, npc, npc_rid, npc_wp, RLEN, WPS, NWP, CUM, TANG, ex, ey
 def _spawn_ego(rs, e, ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act, t,
                WPS, NWP, CUM, TANG):
     rid = np.int32(_rnd(rs, e) * 2.999)        # 남쪽 팔 진입 고정, 기동 R/S/L 무작위
-    x, y, h, wp = _place_at_s(rid, np.float32(2.0), WPS, NWP, CUM, TANG)
+    # MetaDrive 스폰 실측: 10m 스폰 차선의 중간(5m 지점), 속도 0
+    x, y, h, wp = _place_at_s(rid, np.float32(5.0), WPS, NWP, CUM, TANG)
     ego[e, 0] = x
     ego[e, 1] = y
     ego[e, 2] = h
     ego[e, 3] = 0.0                             # MetaDrive 스폰 속도 0
     ego_rid[e] = rid
     ego_wp[e] = wp
-    ego_long_last[e] = np.float32(2.0)
+    ego_long_last[e] = np.float32(5.0)
     ego_prev_h[e] = h
     last_act[e, 0] = 0.0
     last_act[e, 1] = 0.0
@@ -237,9 +239,10 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
 
         # ---------- 5. 관측 51차원 ----------
         # ego 9 (state_obs.py:86~152 공식)
-        lat_rc = lat - np.float32(LANE_OFF)          # 도로 중심선 기준 (좌+)
-        obs[e, 0] = _clip01((HF - lat_rc) / TW)      # 좌측 경계까지
-        obs[e, 1] = _clip01((HF + lat_rc) / TW)      # 우측 경계까지
+        # 라운드2: MetaDrive 는 '현재 방향 로드웨이(3차선, 폭 10.5)' 가장자리까지의 거리를
+        # total_width=18 로 정규화 (실측 대조로 확인). 주행차선이 로드웨이 중앙이므로 ±5.25.
+        obs[e, 0] = _clip01((HRW - lat) / TW)        # 좌측 로드웨이 가장자리까지
+        obs[e, 1] = _clip01((HRW + lat) / TW)        # 우측
         # MetaDrive 부호 규약 (2026-08-20 프로브로 실측 확정):
         #   lateral 은 오른쪽=+ (local_coordinates: 왼쪽 0.5m 이동 시 lat=-0.5)
         #   heading_diff 는 좌회전 시 감소 (정렬 0.500 → 좌 10° 0.413)

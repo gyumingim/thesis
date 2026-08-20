@@ -25,8 +25,8 @@ COLLISION_RADIUS = 2.5  # m, 원-원 충돌 근사 (MetaDrive 는 박스 충돌 
 NAVI_POINT_DIST = 50.0  # base_navigation.py:20
 CURVE_RADIUS_MAX = 60.0 # pg_space.py:286 BoxSpace(min=25, max=60)
 CURVE_ANGLE_MAX = 135.0 # pg_space.py:287 (deg)
-N_LANES = 1             # 편도 차선 수 (우리 맵)
-TOTAL_WIDTH = (N_LANES + 1) * 3.5   # state_obs.py:96 (MAX_LANE_NUM+1)*MAX_LANE_WIDTH
+N_LANES = 3             # 편도 차선 수 — MetaDrive X맵 실측 (current_ref_lanes == 3)
+TOTAL_WIDTH = 18.0      # 실측: MAX_LANE_NUM=3, MAX_LANE_WIDTH=4.5 → (3+1)*4.5 (2026-08-20 프로브)
 
 # --- 관측 차원 (MetaDrive 51차원 정합; 벤치 커널의 구 40차원은 kernel_*.py 에만 남음) ---
 EGO_DIM = 9

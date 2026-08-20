@@ -1,22 +1,26 @@
-"""X자 교차로 도로·경로 기하 (빌드 타임, NumPy).
+"""X자 교차로 도로·경로 기하 — MetaDrive X맵 실측 정합판 (라운드 2, 2026-08-20).
 
-MetaDrive map="X"(StdInterSection)의 경량 대응물. 우회전/직진/좌회전 경로를
-폴리라인(웨이포인트 열)으로 미리 계산해 두고, 런타임(Numba)은 배열만 읽는다.
+설치된 metadrive 0.4.3 map="X" 에서 실측한 값으로 재구축:
+  MAX_LANE_NUM=3, MAX_LANE_WIDTH=4.5 → 관측 정규화 분모 total_width=18.0
+  편도 3차선(폭 3.5), 스폰 직선 10m, 경로 총길이 122.5m,
+  스폰 시 체크포인트 5m/45m 전방, 50m 내 차량 노출 평균 1.3대.
 
-좌표계: 교차로 중심 = 원점. 팔은 +x(E), +y(N), -x(W), -y(S) 방향.
-우측통행: 진행방향 기준 오른쪽 차선을 쓴다. 차선폭 3.5m, 편도 1차선.
-도로 반폭 H = 3.5m (양방향 2차선 = 총폭 7m).
+좌표계: 교차로 중심 = 원점. 우측통행. ego/NPC 는 가운데 차선(중심에서 5.25m) 주행.
+도로 반폭 H = 3차선 x 3.5 = 10.5m (편도 로드웨이 폭 = 10.5, 양방향 전체 = 21).
 
-경로 12개 = 진입 팔 4 × 기동 3 (right/straight/left).
+경로 12개 = 진입 팔 4 x 기동 3 (right/straight/left). 모든 경로 총길이 122.5m 로 통일.
 """
 import numpy as np
 
 import spec
 
-H = spec.LANE_WIDTH                 # 도로 반폭 = 3.5 (편도 1차선)
-LANE_OFF = spec.LANE_WIDTH / 2      # 차선 중심의 횡방향 오프셋 = 1.75
-ARM = spec.ARM_LENGTH               # 60
-WP_STEP = 2.0                       # 웨이포인트 간격 m
+LANE_W = spec.LANE_WIDTH            # 3.5
+H = 3 * LANE_W                      # 10.5 — 도로(편도) 반... 정확히는 로드웨이 폭이자 도로 반폭
+EGO_OFF = 1.5 * LANE_W              # 5.25 — 주행 차선(가운데) 중심의 도로중심 기준 오프셋
+ENTRY_LEN = 10.0                    # MetaDrive FirstPGBlock 실측 (스폰 차선 길이 10)
+TOTAL_ROUTE = 122.5                 # MetaDrive navigation.total_length 실측
+ROAD_ARM = 110.0                    # 물리 도로 팔 길이 (최장 진출로 커버, on_road 판정용)
+WP_STEP = 2.0
 MANEUVERS = ("right", "straight", "left")
 
 
@@ -26,62 +30,60 @@ def _rot(theta):
 
 
 def _south_route(maneuver):
-    """남쪽 팔에서 진입하는 기준 경로. 다른 팔은 회전으로 얻는다.
-
-    진입 차선 중심: x=+1.75, y ∈ [-(H+ARM), -H], 진행방향 +y.
-    """
+    """남쪽 팔 진입 기준 경로 (가운데 차선). 진행방향 +y, 차선중심 x=+5.25."""
     pts = []
-    # 진입 직선
-    y = np.arange(-(H + ARM), -H, WP_STEP)
-    pts.append(np.stack([np.full_like(y, LANE_OFF), y], -1))
+    y0 = -(H + ENTRY_LEN)
+    y = np.arange(y0, -H, WP_STEP)
+    pts.append(np.stack([np.full_like(y, EGO_OFF), y], -1))
 
     if maneuver == "straight":
-        y2 = np.arange(-H, H + ARM, WP_STEP)
-        pts.append(np.stack([np.full_like(y2, LANE_OFF), y2], -1))
-        pts.append(np.array([[LANE_OFF, H + ARM]]))                 # 정확한 종점
+        mid_len = 2 * H
+        y2 = np.arange(-H, H, WP_STEP)
+        pts.append(np.stack([np.full_like(y2, EGO_OFF), y2], -1))
+        exit_dir, exit_start = np.array([0.0, 1.0]), np.array([EGO_OFF, H])
     elif maneuver == "right":
-        # (1.75, -H) → (H, -1.75), 중심 (H, -H), 반경 H-LANE_OFF=1.75, 시계방향
-        r = H - LANE_OFF
-        th = np.linspace(np.pi, np.pi / 2, 8)
-        arc = np.stack([H + r * np.cos(th), -H + r * np.sin(th)], -1)
-        pts.append(arc)
-        x2 = np.arange(H, H + ARM, WP_STEP)
-        pts.append(np.stack([x2, np.full_like(x2, -LANE_OFF)], -1))
-        pts.append(np.array([[H + ARM, -LANE_OFF]]))
+        # (5.25,-10.5) → (10.5,-5.25), 중심 (10.5,-10.5), 반경 10.5-5.25=5.25
+        r = H - EGO_OFF
+        mid_len = r * np.pi / 2
+        th = np.linspace(np.pi, np.pi / 2, 10)
+        pts.append(np.stack([H + r * np.cos(th), -H + r * np.sin(th)], -1))
+        exit_dir, exit_start = np.array([1.0, 0.0]), np.array([H, -EGO_OFF])
     elif maneuver == "left":
-        # (1.75, -H) → (-H, 1.75), 중심 (-H, -H), 반경 H+LANE_OFF=5.25, 반시계
-        r = H + LANE_OFF
-        th = np.linspace(0.0, np.pi / 2, 14)
-        arc = np.stack([-H + r * np.cos(th), -H + r * np.sin(th)], -1)
-        pts.append(arc)
-        x2 = np.arange(-H, -(H + ARM), -WP_STEP)
-        pts.append(np.stack([x2, np.full_like(x2, LANE_OFF)], -1))
-        pts.append(np.array([[-(H + ARM), LANE_OFF]]))
+        # (5.25,-10.5) → (-10.5, 5.25), 중심 (-10.5,-10.5), 반경 10.5+5.25=15.75
+        r = H + EGO_OFF
+        mid_len = r * np.pi / 2
+        th = np.linspace(0.0, np.pi / 2, 18)
+        pts.append(np.stack([-H + r * np.cos(th), -H + r * np.sin(th)], -1))
+        exit_dir, exit_start = np.array([-1.0, 0.0]), np.array([-H, EGO_OFF])
     else:
         raise ValueError(maneuver)
+
+    exit_len = TOTAL_ROUTE - ENTRY_LEN - mid_len
+    n_exit = int(exit_len // WP_STEP)
+    t = np.arange(1, n_exit + 1)[:, None] * WP_STEP
+    pts.append(exit_start[None, :] + exit_dir[None, :] * 0)          # 정확한 이음점
+    pts.append(exit_start[None, :] + exit_dir[None, :] * t)
+    pts.append(exit_start[None, :] + exit_dir[None, :] * exit_len)   # 정확한 종점
+
     out = np.concatenate(pts, 0)
-    # 이음매의 중복/근접점 제거 (0 길이 세그먼트는 접선 계산을 깨뜨린다)
     keep = np.ones(len(out), bool)
     keep[1:] = np.linalg.norm(np.diff(out, axis=0), axis=1) > 1e-4
     return out[keep]
 
 
 def build_routes():
-    """(n_routes, max_wp, 2) 웨이포인트, (n_routes,) 실제 개수·총길이, 누적길이·접선.
-
-    route index = arm*3 + maneuver  (arm: 0=S,1=E,2=N,3=W / maneuver: 0=R,1=S,2=L)
-    """
+    """(n_routes, max_wp, 2), 개수, 누적호장, 접선, 총길이. index = arm*3 + maneuver."""
     raw = []
     for arm in range(4):
-        R = _rot(arm * np.pi / 2)   # S 기준 경로를 90도씩 회전
+        R = _rot(arm * np.pi / 2)
         for m in MANEUVERS:
             raw.append(_south_route(m) @ R.T)
     n = len(raw)
     max_wp = max(len(r) for r in raw)
     wps = np.zeros((n, max_wp, 2), np.float32)
     n_wp = np.zeros(n, np.int32)
-    cum = np.zeros((n, max_wp), np.float32)     # 시작점부터의 호장
-    tang = np.zeros((n, max_wp, 2), np.float32)  # 단위 접선
+    cum = np.zeros((n, max_wp), np.float32)
+    tang = np.zeros((n, max_wp, 2), np.float32)
     for i, r in enumerate(raw):
         k = len(r)
         wps[i, :k] = r
@@ -92,7 +94,6 @@ def build_routes():
         t = seg / L[:, None]
         tang[i, : k - 1] = t
         tang[i, k - 1] = t[-1]
-        # 패딩 구간은 마지막 값 유지 (Numba 분기 제거용)
         wps[i, k:] = r[-1]
         cum[i, k:] = cum[i, k - 1]
         tang[i, k:] = t[-1]
@@ -101,7 +102,6 @@ def build_routes():
 
 
 def _interp_at_s(r, cum_r, k, s):
-    """호장 s 에서의 폴리라인 좌표 (빌드 타임 전용)."""
     i = int(np.searchsorted(cum_r[:k], s, side="right") - 1)
     i = max(0, min(i, k - 2))
     seg = cum_r[i + 1] - cum_r[i]
@@ -110,33 +110,27 @@ def _interp_at_s(r, cum_r, k, s):
 
 
 def build_sections():
-    """경로별 체크포인트(섹션) 정보 — MetaDrive 내비 관측용.
-
-    섹션 = [진입 직선, 교차로 내부(호 또는 직선), 진출 직선].
-    체크포인트 = 각 섹션의 끝점 (MetaDrive: ref_lane.position(ref_lane.length, 0) = 차선 끝).
-    sec_info = (bend01, dir01, angle01):
-      직선   → (0, 0.5, 0.5)
-      우회전 → (1.75/63.5, 1.0, (90/135+1)/2)   좌회전 → (5.25/63.5, 0.0, 동일)
-      정규화 근거: node_network_navigation.py:326~344, CURVE radius max=60, angle max=135,
-                  분모 = 60 + lane_num*lane_width = 63.5
-    """
+    """체크포인트(섹션) 정보. bend 정규화 분모 = CURVE_RADIUS_MAX + lane_num*lane_width
+    = 60 + 3*3.5 = 70.5 (node_network_navigation.py:326, 편도 3차선 기준)."""
     wps, n_wp, cum, tang, length = build_routes()
     n = len(wps)
     sec_end_s = np.zeros((n, 3), np.float32)
     sec_end_xy = np.zeros((n, 3, 2), np.float32)
     sec_info = np.zeros((n, 3, 3), np.float32)
-    denom = spec.CURVE_RADIUS_MAX + 1 * spec.LANE_WIDTH
+    denom = spec.CURVE_RADIUS_MAX + 3 * LANE_W
     a90 = (90.0 / spec.CURVE_ANGLE_MAX + 1) / 2
     STRAIGHT = (0.0, 0.5, 0.5)
     for i in range(n):
-        m = i % 3      # 0=right, 1=straight, 2=left
+        m = i % 3
         if m == 0:
-            mid_len, info_mid = (H - LANE_OFF) * np.pi / 2, ((H - LANE_OFF) / denom, 1.0, a90)
+            r = H - EGO_OFF
+            mid_len, info_mid = r * np.pi / 2, (r / denom, 1.0, a90)
         elif m == 1:
             mid_len, info_mid = 2 * H, STRAIGHT
         else:
-            mid_len, info_mid = (H + LANE_OFF) * np.pi / 2, ((H + LANE_OFF) / denom, 0.0, a90)
-        s1 = ARM                      # 진입 직선 길이 = 60 (팔끝→도로경계)
+            r = H + EGO_OFF
+            mid_len, info_mid = r * np.pi / 2, (r / denom, 0.0, a90)
+        s1 = ENTRY_LEN
         s2 = s1 + mid_len
         s3 = float(length[i])
         sec_end_s[i] = (s1, s2, s3)
@@ -149,6 +143,5 @@ def build_sections():
 
 
 def on_road(x, y):
-    """도로 위 여부 (십자 영역). out_of_road = not on_road. 검증용 NumPy 버전."""
-    return ((np.abs(x) <= H) & (np.abs(y) <= H + ARM)) | \
-           ((np.abs(y) <= H) & (np.abs(x) <= H + ARM))
+    return ((np.abs(x) <= H) & (np.abs(y) <= H + ROAD_ARM)) | \
+           ((np.abs(y) <= H) & (np.abs(x) <= H + ROAD_ARM))

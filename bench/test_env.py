@@ -21,9 +21,11 @@ def t1_expert_arrives():
 
 def t2_out_of_road():
     env = IntersectionEnv(16, 1, seed=2)
-    bad = np.tile(np.float32([1, 1]), (16, 1))
+    # 라운드2 도로폭 21m: 풀조향(선회지름 ~6.7m)은 도로 안에서 맴돌아 이탈하지 않는다.
+    # 완만한 조향(0.2 → 선회지름 ~40m)이라야 코리도를 벗어난다.
+    bad = np.tile(np.float32([0.2, 1]), (16, 1))
     seen = np.zeros(5, int)
-    for _ in range(300):
+    for _ in range(400):
         _, _, tm, tr, fl = env.step(bad)
         for e in np.nonzero(tm | tr)[0]: seen[fl[e]] += 1
     assert seen[2] > 0, seen
