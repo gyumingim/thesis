@@ -31,13 +31,14 @@
 
 ## 하고 있는 일
 
-- **환경 완성 (2026-08-20)** — `bench/env_numba.py` + `bench/gym_env.py` + `bench/test_env.py`
-  - 관측 51차원·보상·종료를 설치된 MetaDrive 0.4.3 소스 공식 그대로 복제 (PAPER.md 3.9)
-  - 교차로 기하 12경로(4팔×R/S/L), 체크포인트 내비, NPC 순수추종+간격법, in-kernel 자동리셋
-  - 행동 검증 5종 통과 (전문가 도달 63/65, 이탈·충돌 판정 동작, obs 경계, SPS)
-  - **완성 환경 1,342,446 SPS = MetaDrive 병렬 정점 대비 193배** — 논문 확정 수치
-- **미해결**: same-step 자동리셋 vs gymnasium NextStep 의미론 차이 — CleanRL GAE 연결 시 처리 필요
-- 다음: CleanRL ppo_continuous_action 연결 → 동일 wall-clock 학습 곡선
+- **PPO 연결 완료 (2026-08-20)** — `bench/ppo.py` = CleanRL 고정 커밋(fe8d8a0) 최소 수정판
+  - 수정 3곳만 (env 생성/로깅/Args), 알고리즘 본체 원본 그대로, 원본 파일 보존으로 diff 증명 가능
+  - 리셋 의미론: 커널을 NEXT_STEP 으로 전환 (gymnasium 1.2.3 stateful 래퍼가 SAME_STEP 미지원)
+  - 스폰 즉사 버그 수정 (ego 반경 8m 회피)
+  - **학습 확인: 20만 스텝에서 리턴 4.0 → 71.8** (전문가 136, 무작위 −5 기준). MetaDrive 갈래도 구동 확인
+- **본실험 설계 방향**: custom 은 PPO 업데이트가 병목(env 1.35M vs 학습 6k SPS)
+  → num_envs 1024~2048 로 배치 확대 vs MetaDrive num_envs=12(병렬 정점), 동일 wall-clock
+- 다음: 본실험 — 동일 wall-clock 학습 곡선 + 교차 평가(custom 정책 → MetaDrive 평가)
 
 ## 할 일
 

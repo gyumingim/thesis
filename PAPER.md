@@ -250,6 +250,40 @@ CleanRL PPO 연결, 동일 wall-clock 학습 곡선.
 예상대로 완성 비용(관측 조립·경로 추적·NPC 제어)이 커널 대비 3.1배를 소모했지만,
 공정 비교 기준 **193배**가 유지된다. 이것이 논문의 확정 처리량 주장이다.
 
+### 3.10 PPO 연결 및 학습 확인 (2026-08-20)
+
+**동일 PPO 원칙의 구현** — `bench/ppo.py` 는 CleanRL `ppo_continuous_action.py`
+(커밋 `fe8d8a0`, `bench/cleanrl_ppo_commit.txt` 에 고정)의 최소 수정판이다. 수정 3곳:
+env 생성부(`--sim custom|metadrive` 분기, 동일 래퍼 스택), 에피소드 로깅(gymnasium 1.x
+벡터 API), Args 필드 추가. **GAE·업데이트 루프·네트워크·하이퍼파라미터는 원본 그대로**이며
+diff 로 증명 가능하다 (`cleanrl_ppo_continuous_action_orig.py` 보존).
+
+**리셋 의미론 통일** — gymnasium 1.2.3 의 stateful 벡터 래퍼(NormalizeObservation 등)가
+SAME_STEP 을 지원하지 않아(vector_env.py:542 assert) 커널을 표준 NEXT_STEP 으로 전환.
+MetaDrive 쪽 AsyncVectorEnv 기본값과 동일 → 양쪽 의미론 일치. 전환 후 검증 5종 재통과.
+
+**환경 수정 1건** — NPC 가 ego 스폰 지점 위에 태어나 length=1 에피소드가 생기는 문제를
+발견(래퍼 검사 중 즉사 에피소드로 표면화), 스폰 시 ego 반경 8m 회피(5회 재시도)로 수정.
+수정 후 전문가 평균 리턴 134.4→136.2.
+
+**학습 스모크런 (custom, 64env×64step, 20만 스텝, 기본 하이퍼파라미터)**
+| 진행 | 평균 에피소드 리턴 |
+|---|---:|
+| 초반 10개 | 4.0 |
+| 40~60% | 64.8 |
+| 마지막 10개 | **71.8** |
+
+전문가(순수추종) 136, 무작위 ≈ −5~0 기준 — **PPO 가 우리 환경에서 실제로 주행을 학습한다.**
+에피소드 길이 48→91 (더 오래 생존). MetaDrive 갈래도 동일 파일로 end-to-end 구동 확인.
+
+**중요한 관찰 — 본실험 설계에 반영할 것:**
+학습 포함 SPS 는 custom 6,030 / MetaDrive 179 (각각 64env/4env 소규모 기준).
+custom 쪽은 env 가 아니라 **PPO 업데이트가 병목**이다 (env 1.35M SPS vs 학습 6k).
+따라서 wall-clock 우위는 num_envs 를 키워 학습 배치를 키울 때 실현된다 —
+"싼 시뮬 = 대량 num_envs 가능"이 곧 논문의 메커니즘이다. 본실험은
+custom(num_envs 1024~2048) vs MetaDrive(num_envs 12 = 병렬 정점)로,
+**같은 하드웨어에서 각자의 최적 구성**을 쓰는 동일 wall-clock 비교로 설계한다.
+
 ## 4. 위협 요인 (미리 적어둔다)
 
 - **자명한 결과 위험**: 동일 wall-clock에서 샘플 수가 ~1000배 차이나므로,

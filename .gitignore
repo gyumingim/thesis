@@ -1,5 +1,5 @@
+runs/
+bench_results/
 .venv/
 __pycache__/
 *.pyc
-runs/
-bench_results/

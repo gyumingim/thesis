@@ -1,11 +1,14 @@
 """IntersectionEnv 의 Gymnasium VectorEnv 어댑터 — CleanRL 연결용.
 
-주의(자동 리셋 의미론): 커널이 same-step 리셋을 한다. 즉 done 이 True 인 스텝의
-obs 는 이미 '다음 에피소드의 첫 관측'이다. gymnasium 1.x 표준(NextStep)과 다르므로
-CleanRL 의 GAE 부트스트랩 연결 시 이 차이를 명시적으로 처리해야 한다 (STATUS.md 참조).
+리셋 의미론 = gymnasium 표준 NEXT_STEP: done 스텝은 마지막 관측을 반환하고,
+그 다음 step() 호출이 행동을 무시하며 새 에피소드의 첫 관측(보상 0)을 반환한다.
+gymnasium 1.2.3 의 stateful 벡터 래퍼(NormalizeObservation 등)가 SAME_STEP 을
+지원하지 않아(vector_env.py:542 assert) 커널을 NEXT_STEP 으로 맞췄다.
+MetaDrive 쪽 AsyncVectorEnv 기본값과도 동일 → 양쪽 의미론 일치.
 """
 import gymnasium as gym
 import numpy as np
+from gymnasium.vector import AutoresetMode
 from gymnasium.vector.utils import batch_space
 
 import spec
@@ -13,7 +16,8 @@ from env_numba import IntersectionEnv
 
 
 class IntersectionVectorEnv(gym.vector.VectorEnv):
-    metadata = {}
+    # 벡터 래퍼(RecordEpisodeStatistics 등)가 이 태그로 리셋 의미론을 판별한다.
+    metadata = {"autoreset_mode": AutoresetMode.NEXT_STEP}
 
     def __init__(self, num_envs, n_vehicles=16, seed=0):
         self._env = IntersectionEnv(num_envs, n_vehicles, seed)

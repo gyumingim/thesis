@@ -86,10 +86,21 @@ def _place_at_s(rid, s, WPS, NWP, CUM, TANG):
 
 
 @njit(inline="always")
-def _spawn_npc(rs, e, i, npc, npc_rid, npc_wp, RLEN, WPS, NWP, CUM, TANG):
-    rid = np.int32(_rnd(rs, e) * 11.999)
-    s = np.float32(2.0) + _rnd(rs, e) * (RLEN[rid] * np.float32(0.7))
-    x, y, h, wp = _place_at_s(rid, s, WPS, NWP, CUM, TANG)
+def _spawn_npc(rs, e, i, npc, npc_rid, npc_wp, RLEN, WPS, NWP, CUM, TANG, ex, ey):
+    # ego 주변 8m 는 피해서 스폰 (즉사 방지). 5회 재시도 후에도 겹치면 마지막 후보 사용.
+    x = np.float32(0.0)
+    y = np.float32(0.0)
+    h = np.float32(0.0)
+    wp = np.int32(0)
+    rid = np.int32(0)
+    for _try in range(5):
+        rid = np.int32(_rnd(rs, e) * 11.999)
+        s = np.float32(2.0) + _rnd(rs, e) * (RLEN[rid] * np.float32(0.7))
+        x, y, h, wp = _place_at_s(rid, s, WPS, NWP, CUM, TANG)
+        dx = x - ex
+        dy = y - ey
+        if dx * dx + dy * dy > np.float32(64.0):
+            break
     npc[e, i, 0] = x
     npc[e, i, 1] = y
     npc[e, i, 2] = h
@@ -119,15 +130,26 @@ def _spawn_ego(rs, e, ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act,
 @njit(parallel=True, cache=True)
 def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
           ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act, t, rs,
-          npc, npc_rid, npc_wp,
+          npc, npc_rid, npc_wp, pending,
           action, obs, reward, term, trunc, flags):
     E = ego.shape[0]
     V = npc.shape[1]
     for e in prange(E):
+        # ---------- 0. NEXT_STEP 리셋: 직전 스텝에 종료된 env 는 이번 스텝에서
+        # 행동을 무시하고 리스폰 + 첫 관측만 반환한다 (gymnasium NEXT_STEP 의미론) ----------
+        fresh = pending[e] == 1
+        if fresh:
+            _spawn_ego(rs, e, ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act, t,
+                       WPS, NWP, CUM, TANG)
+            for i in range(V):
+                _spawn_npc(rs, e, i, npc, npc_rid, npc_wp, RLEN, WPS, NWP, CUM, TANG,
+                           ego[e, 0], ego[e, 1])
+            pending[e] = 0
+
         # ---------- 1. NPC 제어 ----------
         st_npc = np.empty(V, np.float32)
         ac_npc = np.empty(V, np.float32)
-        for i in range(V):
+        for i in range(0 if fresh else V):
             rid = npc_rid[e, i]
             x = npc[e, i, 0]
             y = npc[e, i, 1]
@@ -174,7 +196,10 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
         a0 = -1.0 if a0 < -1.0 else (1.0 if a0 > 1.0 else a0)
         a1 = action[e, 1]
         a1 = -1.0 if a1 < -1.0 else (1.0 if a1 > 1.0 else a1)
-        for _ in range(REP):
+        if fresh:
+            a0 = np.float32(0.0)
+            a1 = np.float32(0.0)
+        for _ in range(0 if fresh else REP):
             v = ego[e, 3] + a1 * MA * DT_P
             v = 0.0 if v < 0.0 else (VMAX if v > VMAX else v)
             hh = ego[e, 2] + v / WB * np.tan(a0 * MS) * DT_P
@@ -192,13 +217,14 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
                 npc[e, i, 3] = vi
 
         # ---------- 3. NPC 경로 종료 → 재투입 ----------
-        for i in range(V):
+        for i in range(0 if fresh else V):
             rid = npc_rid[e, i]
             wp, lng, lat, tx, ty = _track(rid, npc_wp[e, i], npc[e, i, 0], npc[e, i, 1],
                                           WPS, NWP, CUM, TANG)
             npc_wp[e, i] = wp
             if lng > RLEN[rid] - np.float32(1.5):
-                _spawn_npc(rs, e, i, npc, npc_rid, npc_wp, RLEN, WPS, NWP, CUM, TANG)
+                _spawn_npc(rs, e, i, npc, npc_rid, npc_wp, RLEN, WPS, NWP, CUM, TANG,
+                           ego[e, 0], ego[e, 1])
 
         # ---------- 4. ego 경로 추적 ----------
         rid = ego_rid[e]
@@ -293,40 +319,43 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
             obs[e, b + 3] = 0.0
 
         # ---------- 6. 보상·종료 (metadrive_env.py:245~296 공식) ----------
-        ax = ex if ex > 0 else -ex
-        ay = ey if ey > 0 else -ey
-        on_rd = (ax <= HF and ay <= HF + ARMF) or (ay <= HF and ax <= ARMF + HF)
-        crashed = min_d < CR
-        arrived = lng >= RLEN[rid] - np.float32(2.0)
-        out_road = (not on_rd) and (not arrived)
-        t[e] += 1
-        timeout = t[e] >= HOR
+        if fresh:
+            reward[e] = 0.0
+            term[e] = False
+            trunc[e] = False
+            flags[e] = 0
+        else:
+            ax = ex if ex > 0 else -ex
+            ay = ey if ey > 0 else -ey
+            on_rd = (ax <= HF and ay <= HF + ARMF) or (ay <= HF and ax <= ARMF + HF)
+            crashed = min_d < CR
+            arrived = lng >= RLEN[rid] - np.float32(2.0)
+            out_road = (not on_rd) and (not arrived)
+            t[e] += 1
+            timeout = t[e] >= HOR
 
-        r = np.float32(1.0) * (lng - ego_long_last[e]) \
-            + np.float32(0.1) * (ev * np.float32(3.6) / VMAX_KMH)
-        if arrived:
-            r = np.float32(10.0)
-        elif out_road:
-            r = np.float32(-5.0)
-        elif crashed:
-            r = np.float32(-5.0)
-        reward[e] = r
-        ego_long_last[e] = lng
+            r = np.float32(1.0) * (lng - ego_long_last[e]) \
+                + np.float32(0.1) * (ev * np.float32(3.6) / VMAX_KMH)
+            if arrived:
+                r = np.float32(10.0)
+            elif out_road:
+                r = np.float32(-5.0)
+            elif crashed:
+                r = np.float32(-5.0)
+            reward[e] = r
+            ego_long_last[e] = lng
 
-        is_term = crashed or out_road or arrived
-        term[e] = is_term
-        trunc[e] = timeout and not is_term
-        flags[e] = 1 if crashed else (2 if out_road else (3 if arrived else (4 if timeout else 0)))
+            is_term = crashed or out_road or arrived
+            term[e] = is_term
+            trunc[e] = timeout and not is_term
+            flags[e] = 1 if crashed else (2 if out_road else (3 if arrived else (4 if timeout else 0)))
 
-        # ---------- 7. 자동 리셋 ----------
-        if is_term or timeout:
-            _spawn_ego(rs, e, ego, ego_rid, ego_wp, ego_long_last, ego_prev_h, last_act, t,
-                       WPS, NWP, CUM, TANG)
-            for i in range(V):
-                _spawn_npc(rs, e, i, npc, npc_rid, npc_wp, RLEN, WPS, NWP, CUM, TANG)
+            # ---------- 7. NEXT_STEP: 종료 표시만 하고 리스폰은 다음 스텝 첫머리에 ----------
+            if is_term or timeout:
+                pending[e] = 1
 
-        last_act[e, 0] = a0
-        last_act[e, 1] = a1
+            last_act[e, 0] = a0
+            last_act[e, 1] = a1
 
 
 class IntersectionEnv:
@@ -351,18 +380,13 @@ class IntersectionEnv:
         self.term = np.zeros(self.E, np.bool_)
         self.trunc = np.zeros(self.E, np.bool_)
         self.flags = np.zeros(self.E, np.int8)
+        self.pending = np.zeros(self.E, np.int8)
         self.reset()
 
     def reset(self):
-        for e in range(self.E):
-            _spawn_ego(self.rs, e, self.ego, self.ego_rid, self.ego_wp, self.ego_long_last,
-                       self.ego_prev_h, self.last_act, self.t, _WPS, _NWP, _CUM, _TANG)
-            for i in range(self.V):
-                _spawn_npc(self.rs, e, i, self.npc, self.npc_rid, self.npc_wp, _RLEN,
-                           _WPS, _NWP, _CUM, _TANG)
-        # 관측만 갱신하는 0-스텝: 정지 행동으로 1스텝 돌리는 대신 직접 조립하는 편이
-        # 낫지만, 코드 중복을 피하기 위해 미소시간 스텝을 쓰지 않고 step 결과의 obs 를
-        # 첫 관측으로 사용한다 (v=0 이므로 상태 변화 없음).
+        # NEXT_STEP: 전 env 를 pending 으로 만들고 0-행동 스텝을 돌리면
+        # 커널의 fresh 경로가 리스폰 + 첫 관측 조립을 수행한다 (보상 0, done False).
+        self.pending[:] = 1
         a = np.zeros((self.E, 2), np.float32)
         obs, *_ = self.step(a)
         return obs.copy()
@@ -371,7 +395,7 @@ class IntersectionEnv:
         _step(_WPS, _NWP, _CUM, _TANG, _RLEN, _SES, _SXY, _SINFO,
               self.ego, self.ego_rid, self.ego_wp, self.ego_long_last, self.ego_prev_h,
               self.last_act, self.t, self.rs,
-              self.npc, self.npc_rid, self.npc_wp,
+              self.npc, self.npc_rid, self.npc_wp, self.pending,
               np.ascontiguousarray(action, dtype=np.float32),
               self.obs, self.reward, self.term, self.trunc, self.flags)
         return self.obs, self.reward, self.term, self.trunc, self.flags
