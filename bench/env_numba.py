@@ -14,7 +14,7 @@ import numpy as np
 from numba import njit, prange
 
 import spec
-from geometry import build_routes, build_sections, H, EGO_OFF, ROAD_ARM, ENTRY_LEN
+from geometry import build_routes, build_sections, H, EGO_OFF, ROAD_ARM, ENTRY_LEN, IBOX
 
 _WPS, _NWP, _CUM, _TANG, _RLEN = build_routes()
 _SES, _SXY, _SINFO = build_sections()
@@ -23,7 +23,10 @@ DT_P = np.float32(spec.DT_PHYS)
 REP = spec.DECISION_REPEAT
 WB = np.float32(spec.WHEELBASE)
 MS = np.float32(spec.MAX_STEER)
-MA = np.float32(spec.MAX_ACCEL)
+MA = np.float32(spec.ACCEL_MAX)          # 가속 2.93 (실측)
+MB = np.float32(spec.BRAKE_MAX)          # 제동 14.1 (실측, 비대칭)
+SV0 = np.float32(spec.STEER_SAT_V0)      # 조향 포화 모델
+SSP = np.float32(spec.STEER_SAT_P)
 VMAX = np.float32(spec.MAX_SPEED)
 VMAX_KMH = np.float32(spec.MAX_SPEED_KMH)
 CR = np.float32(spec.COLLISION_RADIUS)
@@ -38,6 +41,7 @@ LOOKAHEAD = np.float32(6.0)  # 순수추종 전방주시거리 m
 HF = np.float32(H)                # 도로 반폭 10.5 (라운드2: MetaDrive 정합)
 ARMF = np.float32(ROAD_ARM)       # 물리 팔 길이 110
 HRW = np.float32(EGO_OFF)         # 주행차선 중심 ↔ 로드웨이 가장자리 = 5.25
+IBOXF = np.float32(IBOX)          # 교차로 영역 반크기 20.5
 
 
 @njit(inline="always")
@@ -191,7 +195,7 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
                 a = (gap - (np.float32(2.0) + np.float32(1.5) * v)) * np.float32(0.5)
             else:
                 a = (NPC_V - v) * np.float32(0.8)
-            ac_npc[i] = -MA if a < -MA else (MA if a > MA else a)
+            ac_npc[i] = -MB if a < -MB else (MA if a > MA else a)   # 제동은 14.1까지 허용
 
         # ---------- 2. 적분 (물리 서브스텝) ----------
         a0 = action[e, 0]
@@ -202,9 +206,12 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
             a0 = np.float32(0.0)
             a1 = np.float32(0.0)
         for _ in range(0 if fresh else REP):
-            v = ego[e, 3] + a1 * MA * DT_P
+            acc = a1 * MA if a1 > 0.0 else a1 * MB       # 실측: 가속 2.93 / 제동 14.1
+            v = ego[e, 3] + acc * DT_P
             v = 0.0 if v < 0.0 else (VMAX if v > VMAX else v)
-            hh = ego[e, 2] + v / WB * np.tan(a0 * MS) * DT_P
+            # 조향 포화(타이어 슬립 근사): δ_eff = δ / (1 + (|s|·v/V0)^P) — MD 4점 실측 피팅
+            sat = np.float32(1.0) + ((a0 if a0 > 0 else -a0) * v / SV0) ** SSP
+            hh = ego[e, 2] + v / WB * np.tan(a0 * MS / sat) * DT_P
             ego[e, 0] += v * np.cos(hh) * DT_P
             ego[e, 1] += v * np.sin(hh) * DT_P
             ego[e, 2] = hh
@@ -212,7 +219,9 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
             for i in range(V):
                 vi = npc[e, i, 3] + ac_npc[i] * DT_P
                 vi = 0.0 if vi < 0.0 else (VMAX if vi > VMAX else vi)
-                hi = npc[e, i, 2] + vi / WB * np.tan(st_npc[i] * MS) * DT_P
+                sti = st_npc[i]
+                sati = np.float32(1.0) + ((sti if sti > 0 else -sti) * vi / SV0) ** SSP
+                hi = npc[e, i, 2] + vi / WB * np.tan(sti * MS / sati) * DT_P
                 npc[e, i, 0] += vi * np.cos(hi) * DT_P
                 npc[e, i, 1] += vi * np.sin(hi) * DT_P
                 npc[e, i, 2] = hi
@@ -334,7 +343,8 @@ def _step(WPS, NWP, CUM, TANG, RLEN, SES, SXY, SINFO,
         else:
             ax = ex if ex > 0 else -ex
             ay = ey if ey > 0 else -ey
-            on_rd = (ax <= HF and ay <= HF + ARMF) or (ay <= HF and ax <= ARMF + HF)
+            on_rd = (ax <= HF and ay <= IBOXF + ARMF) or (ay <= HF and ax <= IBOXF + ARMF) \
+                or (ax <= IBOXF and ay <= IBOXF)
             crashed = min_d < CR
             arrived = lng >= RLEN[rid] - np.float32(2.0)
             out_road = (not on_rd) and (not arrived)

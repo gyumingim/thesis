@@ -18,7 +18,12 @@ MAX_SPEED = MAX_SPEED_KMH / 3.6          # 22.22 m/s
 import numpy as _np
 MAX_STEER = float(_np.deg2rad(40.0))     # pg_space.py:232 max_steering=ConstantSpace(40) [deg]
 WHEELBASE = 2.8         # m, 자전거 모델 축거 (MetaDrive 는 Bullet 강체 — 근사값, 논문에 명시)
-MAX_ACCEL = 5.0         # m/s^2 (근사값 — MetaDrive 는 엔진 힘 곡선. 논문에 명시)
+# 라운드3 (2026-08-20): MetaDrive 응답 실측으로 캘리브레이션
+ACCEL_MAX = 2.93        # m/s^2 — 실측: 풀스로틀 0~15m/s 전 구간 상수
+BRAKE_MAX = 14.1        # m/s^2 — 실측: 14.7m/s 풀브레이크 평균 감속
+STEER_SAT_V0 = 5.33     # 조향 포화 모델 δ_eff = δ/(1+(s·v/V0)^P), 4점 실측 피팅(최대오차 7%)
+STEER_SAT_P = 2.28
+MAX_ACCEL = ACCEL_MAX   # (구 코드 호환: 벤치 커널은 동결이라 이 별칭만 유지)
 COLLISION_RADIUS = 2.5  # m, 원-원 충돌 근사 (MetaDrive 는 박스 충돌 — 근사, 논문에 명시)
 
 # --- 관측 정규화 상수 (설치된 metadrive 0.4.3 소스 확인) ---

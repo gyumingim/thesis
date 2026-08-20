@@ -15,8 +15,11 @@ import numpy as np
 import spec
 
 LANE_W = spec.LANE_WIDTH            # 3.5
-H = 3 * LANE_W                      # 10.5 — 도로(편도) 반... 정확히는 로드웨이 폭이자 도로 반폭
-EGO_OFF = 1.5 * LANE_W              # 5.25 — 주행 차선(가운데) 중심의 도로중심 기준 오프셋
+H = 3 * LANE_W                      # 10.5 — 로드웨이 폭(편도 3차선)이자 팔 구간 도로 반폭
+CORNER_R = 10.0                     # MetaDrive StdInterSection radius=10 (pg_space 실측)
+IBOX = H + CORNER_R                 # 20.5 — 교차로 영역 반크기. 교차 구간 길이 41m
+                                    #        (MD 실측: 블록1 끝 x=10 → ck2 x=50, 40m 교차와 일치)
+EGO_OFF = 1.5 * LANE_W              # 5.25 — 주행 차선(가운데) 중심 오프셋
 ENTRY_LEN = 10.0                    # MetaDrive FirstPGBlock 실측 (스폰 차선 길이 10)
 TOTAL_ROUTE = 122.5                 # MetaDrive navigation.total_length 실측
 ROAD_ARM = 110.0                    # 물리 도로 팔 길이 (최장 진출로 커버, on_road 판정용)
@@ -32,29 +35,29 @@ def _rot(theta):
 def _south_route(maneuver):
     """남쪽 팔 진입 기준 경로 (가운데 차선). 진행방향 +y, 차선중심 x=+5.25."""
     pts = []
-    y0 = -(H + ENTRY_LEN)
-    y = np.arange(y0, -H, WP_STEP)
+    y0 = -(IBOX + ENTRY_LEN)
+    y = np.arange(y0, -IBOX, WP_STEP)
     pts.append(np.stack([np.full_like(y, EGO_OFF), y], -1))
 
     if maneuver == "straight":
-        mid_len = 2 * H
-        y2 = np.arange(-H, H, WP_STEP)
+        mid_len = 2 * IBOX
+        y2 = np.arange(-IBOX, IBOX, WP_STEP)
         pts.append(np.stack([np.full_like(y2, EGO_OFF), y2], -1))
-        exit_dir, exit_start = np.array([0.0, 1.0]), np.array([EGO_OFF, H])
+        exit_dir, exit_start = np.array([0.0, 1.0]), np.array([EGO_OFF, IBOX])
     elif maneuver == "right":
-        # (5.25,-10.5) → (10.5,-5.25), 중심 (10.5,-10.5), 반경 10.5-5.25=5.25
-        r = H - EGO_OFF
+        # (5.25,-20.5) → (20.5,-5.25), 중심 (20.5,-20.5), 반경 20.5-5.25=15.25
+        r = IBOX - EGO_OFF
         mid_len = r * np.pi / 2
-        th = np.linspace(np.pi, np.pi / 2, 10)
-        pts.append(np.stack([H + r * np.cos(th), -H + r * np.sin(th)], -1))
-        exit_dir, exit_start = np.array([1.0, 0.0]), np.array([H, -EGO_OFF])
+        th = np.linspace(np.pi, np.pi / 2, 14)
+        pts.append(np.stack([IBOX + r * np.cos(th), -IBOX + r * np.sin(th)], -1))
+        exit_dir, exit_start = np.array([1.0, 0.0]), np.array([IBOX, -EGO_OFF])
     elif maneuver == "left":
-        # (5.25,-10.5) → (-10.5, 5.25), 중심 (-10.5,-10.5), 반경 10.5+5.25=15.75
-        r = H + EGO_OFF
+        # (5.25,-20.5) → (-20.5, 5.25), 중심 (-20.5,-20.5), 반경 20.5+5.25=25.75
+        r = IBOX + EGO_OFF
         mid_len = r * np.pi / 2
-        th = np.linspace(0.0, np.pi / 2, 18)
-        pts.append(np.stack([-H + r * np.cos(th), -H + r * np.sin(th)], -1))
-        exit_dir, exit_start = np.array([-1.0, 0.0]), np.array([-H, EGO_OFF])
+        th = np.linspace(0.0, np.pi / 2, 24)
+        pts.append(np.stack([-IBOX + r * np.cos(th), -IBOX + r * np.sin(th)], -1))
+        exit_dir, exit_start = np.array([-1.0, 0.0]), np.array([-IBOX, EGO_OFF])
     else:
         raise ValueError(maneuver)
 
@@ -123,12 +126,12 @@ def build_sections():
     for i in range(n):
         m = i % 3
         if m == 0:
-            r = H - EGO_OFF
+            r = IBOX - EGO_OFF
             mid_len, info_mid = r * np.pi / 2, (r / denom, 1.0, a90)
         elif m == 1:
-            mid_len, info_mid = 2 * H, STRAIGHT
+            mid_len, info_mid = 2 * IBOX, STRAIGHT
         else:
-            r = H + EGO_OFF
+            r = IBOX + EGO_OFF
             mid_len, info_mid = r * np.pi / 2, (r / denom, 0.0, a90)
         s1 = ENTRY_LEN
         s2 = s1 + mid_len
@@ -143,5 +146,6 @@ def build_sections():
 
 
 def on_road(x, y):
-    return ((np.abs(x) <= H) & (np.abs(y) <= H + ROAD_ARM)) | \
-           ((np.abs(y) <= H) & (np.abs(x) <= H + ROAD_ARM))
+    return ((np.abs(x) <= H) & (np.abs(y) <= IBOX + ROAD_ARM)) | \
+           ((np.abs(y) <= H) & (np.abs(x) <= IBOX + ROAD_ARM)) | \
+           ((np.abs(x) <= IBOX) & (np.abs(y) <= IBOX))
