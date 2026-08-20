@@ -103,7 +103,11 @@ class IntersectionNumpy:
     def _observe(self, dist):
         d_ego = dist[:, 0, 1:]                                            # (E, V) ego↔NPC
         k = min(spec.NUM_OTHERS, self.V)
-        near = np.argpartition(d_ego, kth=k - 1, axis=1)[:, :k]           # 최근접 k대
+        # 최근접 k대. argpartition 은 순서를 보장하지 않으므로 거리순으로 정렬한다.
+        # (Numba/Torch 구현은 정렬된 순서를 내므로, 정렬하지 않으면 관측 슬롯이 어긋난다.)
+        part = np.argpartition(d_ego, kth=k - 1, axis=1)[:, :k]
+        rows_p = np.arange(self.E)[:, None]
+        near = np.take_along_axis(part, np.argsort(d_ego[rows_p, part], axis=1), axis=1)
         rows = np.arange(self.E)[:, None]
         sel = self.npc[rows, near]                                        # (E, k, 4)
 

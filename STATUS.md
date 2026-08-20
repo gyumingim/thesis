@@ -31,21 +31,12 @@
 
 ## 하고 있는 일
 
-- **과제·행동·관측 확정 (2026-08-18, 사용자 제안 + MetaDrive 소스 대조)**
-  - 메인 과제 = **intersection**, 일반화 검증 = **bottleneck**(2차) — 사용자 확정
-  - 제어 = **연속** — 사용자 확정 → CleanRL `ppo_continuous_action.py` 확정
-  - 관측 = **저차원 벡터, 카메라 없음** — 사용자 확정
-  - 정정 1: 행동공간 3차원(steering/throttle/brake) → **2차원**
-    근거 `metadrive/policy/env_input_policy.py:62` = `Box(-1.0, 1.0, shape=(2,))`,
-    `base_vehicle.py:472` = `action[0]=steering, action[1]=throttle_brake`.
-    분리하면 비교군과 행동공간이 달라 비교 무효 + throttle/brake 동시입력이 정의 불가
-  - 정정 2: 관측의 "다른 차량 relative x/y/speed/heading"(객체 리스트) → **라이다 광선**
-    근거: `metadrive/obs/` 에 객체 리스트 관측이 없음(state_obs/image_obs/top_down_obs 뿐).
-    객체 리스트로 단순화하면 광선 캐스팅 비용이 측정에서 빠져 SPS 우위가 과장됨
-  - 신호등: 1차 실험 제외 (비교군에 없는 정보를 한쪽만 갖게 됨)
-- **마이크로벤치 승인 대기** — 사용자 설계에 다음 2건 보완 제안
-  - PyTorch GPU 텐서 구현을 측정 대상에 추가 (Numba를 버릴 경우의 폴백이 없으면 판단 불가)
-  - 차량 수 1024는 교차로에서 비현실적 → 차량 4/16/64, 환경 수를 주 스케일링 축(1~4096)으로
+- **마이크로벤치 완료 (2026-08-20)** — 결과는 PAPER.md 3.5~3.7 절
+  - 세 커널(NumPy/Numba/Torch) 동치 검증 통과 후 측정 (obs 차이 2.98e-07)
+  - **Numba 채택 확정 근거 확보**: V=16, E=1024 에서 4.1M SPS (MetaDrive 단일 1,532 SPS 의 ~2,700배)
+  - 함정 발견: OMP 16스레드는 SMT 경합으로 103배 붕괴 → `NUMBA_NUM_THREADS=8` (물리 코어 수) 필수
+  - 발견: NumPy argpartition 비정렬 → 관측 슬롯 불일치 버그를 동치 검증이 잡아냄
+- 다음: MetaDrive AsyncVectorEnv 병렬 기준선 측정 → CleanRL PPO 연결
 
 ## 할 일
 
