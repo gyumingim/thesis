@@ -41,13 +41,55 @@
 
 ## 2. 관련 연구
 
-- **가속 주행 시뮬**: GPUDrive(1M FPS, Madrona/CUDA, Waymo 데이터 필수), Waymax(JAX,
-  Waymo 데이터 필수), HighJax(highway-env의 JAX 재구현, 이산행동) — 본 연구와 달리
-  모두 "빠른 시뮬 자체"가 기여이며, 기존 고충실도 시뮬과의 벽시계 통제 비교는 다루지 않는다.
-- **고충실도 비교군**: MetaDrive — 절차적 생성, 데이터셋 불필요, Bullet 물리. 본 연구의
-  기준 과제 공급자이자 전이 시험장.
-- **sim-to-sim / 도메인 정합**: [TBD — 관련연구 조사 확장: domain randomization 대
-  exact matching, observation mismatch 문헌]
+(전 문헌 2026-08-21 arXiv 원문 페이지 실존·제목 검증 완료. 전체 서지는 부록 B.)
+
+### 2.1 처리량 지향 시뮬레이션과 벽시계 기준 비교
+
+환경 실행 자체가 RL의 병목이라는 문제의식은 Sample Factory(2020)·Podracer(2021)에서
+출발해, 물리와 학습을 한 가속기에 통합한 Isaac Gym(2021)·Brax(2021), 실행 엔진을
+분리 최적화한 EnvPool(2022)·PufferLib(2024), 주행 특화 GPUDrive(ICLR 2025, 1M FPS)로
+이어진다. 이 계열의 보고 관행 자체가 "동일 스텝"이 아니라 **"몇 분 만에 도달했는가"**
+— Brax "수 분", EnvPool "노트북 5분", GPUDrive "15분 내 95%" — 로 이동해 있다.
+알고리즘 간 비교를 벽시계 축으로 명시 통제한 연구는 이보다 드물다: FastTD3(2025)는
+동일 GPU·시간 예산 비교를 제1지표로 삼았고, Rethinking Suitability(2026)는 PPO/SAC/
+TD-MPC2를 샘플 축과 벽시계 축에서 각각 평가해 **두 축의 순위가 갈린다**는 것을 직접
+보였다. Hilton et al.(2023)은 동일 compute 예산 하의 최적 배분을 거듭제곱 법칙으로
+정식화했다(RL판 compute-optimal scaling). 그러나 이들은 모두 **단일 시뮬레이터 안**의
+비교다 — "처리량이 다른 두 시뮬레이터를 같은 시간 예산에 놓고, 낮은 충실도의 대량
+샘플 대 높은 충실도의 소량 샘플"을 정면 비교한 사례는 확인되지 않았다. 본 연구가
+채우는 첫 번째 공백이다.
+
+### 2.2 시뮬레이터 간 정합과 전이
+
+복수 시뮬레이터를 다루는 기존 연구는 목적이 다르다. Driver Dojo(2022)는 SUMO(규칙)+
+CARLA(관측)+CommonRoad(동역학)를 **조합**해 하나의 벤치마크를 만들었고 — 이 3분해는
+본 연구의 정합 계층 분류(§4: 관측/동역학/규칙/기하)와 정확히 호응한다 — ScenarioNet
+(NeurIPS 2023)은 이종 실측 데이터를 MetaDrive 포맷으로 **통합**했다. 정책을 실제로
+저충실도에서 고충실도로 옮긴 CARLA–SUMO co-simulation(2024)은 그러나 제로샷이 아니라
+CARLA에서 10.5시간 추가 미세조정을 요한다. 충실도–전이 관계의 이론화는 sim-to-real
+쪽에 있다: Muratore et al.(TPAMI 2021)의 시뮬레이션 최적화 편향(SOB) 정량화,
+다중 충실도 GP 캐스케이드(2017), 디지털 트윈 단계적 전이(2022), 그리고 정책 재학습
+없이 정렬 레이어만으로 제로샷 전이하는 Dynamics-Decoupled Trajectory Alignment(2025).
+본 연구의 "정합 후 제로샷"은 이 마지막 갈래와 철학이 같되 타깃이 실차가 아니라
+**실측 정합된 다른 시뮬레이터**라는 점이 다르다 — 자율주행 RL에서 순수 sim-to-sim
+제로샷 전이를 정면으로 다룬 논문은 이번 조사에서 확인되지 않았다(두 번째 공백).
+
+### 2.3 관측 분포 불일치와 정규화 통계
+
+관측 정규화가 성능의 결정 변수라는 것은 대규모 통제 실험 두 건(Engstrom et al.,
+ICLR 2020; Andrychowicz et al., ICLR 2021 — 25만 실험, "입력 정규화는 거의 모든
+환경에서 필수")이 확립했고, 그 통계량이 도메인 특정적이라 이질 도메인 간 공유가
+부적절하다는 지적도 최근 나왔다(PON, IJCNN 2025). 퇴화 차원의 위험은 세 방향에서
+독립적으로 알려져 있다: (i) Kidziński et al.(2018)은 NeurIPS Learning to Run
+챌린지에서 **학습 중 상수였던 관측 차원의 std=0이 정규화를 깨뜨린** 사례를 직접
+보고했다(단, 우회 수정에 그침). (ii) Observational Overfitting(ICLR 2020)은 손실에
+벌점이 없는 관측 차원에 정책이 임의 가중치를 싣는 메커니즘을 이론화했다. (iii) 오프라인
+RL의 CQL(NeurIPS 2020)은 지지집합 밖 입력에 대한 검증되지 않은 외삽이 폭주로 이어지는
+패턴을 정식화했다. 본 연구의 §5는 이 세 기제 — 정규화의 도메인 고착, 퇴화 차원의
+암묵적 가중치, 지지집합 밖 외삽 — 가 "학습 중 우연히 무분산이던 슬롯"이라는 단일
+실패 지점에서 만나는 것을 시뮬 간 전이 셋업에서 **분리·재현·정량화**(통제실험
+Δsteer 0.74)한 사례연구다. 현상의 최초 발견이 아니라 인과 사슬의 실증적 규명이
+기여임을 명시한다.
 
 ## 3. 방법
 
@@ -99,8 +141,22 @@ NPC 수를 노출 평균(1.3대) 정합 목적으로 4→2로 줄이자 **3번�
 통제 실험: 학습 평균 관측에서 해당 4차원만 채우자 조향 −0.08→+0.66 (Δ0.74) 폭주.
 
 **원리**: 분포의 1차 통계(노출 평균)를 맞추는 것보다, **모든 관측 차원이 학습 중 비퇴화
-분산을 갖는 것(지지집합 커버리지)이 우선**한다. 검증: (a) 퇴화 차원 마스킹만으로 기존
-정책의 전이가 회복되는가 [TBD — 마스킹 재평가], (b) V=3 재학습이 회복하는가 [TBD].
+분산을 갖는 것(지지집합 커버리지)이 우선**한다.
+
+**검증 (a) — 동일 시뮬레이터 소거 실험 (완료)**: 시뮬 격차를 완전히 제거하고 V만 바꿔
+평가하면(V=2 학습 정책, 결정론 64ep, 시드 500000):
+
+| 정책 | V=2 평가 (in-domain) | V=3 평가 (지지집합 위반만) |
+|---|---|---|
+| 경량 s1 | 81% (이탈 0%) | 22% (이탈 67%) |
+| 경량 s3 | 89% (이탈 2%) | 36% (이탈 45%) |
+
+동일 시뮬·동일 정책에서 3번째 차량 슬롯이 지지집합을 벗어나는 것만으로 −53~−59pp,
+실패 모드는 이탈 폭증 — 통제실험의 조향 폭주(Δ0.74)와 정합하는 지문이다. 즉 §6.2 의
+전이 붕괴는 시뮬 간 격차가 아니라 지지집합 위반이 지배 요인이다.
+
+남은 검증: (b) 퇴화 차원 마스킹만으로 기존 정책의 전이가 회복되는가 [TBD — 마스킹
+재평가], (c) V=3 재학습이 회복하는가 [TBD].
 
 ## 6. 결과
 
@@ -114,14 +170,24 @@ NPC 수를 노출 평균(1.3대) 정합 목적으로 4→2로 줄이자 **3번�
 | **격차 (공정)** | | **138×** |
 | 학습 포함 | custom 72K vs MetaDrive 1.36K | 53× (동일 1시간 샘플) |
 
-### 6.2 본판 (1시간 × 시드 3, 전이 시험장 = MetaDrive)
+### 6.2 본판 (1시간 × 시드 3, 전이 시험장 = MetaDrive, 30ep 결정론)
 | 학습 환경 | →MetaDrive 성공률 (시드 평균±σ) | 비고 |
 |---|---|---|
-| MetaDrive (네이티브) | **60% ± 3%** (2시드 기준, s3 [TBD]) | 기준선 |
-| 경량 V=2 (지지집합 결함) | 5% ± 5% | §5의 병리 표본 |
-| 경량 V=2 + 퇴화차원 마스킹 | [TBD] | 원리 검증 (a) |
+| MetaDrive (네이티브) | **66% ± 10%** (63/57/77, 3시드)¹ | 기준선 |
+| 경량 V=2 (지지집합 결함) | 5% ± 7% (0/10, 2시드)² | §5의 병리 표본 |
+| 경량 V=2 + 퇴화차원 마스킹 | [TBD] | 원리 검증 (b) |
 | **경량 V=3 (수정판)** | **[TBD]** | 본 연구의 주 결과 |
 | (참고) 파일럿 R5 30분 | 30% (단일 시드) | 지지집합 건재 시 도달점 |
+
+¹ s3은 학습 중 벡터 워커 스톨(약 2.8h)로 예산 체크가 지연 발화, final 이 벽시계
+12,857s 시점이 됨 → 벽시계 3,600s 시점 상태인 t=2,700s 체크포인트(77%)로 대체
+(부록 A; final 사용 시 70%, 3시드 평균 63%±6%로 결론 불변).
+² s2는 CUDA 순간 결함으로 11분에 사망(체크포인트 미생성), V=3 본판에서 대체.
+
+**역방향 비대칭**: MetaDrive 네이티브 정책 → 경량 환경(V=3)은 2%±3%(0/5/0)로 전멸,
+이탈 88~97%. 정합은 "경량→MetaDrive" 방향으로 설계·검증된 것이며(경량의 관측·기하가
+MetaDrive 의 부분집합), 역방향은 MetaDrive 학습 분포가 경량 환경의 NPC 행동·스폰
+분포를 커버하지 못한다. 전이 가능성은 대칭 관계가 아니라는 실측 사례.
 
 ### 6.3 인지 파이프라인 (병행 플로우, 요약)
 CARLA 500프레임(이미지+3D+2D박스 라벨) 자동 생성. 무학습 지면평면 기준선: 종방향
@@ -137,4 +203,49 @@ CARLA 500프레임(이미지+3D+2D박스 라벨) 자동 생성. 무학습 지면
 ## 부록 A. 재현성 함정 목록 (전부 실측)
 ROS PYTHONPATH 오염 / MetaDrive reset(seed)=시나리오 인덱스 / horizon 기본값 버전 차 /
 gymnasium 벡터래퍼 SAME_STEP 미지원 / AsyncVectorEnv 시드 배분과 시나리오 범위 충돌 /
-노트북 절전과 wall-clock / SSH 종료 시 원격 자식 사망 / CUDA 순간 결함 / SMT 스레드 경합.
+노트북 절전과 wall-clock / SSH 종료 시 원격 자식 사망 / CUDA 순간 결함 / SMT 스레드 경합 /
+**벡터 워커 스톨과 벽시계 예산**: env 워커가 행에 걸리면 예산 검사가 반복 경계에서만
+발화해 벽시계 예산이 조용히 위반된다(실측: 3,600s 예산 런이 12,857s에 종료, §6.2 s3).
+체크포인트 타임라인(300s 간격)으로 사후 복원 가능 — 벽시계 실험엔 주기 체크포인트가
+프로토콜 보험이다.
+
+## 부록 B. 참고문헌 (URL 은 2026-08-21 실존 검증)
+
+**처리량·벽시계 (§2.1)**
+- Petrenko et al., *Sample Factory*, ICML 2020. arXiv:2006.11751
+- Hessel et al., *Podracer architectures for scalable RL*, 2021. arXiv:2104.06272
+- Makoviychuk et al., *Isaac Gym*, NeurIPS D&B 2021. arXiv:2108.10470
+- Freeman et al., *Brax*, NeurIPS D&B 2021. arXiv:2106.13281
+- Weng et al., *EnvPool*, NeurIPS 2022. arXiv:2206.10558
+- Suarez, *PufferLib*, 2024. arXiv:2406.12905
+- Kazemkhani et al., *GPUDrive: 1M FPS driving simulation*, ICLR 2025. arXiv:2408.01584
+- Hilton et al., *Scaling laws for single-agent RL*, 2023. arXiv:2301.13442
+- *FastTD3*, 2025. arXiv:2505.22642
+- *Rethinking the Suitability of RL Algorithms Under Practical Transfer Constraints*,
+  2026. arXiv:2607.17326
+
+**시뮬 간 정합·전이 (§2.2)**
+- Li et al., *MetaDrive*, TPAMI 2023. arXiv:2109.12674
+- Li et al., *ScenarioNet*, NeurIPS D&B 2023. arXiv:2306.12241
+- *Driver Dojo*, 2022. arXiv:2207.11432
+- *Traffic Co-Simulation (CARLA–SUMO) with RL*, 2024. arXiv:2412.03925
+- Muratore et al., *Assessing Transferability From Simulation to Reality*, TPAMI 2021.
+  arXiv:1907.04685
+- Cutler et al. 계열, *Multi-Fidelity RL with Gaussian Processes*, 2017. arXiv:1712.06489
+- *RL from Simulation to Real World AD using Digital Twin*, 2022. arXiv:2211.14874
+- *Dynamics-Decoupled Trajectory Alignment for Sim-to-Real RL AD*, 2025. arXiv:2511.07155
+- *A Review of Nine Physics Engines for RL Research*, 2024. arXiv:2407.08590
+
+**관측 정규화·지지집합 (§2.3, §5)**
+- Kidziński et al., *Learning to Run challenge solutions*, 2018. arXiv:1804.00361 (§8.1:
+  상수 차원 std=0 이 정규화를 통과 못한 실측 보고)
+- Engstrom et al., *Implementation Matters in Deep Policy Gradients*, ICLR 2020.
+  arXiv:2005.12729
+- Andrychowicz et al., *What Matters In On-Policy RL*, ICLR 2021. arXiv:2006.05990
+- Song et al., *Observational Overfitting in RL*, ICLR 2020. arXiv:1912.02975
+- Kumar et al., *Conservative Q-Learning*, NeurIPS 2020. arXiv:2006.04779
+- Kirk et al., *A Survey of Zero-shot Generalisation in Deep RL*, JAIR 2023.
+  arXiv:2111.09794
+- Kumar et al., *RMA: Rapid Motor Adaptation*, RSS 2021. arXiv:2107.04034
+- *Personalized Observation Normalization for Federated RL*, IJCNN 2025.
+  arXiv:2605.27385
