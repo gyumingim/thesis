@@ -39,14 +39,19 @@ def load_agent(ckpt_path, device):
     return agent, mean, std, d
 
 
+MASK_DEGENERATE = False   # 학습 중 σ=0 이던 차원을 0으로 마스킹 (미학습 차원 폭주 방지)
+
+
 def _act(agent, obs, mean, std, device):
     x = np.clip((obs - mean) / std, -10, 10).astype(np.float32)
+    if MASK_DEGENERATE:
+        x[..., std < 1e-3] = 0.0
     with torch.no_grad():
         a = agent.actor_mean(torch.from_numpy(x).to(device))
     return np.clip(a.cpu().numpy(), -1.0, 1.0)
 
 
-def eval_custom(agent, mean, std, episodes, seed, device, n_vehicles=2):
+def eval_custom(agent, mean, std, episodes, seed, device, n_vehicles=3):
     from env_numba import IntersectionEnv
     E = min(64, episodes)
     env = IntersectionEnv(E, n_vehicles, seed=seed)
@@ -107,9 +112,13 @@ def main():
     ap.add_argument("--target", choices=["custom", "metadrive"], required=True)
     ap.add_argument("--episodes", type=int, default=30)
     ap.add_argument("--seed", type=int, default=1000)   # 학습 시드와 분리
+    ap.add_argument("--mask-degenerate", action="store_true",
+                    help="학습 σ=0 차원을 0으로 (V부족 학습런의 전이 구제 실험)")
     ap.add_argument("--out")
     a = ap.parse_args()
 
+    global MASK_DEGENERATE
+    MASK_DEGENERATE = a.mask_degenerate
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ckpts = [a.ckpt] if a.ckpt else sorted(glob.glob(f"{a.run_dir}/ckpt/*.pt"))
     rows = []

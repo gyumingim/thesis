@@ -19,7 +19,7 @@ class IntersectionVectorEnv(gym.vector.VectorEnv):
     # 벡터 래퍼(RecordEpisodeStatistics 등)가 이 태그로 리셋 의미론을 판별한다.
     metadata = {"autoreset_mode": AutoresetMode.NEXT_STEP}
 
-    def __init__(self, num_envs, n_vehicles=2, seed=0):
+    def __init__(self, num_envs, n_vehicles=3, seed=0):
         # n_vehicles=4: 50m 내 실측기하 맵에서 V=2가 노출 1.18대로 MD(1.3) 최근접 (2026-08-20 R6) → MetaDrive 실측(1.3대/최대 3) 정합 (2026-08-20)
         self._env = IntersectionEnv(num_envs, n_vehicles, seed)
         self.num_envs = num_envs
