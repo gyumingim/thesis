@@ -63,10 +63,16 @@ class MetaDriveGT(gym.Env):
 
     def __init__(self, seed=0, num_others=NUM_OTHERS, density=0.1, num_scenarios=1):
         self._env = MetaDriveEnv(base_config(seed, num_others, density, num_scenarios))
+        self._start, self._n = seed, num_scenarios
         self.observation_space = self._env.observation_space
         self.action_space = self._env.action_space
 
     def reset(self, *, seed=None, options=None):
+        # MetaDrive 의 seed 는 시나리오 인덱스 [start, start+n). gymnasium AsyncVectorEnv 가
+        # reset(seed=s) 를 워커별 s+i 로 배분하므로, 어떤 값이 와도 자기 범위로 사상한다
+        # (범위 안 값은 항등 — 평가 경로 동작 불변). 2026-08-21 본판 MD 전멸 원인 수정.
+        if seed is not None:
+            seed = self._start + ((seed - self._start) % self._n)
         return self._env.reset(seed=seed)
 
     def step(self, action):
