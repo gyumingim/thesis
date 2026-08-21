@@ -50,7 +50,7 @@ def world_to_camera_local_m(t):
 
 
 def main():
-    n_scenes = 3
+    n_scenes = 10
     for a in sys.argv[1:]:
         if not a.startswith("-"):
             try:
@@ -102,14 +102,18 @@ def main():
             az = math.radians(random.uniform(-SECTOR_HALF_ANGLE_DEG, SECTOR_HALF_ANGLE_DEG))
             x = dist * 100 * math.cos(az)
             y = dist * 100 * math.sin(az)
-            # 메시 원점이 바닥이 아닐 수 있어 바운드로 지면 접지: z = -(origin.z - extent.z)
-            z = -(b.origin.z - ext.z)
             yaw = random.uniform(0, 360)
-            v = act.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(x, y, z),
+            v = act.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(x, y, 0),
                                            unreal.Rotator(0, 0, yaw))
             v.static_mesh_component.set_static_mesh(mesh)
             v.static_mesh_component.set_mobility(unreal.ComponentMobility.MOVABLE)
-            lx, ly, lz = world_to_camera_local_m((x, y, z + b.origin.z))
+            # 접지: 피벗이 메시마다 달라 로컬 바운드 공식이 어긋남(지붕만 보이는 침몰 사례).
+            # 스폰 후 월드 바운드 실측으로 바닥을 z=0 에 정렬한다.
+            wo, we = v.get_actor_bounds(False)
+            z = -(wo.z - we.z)
+            v.set_actor_location(unreal.Vector(x, y, z), False, False)
+            wo2, _we2 = v.get_actor_bounds(False)      # 보정 후 실제 중심
+            lx, ly, lz = world_to_camera_local_m((wo2.x, wo2.y, wo2.z))
             vehicles.append(dict(
                 mesh=mesh.get_name(),
                 relative_position_m=dict(x=lx, y=ly, z=lz),
