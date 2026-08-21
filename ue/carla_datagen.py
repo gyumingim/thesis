@@ -92,6 +92,32 @@ def main():
             img = q.get(timeout=10.0)
         img.save_to_disk(os.path.join(OUT, f"frame_{i}.png"))
 
+        FX = (W / 2) / math.tan(math.radians(FOV / 2))
+        CXX, CYY = W / 2, H / 2
+
+        def project_box(v, cam_tf):
+            '''3D 바운딩박스 8모서리 → 이미지 2D 박스 (u0,v0,u1,v1). 화면 밖은 클립.'''
+            bb = v.bounding_box
+            tf = v.get_transform()
+            us, vs = [], []
+            for sx in (-1, 1):
+                for sy in (-1, 1):
+                    for sz in (-1, 1):
+                        corner = carla.Location(bb.location.x + sx * bb.extent.x,
+                                                bb.location.y + sy * bb.extent.y,
+                                                bb.location.z + sz * bb.extent.z)
+                        wp = tf.transform(corner)
+                        cx, cy, cz = rel_in_cam(cam_tf, wp)
+                        if cx < 0.3:
+                            return None
+                        us.append(CXX + FX * cy / cx)
+                        vs.append(CYY - FX * cz / cx)
+            u0, u1 = max(0, min(us)), min(W, max(us))
+            v0, v1 = max(0, min(vs)), min(H, max(vs))
+            if u1 - u0 < 4 or v1 - v0 < 4:
+                return None
+            return [round(u0, 1), round(v0, 1), round(u1, 1), round(v1, 1)]
+
         labels = []
         for v in vehicles:
             loc = v.get_transform().location
@@ -99,12 +125,16 @@ def main():
             d = math.sqrt(fx * fx + fy * fy)
             if d < DETECT_M and fx > 0.5:          # 전방 50m 내만 라벨
                 bb = v.bounding_box
+                box2d = project_box(v, cam_tf)
+                if box2d is None:
+                    continue
                 labels.append(dict(
                     type=v.type_id,
                     relative_position_m=dict(x=fx, y=fy, z=fz),
                     relative_yaw_deg=(v.get_transform().rotation.yaw - cam_tf.rotation.yaw + 180) % 360 - 180,
                     size_m=dict(l=2 * bb.extent.x, w=2 * bb.extent.y, h=2 * bb.extent.z),
                     distance_m=d,
+                    bbox2d=box2d,
                 ))
         with open(os.path.join(OUT, f"frame_{i}.json"), "w") as f:
             json.dump(dict(frame=i, camera=dict(fov_deg=FOV, width=W, height=H,
