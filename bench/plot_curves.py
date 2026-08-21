@@ -54,6 +54,9 @@ for f in evals:
     r = fin[0]
     key = next((k for k in names if k in f), f)
     xs.append(names.get(key, key)); suc.append(r["success_rate"]); oor.append(r["out_of_road_rate"]); ret.append(r["mean_return"])
+order = np.argsort(xs)                    # R0..R6 순 정렬
+xs = [xs[i] for i in order]; suc = [suc[i] for i in order]
+oor = [oor[i] for i in order]; ret = [ret[i] for i in order]
 x = np.arange(len(xs))
 ax.bar(x - 0.2, suc, 0.35, label="success rate")
 ax.bar(x + 0.2, oor, 0.35, label="out-of-road rate")
