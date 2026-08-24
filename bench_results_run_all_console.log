@@ -1,8 +1,0 @@
-=== train main_md seed=1 | 08-24 16:03:09 ===
-위치 줄:2 문자:24
-+ ... DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecu ...
-+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-식 또는 문에서 예기치 않은 'kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);"' 토큰입니다.
-    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
-    + FullyQualifiedErrorId : UnexpectedToken
- 
