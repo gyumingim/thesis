@@ -25,10 +25,7 @@ mkdir -p "$OUT"
 
 # ── 절전 방지: 14시간 무인 실행 중 윈도우가 잠들면 time.time() 예산이 오염된다.
 #    SetThreadExecutionState 를 주기 호출하는 파수꾼을 배치 수명 동안만 띄운다.
-powershell -NoProfile -Command '
-  $sig = "[DllImport(\"kernel32.dll\")] public static extern uint SetThreadExecutionState(uint f);"
-  $k = Add-Type -MemberDefinition $sig -Name KA -Namespace W -PassThru
-  while ($true) { [void]$k::SetThreadExecutionState(0x80000001); Start-Sleep 50 }' &
+powershell -NoProfile -ExecutionPolicy Bypass -File bench/keepawake.ps1 &
 KEEPAWAKE_PID=$!
 trap 'kill $KEEPAWAKE_PID 2>/dev/null' EXIT
 
