@@ -21,6 +21,10 @@ v1(회색 평면 + 흰 차) 대비 변경 — 전부 2026-08-24 실측으로 확
 
 출력: /Game/GenScenes/gen_<i> + C:/ue/out_cs2/scene_<i>.json  (독스트링에 역슬래시 경로 금지 — 16734e2 함정)
 
+노면 습윤 변형 백로그: M_Asphalt_Master_Inst 의 Puddle/Roughness 파라미터는
+set_material_instance_scalar_parameter_value 기본(GLOBAL) 연관으로는 전부 False —
+레이어 파라미터(MFPD 계열) 추정, LAYER_PARAMETER 연관/레이어 인덱스 필요 (2026-08-24 실측).
+
 주의: 이 장비에서 gen_0/gen_5 레벨 자산은 구성 무관하게 -game 렌더 시 D3D12 페이탈을
 재현한다(시드 교체 무효, 신선한 이름 gen_10/11 은 동일 코드로 즉시 성공 — 2026-08-24 실측).
 원인 미상(레벨 자산/캐시 오염 추정). 대량 생성 시 신선한 인덱스 대역을 쓸 것 (only=).
