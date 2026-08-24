@@ -59,6 +59,9 @@ BLDG_POOL = {
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Low_CHG_Modern_A01": 33.0,
 }
+# 건물 풀 확장 실패 기록 (2026-08-24 밤): SFE_A01/B01·NYG_Triangle_B01 을 넣은 장면은
+# -game 로드~첫 프레임에서 D3D12 페이탈이 재현된다 (기지 장면은 같은 시각 정상 렌더 —
+# 머신 아닌 내용 상관 실측). 신규 히어로 빌딩 추가는 장면당 1종씩 단독 검증 후 편입할 것.
 TREE_POOL = [
     "/Game/Prop/Kit_Tree_Maple_Red/Mesh/Tree_Maple_Red_A",
     "/Game/Prop/Kit_Tree_Alder/Mesh/Tree_Alder_A",
@@ -246,18 +249,23 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         m = random.choice(vehicles)
         e = m.get_bounds().box_extent
         r = math.hypot(e.x / 100, e.y / 100)
-        d = random.uniform(6, 48)
-        az = math.radians(random.uniform(-32, 32))
-        x, y = d * math.cos(az), d * math.sin(az)
-        if abs(y) > 8.5:
-            continue
+        mode = random.random()
+        if mode < 0.15:
+            # 평행주차: 갓길(|y|≈8.2m)에 차선과 나란히
+            x = random.uniform(6, 48)
+            side = random.choice((-1, 1))
+            y = side * random.uniform(7.9, 8.4)
+            yaw = (0.0 if side < 0 else 180.0) + random.uniform(-4, 4)
+        else:
+            x = random.uniform(6, 48)
+            y = random.uniform(-7.5, 7.5)
+            if mode < 0.85:
+                # 우측통행 차선 의미론: y<0(우측 차선) 순방향, y>0 마주 옴
+                yaw = (0.0 if y < 0 else 180.0) + random.uniform(-8, 8)
+            else:
+                yaw = random.uniform(0, 360)   # 회전 중/무단 주차 등 자유
         if any(math.hypot(x - px, y - py) < r + pr + 0.4 for px, py, pr in placed):
             continue
-        # 실도로 통계에 근접: 70% 차선 정렬(진행/역방향 ±8°), 30% 자유(주차·회전 중)
-        if random.random() < 0.7:
-            yaw = random.choice((0.0, 180.0)) + random.uniform(-8, 8)
-        else:
-            yaw = random.uniform(0, 360)
         a = ground(spawn_sm(m, x * 100, y * 100, 0, yaw))
         rf = random.random()
         a.static_mesh_component.set_default_custom_primitive_data_float(1, pack_rf(rf))
