@@ -93,57 +93,33 @@
 데스크톱에서 16:05 발사했던 본배치는 역할 변경으로 즉시 중단·폐기 (산출물 없음).
 원격: 데스크톱 ↔ 노트북은 Tailscale 로 연결됨 (노트북 = karma / 100.126.163.103).
 
-## 노트북 원격 조종 (데스크톱에서, 준비 중)
+## 노트북 원격 조종 (SSH 연결 완료)
 
 Tailscale 연결 확인(karma / 100.126.163.103, ping 93ms). SSH 키 인증만 남음 —
 데스크톱 공개키를 노트북 `~/.ssh/authorized_keys` 에 1회 등록하면 이후 데스크톱 세션이
 노트북 GPU 작업(처방 실험·평가·모니터링)을 직접 수행한다.
 배치5가 도는 동안은 읽기 전용 모니터링만 (경합 금지 원칙 동일).
 
-## 언리얼 / 인지 트랙 (재개, 2026-08-24)
+## 언리얼 / 인지 트랙 — 장면 생성 파이프라인 v2 가동 (2026-08-24 저녁)
 
-이 장비 설치 현황: UE **5.8.1** (`C:\Program Files\Epic Games\UE_5.8`) / CitySample 96GB
-(`C:\Users\a3162\Documents\Unreal Projects\CitySample`) / CARLA 0.10.0 (`C:\carla`, py3.12 휠) /
-PerceptGen 최소 프로젝트 (`C:\ue\PerceptGen`).
+**"실제같은 사진" 파이프라인 완성**: ue/scene_build_cs.py(생성, 커맨드릿) +
+ue/cs_render.sh + ue/shot_once.py(렌더, -game). 도시 협곡 장면 — 도로 키트 아스팔트,
+인도, 점등 가로등, 히어로 빌딩 양측, 차량 3~8대(도색 랜덤·겹침 배제·접지), 태양/안개
+장면별 랜덤, 라벨 = 3D 상대위치·요각·크기 + bbox2d(핀홀 투영).
 
-### 상태
+검증 세트: C:/ue/out_cs2/ 에 10장면 (PNG+JSON). bbox2d 정합 휴리스틱 45/45 통과.
+**사용자 육안 판정 대기** — 합격 시 대량 생성 진행 (HARNESS 규칙).
 
-- CARLA 경로: **500프레임 완주** (`C:\carla\out\` PNG 500 + JSON 500) — 저장소에서 이미지를
-  만드는 코드는 `ue/carla_datagen.py:93` 한 곳뿐이다.
-- UE 경로: 장면 생성(`/Game/GenScenes/scene_0~9` + `C:\ue\out_cs\scene_0~9.json`)까지 성공,
-  **헤드리스 캡처는 미성공.**
+하루 동안 실측으로 확정한 함정 (전부 코드 주석·메모리에 등재):
+- 커맨드릿은 렌더 불가(하늘만) → 생성/렌더 프로세스 분리
+- -game 에서 에디터 API 는 크래시, 월드는 find_object, 파일명은 HighResShot filename=
+- LevelInstance 는 커맨드릿에서 비동기 미로드 — 바운드 사용 금지, 실측 반폭 테이블로 배치
+- GNU timeout 이 UE 윈도우 자식을 못 죽여 고아가 VRAM 14GB 점유 → 전 부팅 D3D12 사망
+  (렌더마다 taskkill 청소로 해결)
+- 특정 장면 구성이 HighResShot 시점 D3D12 행 유발 (~2/10) → 시드 교체 재생성으로 회피
 
-### 캡처 실패 원인 (2026-08-24 규명)
-
-`C:\ue\scripts\cs_capture.bat` 의 두 결함:
-1. `start "" /b ... > log 2>&1` — 리다이렉션이 `start` 자신에 걸려 UE 출력이 로그에 안 담긴다
-   (`cs_capture.log` 0바이트의 원인). 실패 원인을 볼 수단이 없었다.
-2. `timeout /t 180` 후 `taskkill` — UE 로그(CitySample.log)는 `Game Engine Initialized` 와
-   Python 초기화까지만 찍히고 끊긴다. 맵 로드도 `HighResShot` 실행도 없다. **부팅 중 잘렸다.**
-
-추가로 `-game -RenderOffscreen -ExecCmds="HighResShot"` 경로 자체가 타이밍에 취약하다
-(ExecCmds 는 엔진 초기화 시점에 실행되는데 그때는 맵이 아직 없다).
-
-### 채택할 설계
-
-파이썬 커맨드릿 안에서 **SceneCapture2D → TextureRenderTarget2D → export_render_target**.
-부팅 1회로 N장면 처리, 타이밍 경합 없음, 라벨에 적히는 FOV 를 렌더에 실제로 강제할 수 있다.
-
-UE 5.8.1 설치본에서 API 실측 확인:
-`SceneCaptureComponent2D.capture_scene()` / `fov_angle` / `capture_source`,
-`RenderingLibrary.create_render_target2d` / `export_render_target`,
-`SceneCaptureSource.SCS_FINAL_COLOR_LDR`, `TextureRenderTargetFormat.RTF_RGBA8_SRGB`.
-MoviePipeline(MRQ)은 이 프로젝트에 미탑재.
-
-### 렌더 외 남은 결손 (코드 근거 확인됨)
-
-- 해상도·출력 포맷이 UE 쪽에 미정의. `scene_build_cs.py:127` 은 `fov_deg=90` 을 하드코딩해
-  라벨에 쓰지만 실제 렌더가 그 화각이라는 보장이 없다
-- 포스트프로세스·노출 제어 없음, 조명이 전 장면 동일(도메인 랜덤화 0)
-- 바닥이 회색 평면 1장, 배경·가림물 없음, 차량 겹침 배제 없음
-- 이미지공간 라벨(`bbox2d`)이 UE 쪽에 없음 (CARLA 쪽에만 있음)
-- `scene_build_cs.py` 는 레벨이 이미 있으면 `new_level` 이 거부되어 재생성 불가
-  (scene_build.py 의 `ensure_level` 은 삭제 후 생성하는데 cs 판엔 그 처리가 없다)
+다음 개선 후보: 교차로/횡단보도 타일 믹스, 가로수·소품 밀도, 카메라 포즈 랜덤화,
+percept v1 학습 연결(bbox2d), CARLA 데이터와 혼합.
 
 ## ⚠ PAPER.md §6.4(인지 파이프라인, 구 6.3) 정정 필요 (2026-08-24 검증)
 

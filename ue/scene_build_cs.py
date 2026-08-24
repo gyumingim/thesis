@@ -151,8 +151,8 @@ def bbox2d(lb):
     return [round(u0, 1), round(v0, 1), round(u1, 1), round(v1, 1)]
 
 
-def build_scene(i, road, sw, pole, vehicles):
-    random.seed(3000 + i)
+def build_scene(i, road, sw, pole, vehicles, seed_base=3000):
+    random.seed(seed_base + i)
     path = "%s/gen_%d" % (LEVEL_DIR, i)
     open_clean_level(path)
 
@@ -239,11 +239,16 @@ def build_scene(i, road, sw, pole, vehicles):
 
 
 def main():
-    n = 10
+    # 인자: <장면수> [only=0,5] [seed=9000]
+    #   only: 해당 장면만 재생성 (특정 구성이 HighResShot 시점 D3D12 행을 유발할 때 시드 교체용)
+    n, only, seed_base = 10, None, 3000
     for tok in sys.argv[1:]:
         if tok.isdigit():
             n = int(tok)
-            break
+        elif tok.startswith("only="):
+            only = [int(x) for x in tok[5:].split(",")]
+        elif tok.startswith("seed="):
+            seed_base = int(tok[5:])
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     road = unreal.load_asset(ROAD_MESH)
     sw = unreal.load_asset(find_asset("/Game/Road/Kit_Sidewalk_A", ("Sidewalk_6_3_A",))[0])
@@ -252,9 +257,9 @@ def main():
                             find_asset("/Game/Vehicle", ("SM_veh",), VEH_EXCLUDE)) if m]
     log("재료: 차량 %d종" % len(vehicles))
     ok = 0
-    for i in range(n):
+    for i in (only if only is not None else range(n)):
         try:
-            build_scene(i, road, sw, pole, vehicles)
+            build_scene(i, road, sw, pole, vehicles, seed_base)
             ok += 1
         except Exception as e:
             unreal.log_error("[cs_build2] scene_%d 실패: %s" % (i, e))
