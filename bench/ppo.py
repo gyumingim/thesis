@@ -259,9 +259,13 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     agent = Agent(envs).to(device)
-    # 수정 6(b): fused Adam — 기본 구현의 step.item() 동기화 제거. CPU 에서는 미지원.
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5,
-                           fused=(device.type == "cuda"))
+    # 수정 6(b): fused Adam — 기본 구현의 step.item() 동기화 제거. CPU 미지원이고
+    # 구버전 torch 는 fused 인자 자체가 없을 수 있어 폴백을 둔다 (장비 간 이동 대비).
+    try:
+        optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5,
+                               fused=(device.type == "cuda"))
+    except (TypeError, RuntimeError):
+        optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)

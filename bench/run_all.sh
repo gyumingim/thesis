@@ -25,9 +25,12 @@ mkdir -p "$OUT"
 
 # ── 절전 방지: 14시간 무인 실행 중 윈도우가 잠들면 time.time() 예산이 오염된다.
 #    SetThreadExecutionState 를 주기 호출하는 파수꾼을 배치 수명 동안만 띄운다.
-powershell -NoProfile -ExecutionPolicy Bypass -File bench/keepawake.ps1 &
-KEEPAWAKE_PID=$!
-trap 'kill $KEEPAWAKE_PID 2>/dev/null' EXIT
+# 리눅스엔 powershell 이 없다 — 그쪽은 systemd-inhibit bash bench/run_all.sh 로 띄울 것.
+if command -v powershell >/dev/null 2>&1; then
+  powershell -NoProfile -ExecutionPolicy Bypass -File bench/keepawake.ps1 &
+  KEEPAWAKE_PID=$!
+  trap 'kill $KEEPAWAKE_PID 2>/dev/null' EXIT
+fi
 
 step() { echo "=== $* | $(date '+%m-%d %H:%M:%S') ==="; }
 # 완주한 런의 디렉터리를 출력 (없으면 빈 문자열)
