@@ -19,7 +19,7 @@ v1(회색 평면 + 흰 차) 대비 변경 — 전부 2026-08-24 실측으로 확
 - 레벨 재사용: delete_asset+new_level 은 OFPA 잔재로 "asset already exists" 가 나므로
   기존 레벨은 열어서 액터 전부 삭제 후 재사용한다.
 
-출력: /Game/GenScenes/gen_<i> + C:\ue\out_cs2\scene_<i>.json
+출력: /Game/GenScenes/gen_<i> + C:/ue/out_cs2/scene_<i>.json  (독스트링에 역슬래시 경로 금지 — 16734e2 함정)
 """
 import unreal
 import sys
