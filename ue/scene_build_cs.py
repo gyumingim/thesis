@@ -40,13 +40,16 @@ ROAD_TILES = 6                    # 20m x 6 = 120m
 ROAD_HALF_W_CM = 1050
 CORRIDOR_CM = 1300                # 건물 금지 회랑 반폭
 ROAD_MESH = "/Game/Road/Kit_City_Road/SM_ROAD_19_20_0_0_road"
-BLDG_POOL = [
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Triangle_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_CHG_Long_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Low_CHG_Modern_A01",
-]
+# 건물 풀: 이름 → y-반폭(m). 커맨드릿에서 LevelInstance 는 비동기 로드라 스폰 직후
+# 바운드가 미형성이고 flush_level_streaming 도 이를 올려주지 않는다(실측). 따라서 배치는
+# 에디터 세션 실측(v7/v8 로그)의 반폭 테이블로 결정론적으로 한다. z 는 건드리지 않는다 —
+# 히어로 빌딩은 원저작이 지면 정렬돼 있고, 미형성 바운드로 ground() 를 하면 오히려
+# 공중에 뜬다(scene_5 부유 건물의 진짜 원인).
+BLDG_POOL = {
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 23.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Low_CHG_Modern_A01": 33.0,
+}
 VEH_EXCLUDE = ("Wheel", "Brake", "Door", "MotionBlur", "Trans", "No_Wheel", "Steering",
                "Caliper", "Rotor", "Glass", "Mirror", "Bumper", "Hood", "Trunk", "seat", "Seat")
 
@@ -112,45 +115,16 @@ def top0(a):
     return a
 
 
-def spawn_bldg(path, x, y, yaw):
+def spawn_bldg(path, half_w_m, x, side, yaw):
     w = unreal.load_asset(path)
     if w is None:
         log("BLDG 로드 실패 " + path)
         return None
+    y = side * (CORRIDOR_CM + half_w_m * 100 + random.uniform(0, 600))
     bl = act.spawn_actor_from_class(unreal.LevelInstance, unreal.Vector(x, y, 0),
                                     unreal.Rotator(0, 0, yaw))
     bl.set_editor_property("world_asset", w)
     return bl
-
-
-def flush_streaming(any_actor):
-    """LevelInstance 로드는 비동기 — 신선한 커맨드릿에서는 스폰 직후 바운드가 미형성이다
-    (v7/v8 에서 즉시 나온 것은 이전 실험이 같은 세션에 레벨을 이미 올려둔 덕이었다).
-    스트리밍을 동기 플러시해 바운드를 확정시킨다."""
-    try:
-        unreal.GameplayStatics.flush_level_streaming(any_actor.get_world())
-        return "flush_level_streaming"
-    except Exception as e:
-        return "flush 실패: %s" % e
-
-
-def settle_bldg(bl):
-    """플러시 후 접지 + 회랑 보정. 바운드가 여전히 미형성이면 퇴출."""
-    wo, we = bl.get_actor_bounds(False)
-    if we.x < 300 or we.y < 300 or we.z < 500:
-        log("BLDG 퇴출 (플러시 후에도 바운드 미형성 e=%.0f,%.0f,%.0f)" % (we.x, we.y, we.z))
-        act.destroy_actor(bl)
-        return False
-    if we.y > 4500:
-        act.destroy_actor(bl)
-        return False
-    bl.add_actor_world_offset(unreal.Vector(0, 0, -(wo.z - we.z)), False, False)
-    wo, we = bl.get_actor_bounds(False)
-    near = abs(wo.y) - we.y
-    if near < CORRIDOR_CM:
-        push = (CORRIDOR_CM - near) * (1 if wo.y >= 0 else -1)
-        bl.add_actor_world_offset(unreal.Vector(0, push, 0), False, False)
-    return True
 
 
 def bbox2d(lb):
@@ -199,19 +173,15 @@ def build_scene(i, road, sw, pole, vehicles):
             ground(spawn_sm(pole, k * 2200, side * (ROAD_HALF_W_CM + 150), 0, yaw))
 
     x = 2000.0
-    pending = []
+    n_bldg = 0
     while x < ROAD_TILES * 2000 + 4000:
         for side in (-1, 1):
             if random.random() < 0.8:
-                b = spawn_bldg(random.choice(BLDG_POOL), x + random.uniform(-500, 500),
-                               side * random.uniform(2400, 3600),
-                               random.uniform(-10, 10) + (0 if side < 0 else 180))
-                if b:
-                    pending.append(b)
+                path = random.choice(list(BLDG_POOL))
+                if spawn_bldg(path, BLDG_POOL[path], x + random.uniform(-500, 500), side,
+                              random.uniform(-10, 10) + (0 if side < 0 else 180)):
+                    n_bldg += 1
         x += random.uniform(3500, 5500)
-    if pending:
-        log("streaming: " + flush_streaming(pending[0]))
-    n_bldg = sum(1 for b in pending if settle_bldg(b))
 
     fog = act.spawn_actor_from_class(unreal.ExponentialHeightFog,
                                      unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
