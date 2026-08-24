@@ -20,6 +20,10 @@ v1(회색 평면 + 흰 차) 대비 변경 — 전부 2026-08-24 실측으로 확
   기존 레벨은 열어서 액터 전부 삭제 후 재사용한다.
 
 출력: /Game/GenScenes/gen_<i> + C:/ue/out_cs2/scene_<i>.json  (독스트링에 역슬래시 경로 금지 — 16734e2 함정)
+
+주의: 이 장비에서 gen_0/gen_5 레벨 자산은 구성 무관하게 -game 렌더 시 D3D12 페이탈을
+재현한다(시드 교체 무효, 신선한 이름 gen_10/11 은 동일 코드로 즉시 성공 — 2026-08-24 실측).
+원인 미상(레벨 자산/캐시 오염 추정). 대량 생성 시 신선한 인덱스 대역을 쓸 것 (only=).
 """
 import unreal
 import sys
@@ -51,6 +55,17 @@ BLDG_POOL = {
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Low_CHG_Modern_A01": 33.0,
 }
+TREE_POOL = [
+    "/Game/Prop/Kit_Tree_Maple_Red/Mesh/Tree_Maple_Red_A",
+    "/Game/Prop/Kit_Tree_Alder/Mesh/Tree_Alder_A",
+    "/Game/Prop/Kit_Tree_Birch/Mesh/SM_Tree_Birch_a",
+    "/Game/Prop/Kit_Tree_Birch/Mesh/SM_Tree_Birch_c",
+]
+PROP_POOL = [   # (경로, 인도 배치 확률)
+    ("/Game/Prop/Kit_Trashcan_A/Mesh/SM_Trashcan_A_01", 0.5),
+    ("/Game/Prop/Kit_StopSign_A/Mesh/SM_StopSign_A", 0.3),
+    ("/Game/Prop/Kit_Cone_C_A/Mesh/SM_Cone_C_A", 0.25),
+]
 VEH_EXCLUDE = ("Wheel", "Brake", "Door", "MotionBlur", "Trans", "No_Wheel", "Steering",
                "Caliper", "Rotor", "Glass", "Mirror", "Bumper", "Hood", "Trunk", "seat", "Seat")
 
@@ -152,7 +167,7 @@ def bbox2d(lb):
     return [round(u0, 1), round(v0, 1), round(u1, 1), round(v1, 1)]
 
 
-def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000):
+def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, trees=(), props=()):
     random.seed(seed_base + i)
     path = "%s/gen_%d" % (LEVEL_DIR, i)
     open_clean_level(path)
@@ -177,6 +192,18 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000):
     for k in range(1, ROAD_TILES):
         for side, yaw in ((-1, 0), (1, 180)):
             ground(spawn_sm(pole, k * 2200, side * (ROAD_HALF_W_CM + 150), 0, yaw))
+    for k in range(1, ROAD_TILES):                     # 가로수: 가로등 사이 중간점
+        for side in (-1, 1):
+            if trees and random.random() < 0.6:
+                ground(spawn_sm(random.choice(trees), k * 2200 + 1100,
+                                side * (ROAD_HALF_W_CM + 200), 0, random.uniform(0, 360)))
+    for k in range(ROAD_TILES * 2):                    # 소품: 인도 위 산포
+        for m, pr in props:
+            if random.random() < pr * 0.5:
+                side = random.choice((-1, 1))
+                ground(spawn_sm(m, random.uniform(500, ROAD_TILES * 2000),
+                                side * (ROAD_HALF_W_CM + random.uniform(120, 260)), 0,
+                                random.uniform(0, 360)))
 
     x = 2000.0
     n_bldg = 0
@@ -267,8 +294,20 @@ def main():
         elif tok.startswith("seed="):
             seed_base = int(tok[5:])
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    def load_any(path):
+        m = unreal.load_asset(path)
+        if m is None:   # Mesh/ 하위가 아니면 키트 루트에서 이름으로 탐색
+            kit = "/".join(path.split("/")[:-2]) if "/Mesh/" in path else "/".join(path.split("/")[:-1])
+            name = path.split("/")[-1]
+            for a in eal.list_assets(kit, recursive=True, include_folder=False):
+                if a.split("/")[-1].split(".")[0] == name:
+                    return unreal.load_asset(a.split(".")[0])
+        return m
     road = unreal.load_asset(ROAD_MESH)
     crosswalk = unreal.load_asset(CROSSWALK_MESH)
+    trees = [m for m in (load_any(t) for t in TREE_POOL) if m]
+    props = [(m, pr) for m, pr in ((load_any(t), pr) for t, pr in PROP_POOL) if m]
+    log("나무 %d종 소품 %d종" % (len(trees), len(props)))
     sw = unreal.load_asset(find_asset("/Game/Road/Kit_Sidewalk_A", ("Sidewalk_6_3_A",))[0])
     pole = unreal.load_asset(find_asset("/Game/Prop/Kit_StreetLamp_A", ("Pole_Large",))[0])
     vehicles = [m for m in (unreal.load_asset(v) for v in
@@ -277,7 +316,7 @@ def main():
     ok = 0
     for i in (only if only is not None else range(n)):
         try:
-            build_scene(i, road, sw, pole, vehicles, crosswalk, seed_base)
+            build_scene(i, road, sw, pole, vehicles, crosswalk, seed_base, trees, props)
             ok += 1
         except Exception as e:
             unreal.log_error("[cs_build2] scene_%d 실패: %s" % (i, e))
