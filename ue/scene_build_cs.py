@@ -40,6 +40,7 @@ ROAD_TILES = 6                    # 20m x 6 = 120m
 ROAD_HALF_W_CM = 1050
 CORRIDOR_CM = 1300                # 건물 금지 회랑 반폭
 ROAD_MESH = "/Game/Road/Kit_City_Road/SM_ROAD_19_20_0_0_road"
+CROSSWALK_MESH = "/Game/Road/Kit_City_Road/SM_ROAD_19_3_0_19_crosswalk"   # 20x4m
 # 건물 풀: 이름 → y-반폭(m). 커맨드릿에서 LevelInstance 는 비동기 로드라 스폰 직후
 # 바운드가 미형성이고 flush_level_streaming 도 이를 올려주지 않는다(실측). 따라서 배치는
 # 에디터 세션 실측(v7/v8 로그)의 반폭 테이블로 결정론적으로 한다. z 는 건드리지 않는다 —
@@ -151,7 +152,7 @@ def bbox2d(lb):
     return [round(u0, 1), round(v0, 1), round(u1, 1), round(v1, 1)]
 
 
-def build_scene(i, road, sw, pole, vehicles, seed_base=3000):
+def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000):
     random.seed(seed_base + i)
     path = "%s/gen_%d" % (LEVEL_DIR, i)
     open_clean_level(path)
@@ -160,6 +161,11 @@ def build_scene(i, road, sw, pole, vehicles, seed_base=3000):
     seg = 2 * rb.box_extent.x
     for k in range(ROAD_TILES):
         top0(spawn_sm(road, k * seg - rb.origin.x, -rb.origin.y))
+    if crosswalk and random.random() < 0.6:       # 횡단보도를 도로 위에 겹쳐 깔기 (데칼처럼 2cm 위)
+        cw_x = random.uniform(8, ROAD_TILES * 20 - 15) * 100
+        cb = crosswalk.get_bounds()
+        a = top0(spawn_sm(crosswalk, cw_x - cb.origin.x, -cb.origin.y))
+        a.add_actor_world_offset(unreal.Vector(0, 0, 2), False, False)
 
     sb = sw.get_bounds()
     for k in range(ROAD_TILES * 20 // 6 + 2):
@@ -196,8 +202,10 @@ def build_scene(i, road, sw, pole, vehicles, seed_base=3000):
     act.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 1000), unreal.Rotator(0, 0, 0))
     act.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
 
-    cam = act.spawn_actor_from_class(unreal.CameraActor, unreal.Vector(0, 0, CAM_Z_CM),
-                                     unreal.Rotator(0, 0, 0))
+    cam_z = random.uniform(130.0, 185.0)          # 승용차~SUV 시점
+    cam_yaw = random.uniform(-6.0, 6.0)
+    cam = act.spawn_actor_from_class(unreal.CameraActor, unreal.Vector(0, 0, cam_z),
+                                     unreal.Rotator(0, 0, cam_yaw))
     cam.set_editor_property("auto_activate_for_player", unreal.AutoReceiveInput.PLAYER0)
 
     n_veh = random.randint(*N_VEH_RANGE)
@@ -214,15 +222,24 @@ def build_scene(i, road, sw, pole, vehicles, seed_base=3000):
             continue
         if any(math.hypot(x - px, y - py) < r + pr + 0.4 for px, py, pr in placed):
             continue
-        yaw = random.uniform(0, 360)
+        # 실도로 통계에 근접: 70% 차선 정렬(진행/역방향 ±8°), 30% 자유(주차·회전 중)
+        if random.random() < 0.7:
+            yaw = random.choice((0.0, 180.0)) + random.uniform(-8, 8)
+        else:
+            yaw = random.uniform(0, 360)
         a = ground(spawn_sm(m, x * 100, y * 100, 0, yaw))
         rf = random.random()
         a.static_mesh_component.set_default_custom_primitive_data_float(1, pack_rf(rf))
         wo, _ = a.get_actor_bounds(False)
         placed.append((x, y, r))
+        # 라벨은 카메라 좌표계 (지터 반영: 평행이동 + -cam_yaw 회전)
+        cyr = math.radians(cam_yaw)
+        dx_, dy_ = wo.x / 100, wo.y / 100
+        rel_x = dx_ * math.cos(cyr) + dy_ * math.sin(cyr)
+        rel_y = -dx_ * math.sin(cyr) + dy_ * math.cos(cyr)
         lb = dict(mesh=m.get_name(), paint_rf=round(rf, 3),
-                  relative_position_m=dict(x=wo.x / 100, y=wo.y / 100, z=(wo.z - CAM_Z_CM) / 100),
-                  relative_yaw_deg=((yaw + 180) % 360) - 180,
+                  relative_position_m=dict(x=rel_x, y=rel_y, z=(wo.z - cam_z) / 100),
+                  relative_yaw_deg=((yaw - cam_yaw + 180) % 360) - 180,
                   size_m=dict(l=2 * e.x / 100, w=2 * e.y / 100, h=2 * e.z / 100))
         bb = bbox2d(lb)
         if bb:
@@ -232,7 +249,7 @@ def build_scene(i, road, sw, pole, vehicles, seed_base=3000):
     lvl.save_current_level()
     with open(os.path.join(OUTPUT_DIR, "scene_%d.json" % i), "w") as f:
         json.dump(dict(scene=i, level=path,
-                       camera=dict(fov_deg=FOV, z_m=CAM_Z_CM / 100, width=W, height=H),
+                       camera=dict(fov_deg=FOV, z_m=round(cam_z / 100, 3), yaw_deg=round(cam_yaw, 2), width=W, height=H),
                        sun=dict(pitch=round(sun_pitch, 1), yaw=round(sun_yaw, 1)),
                        vehicles=labels), f, indent=2)
     log("scene_%d OK (차량 %d, 건물 %d)" % (i, len(labels), n_bldg))
@@ -251,6 +268,7 @@ def main():
             seed_base = int(tok[5:])
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     road = unreal.load_asset(ROAD_MESH)
+    crosswalk = unreal.load_asset(CROSSWALK_MESH)
     sw = unreal.load_asset(find_asset("/Game/Road/Kit_Sidewalk_A", ("Sidewalk_6_3_A",))[0])
     pole = unreal.load_asset(find_asset("/Game/Prop/Kit_StreetLamp_A", ("Pole_Large",))[0])
     vehicles = [m for m in (unreal.load_asset(v) for v in
@@ -259,7 +277,7 @@ def main():
     ok = 0
     for i in (only if only is not None else range(n)):
         try:
-            build_scene(i, road, sw, pole, vehicles, seed_base)
+            build_scene(i, road, sw, pole, vehicles, crosswalk, seed_base)
             ok += 1
         except Exception as e:
             unreal.log_error("[cs_build2] scene_%d 실패: %s" % (i, e))
