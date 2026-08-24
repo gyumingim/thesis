@@ -25,11 +25,11 @@ def isp(im, rng):
     a = np.clip(a * wb, 0.0, 1.0)
 
     # 샷 노이즈: 광자 수 ~ Poisson. 풀웰 스케일을 조명에 따라 랜덤화
-    full_well = rng.uniform(1200.0, 3000.0)
+    full_well = rng.uniform(500.0, 1500.0)
     a = rng.poisson(a * full_well).astype(np.float32) / full_well
 
     # 리드 노이즈 (가우시안, 어두운 곳에서 상대적으로 두드러짐)
-    a += rng.normal(0.0, rng.uniform(0.004, 0.009), size=a.shape).astype(np.float32)
+    a += rng.normal(0.0, rng.uniform(0.006, 0.014), size=a.shape).astype(np.float32)
 
     # 톤 미세 왜곡 (감마 ±3%)
     a = np.clip(a, 0.0, 1.0) ** rng.uniform(0.97, 1.03)

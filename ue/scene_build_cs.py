@@ -43,12 +43,13 @@ W, H, FOV = 1280, 720, 90.0
 FX = FY = (W / 2) / math.tan(math.radians(FOV / 2))   # 640.0
 CX, CY = W / 2, H / 2
 CAM_Z_CM = 150.0
-N_VEH_RANGE = (3, 8)
+N_VEH_RANGE = (6, 14)
 ROAD_TILES = 6                    # 20m x 6 = 120m
 ROAD_HALF_W_CM = 1050
 CORRIDOR_CM = 1300                # 건물 금지 회랑 반폭
 ROAD_MESH = "/Game/Road/Kit_City_Road/SM_ROAD_19_20_0_0_road"
 CROSSWALK_MESH = "/Game/Road/Kit_City_Road/SM_ROAD_19_3_0_19_crosswalk"   # 20x4m
+DECAL_DIR = "/Game/Road/Kit_MeshDecals_A"
 # 건물 풀: 이름 → y-반폭(m). 커맨드릿에서 LevelInstance 는 비동기 로드라 스폰 직후
 # 바운드가 미형성이고 flush_level_streaming 도 이를 올려주지 않는다(실측). 따라서 배치는
 # 에디터 세션 실측(v7/v8 로그)의 반폭 테이블로 결정론적으로 한다. z 는 건드리지 않는다 —
@@ -57,8 +58,8 @@ CROSSWALK_MESH = "/Game/Road/Kit_City_Road/SM_ROAD_19_3_0_19_crosswalk"   # 20x4
 BLDG_POOL = {
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 23.0,
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Low_CHG_Modern_A01": 33.0,
 }
+# Low_CHG_Modern_A01 은 3심 판정에서 "검은 유리 큐브 = 미완성 맵" 지적으로 퇴출 (08-25)
 # 건물 풀 확장 실패 기록 (2026-08-24 밤): SFE_A01/B01·NYG_Triangle_B01 을 넣은 장면은
 # -game 로드~첫 프레임에서 D3D12 페이탈이 재현된다 (기지 장면은 같은 시각 정상 렌더 —
 # 머신 아닌 내용 상관 실측). 신규 히어로 빌딩 추가는 장면당 1종씩 단독 검증 후 편입할 것.
@@ -202,9 +203,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                               side * (ROAD_HALF_W_CM + 150) - sb.origin.y))
             a.add_actor_world_offset(unreal.Vector(0, 0, 15), False, False)
 
-    for k in range(1, ROAD_TILES):
-        for side, yaw in ((-1, 0), (1, 180)):
-            ground(spawn_sm(pole, k * 2200, side * (ROAD_HALF_W_CM + 150), 0, yaw))
+    overcast = random.random() < 0.7          # 젖은 노면(재질 고정)과 정합하는 흐림 우세
+    sun_int = random.uniform(1.5, 4.0) if overcast else random.uniform(7.0, 12.0)
+    fog_d = random.uniform(0.004, 0.009) if overcast else random.uniform(0.001, 0.003)
+    lamps_on = overcast or random.random() < 0.3   # 쨍한 날 점등 가로등 = 렌더 티 (3심 지적)
+    if lamps_on:
+        for k in range(1, ROAD_TILES):
+            for side, yaw in ((-1, 0), (1, 180)):
+                ground(spawn_sm(pole, k * 2200, side * (ROAD_HALF_W_CM + 150), 0, yaw))
     for k in range(1, ROAD_TILES):                     # 가로수: 가로등 사이 중간점
         for side in (-1, 1):
             if trees and random.random() < 0.6:
@@ -218,6 +224,12 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                                 side * (ROAD_HALF_W_CM + random.uniform(120, 260)), 0,
                                 random.uniform(0, 360)))
 
+    # 소실점 폐쇄: 도로 끝 너머(x=140~220m)에 타워 행렬 — "백색 공허" 제거 (3심 1순위)
+    endx = ROAD_TILES * 2000
+    for k in range(3):
+        spawn_bldg(random.choice(list(BLDG_POOL)), BLDG_POOL[list(BLDG_POOL)[0]],
+                   endx + 2000 + k * 3500, random.choice((-1, 1)) * random.uniform(0, 0.25),
+                   random.uniform(0, 360))
     x = 2000.0
     n_bldg = 0
     while x < ROAD_TILES * 2000 + 4000:
@@ -231,7 +243,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
 
     fog = act.spawn_actor_from_class(unreal.ExponentialHeightFog,
                                      unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
-    fog.component.set_editor_property("fog_density", random.uniform(0.001, 0.006))
+    fog.component.set_editor_property("fog_density", fog_d)
     fog.component.set_editor_property("fog_height_falloff", 0.2)
 
     # 카메라/센서 층 (크롭 판정 2026-08-24 밤: 게임 티 1순위 = 노이즈·광학결함·롤오프 부재)
@@ -248,11 +260,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     ov("bloom_intensity", random.uniform(0.4, 0.7))          # 백화 클리핑 완화
     ppv.set_editor_property("settings", st)
 
-    sun_pitch = random.uniform(-65, -15)
+    sun_pitch = random.uniform(-55, -12) if not overcast else random.uniform(-65, -20)
     sun_yaw = random.uniform(0, 360)
     sun = act.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 1000),
                                      unreal.Rotator(0, sun_pitch, sun_yaw))
-    sun.light_component.set_intensity(random.uniform(6.0, 14.0))
+    sun.light_component.set_intensity(sun_int)
+    # 시안 단색조 완화 — 태양 색온도 미세 변주 (난색 편향)
+    warm = random.uniform(0.0, 0.12)
+    sun.light_component.set_light_color(unreal.LinearColor(1.0, 1.0 - warm * 0.4, 1.0 - warm, 1.0))
     act.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 1000), unreal.Rotator(0, 0, 0))
     act.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
 
@@ -262,6 +277,16 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                                      unreal.Rotator(0, 0, cam_yaw))
     cam.set_editor_property("auto_activate_for_player", unreal.AutoReceiveInput.PLAYER0)
 
+    decals = [m for m in (unreal.load_asset(a) for a in
+              (find_asset(DECAL_DIR, ("Painted_Arrow",)) + find_asset(DECAL_DIR, ("Parking_Line",))
+               + find_asset(DECAL_DIR, ("SprayPaint",))[:6])) if m]
+    for _ in range(random.randint(3, 8)):
+        if decals:
+            a = spawn_sm(random.choice(decals), random.uniform(600, ROAD_TILES * 2000),
+                         random.uniform(-900, 900), 0, random.uniform(0, 360))
+            wo, we = a.get_actor_bounds(False)
+            a.add_actor_world_offset(unreal.Vector(0, 0, 1.5 - (wo.z - we.z)), False, False)
+
     n_veh = random.randint(*N_VEH_RANGE)
     placed, labels, tries = [], [], 0
     while len(labels) < n_veh and tries < 100:
@@ -270,7 +295,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         e = m.get_bounds().box_extent
         r = math.hypot(e.x / 100, e.y / 100)
         mode = random.random()
-        if mode < 0.15:
+        if mode < 0.30 and len(labels) >= 2:
+            # 정체 열: 직전 차량 뒤 6~9m 같은 차선 (실도로 밀도의 핵심 — 3심 지적)
+            prev = labels[-1]["relative_position_m"]
+            x = prev["x"] + random.uniform(6.0, 9.0)
+            y = prev["y"] + random.uniform(-0.3, 0.3)
+            yaw = (0.0 if y < 0 else 180.0) + random.uniform(-4, 4)
+            if x > 55: continue
+        elif mode < 0.42:
             # 평행주차: 갓길(|y|≈8.2m)에 차선과 나란히
             x = random.uniform(6, 48)
             side = random.choice((-1, 1))
@@ -279,7 +311,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         else:
             x = random.uniform(6, 48)
             y = random.uniform(-7.5, 7.5)
-            if mode < 0.85:
+            if mode < 0.88:
                 # 우측통행 차선 의미론: y<0(우측 차선) 순방향, y>0 마주 옴
                 yaw = (0.0 if y < 0 else 180.0) + random.uniform(-8, 8)
             else:
