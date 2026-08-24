@@ -1,7 +1,7 @@
 """CleanRL ppo_continuous_action.py 의 최소 수정판 — 두 시뮬에 동일 적용.
 
 원본: vwxyzjn/cleanrl@fe8d8a03c41a7ef5b523e2e354bd01c363e786bb (cleanrl_ppo_commit.txt)
-알고리즘 본체(GAE·업데이트 루프·네트워크)는 원본 그대로다. 수정은 3곳뿐:
+알고리즘 본체(GAE·업데이트 루프·네트워크)는 원본 그대로다. 수정은 6곳뿐:
 
 1. env 생성: gym.make 기반 SyncVectorEnv → make_vector_env(sim=...) 로 교체.
    - sim="custom":   IntersectionVectorEnv (사전 벡터화, in-kernel NEXT_STEP 리셋)
@@ -16,6 +16,17 @@
    (주기적으로 agent 가중치 + NormalizeObservation 통계(obs_rms)를 저장 — 교차 평가 시
    이 통계를 동결 적용해야 정책이 학습 때와 같은 입력 분포를 받는다).
    알고리즘 로직(GAE·업데이트)은 여전히 무수정.
+5. Args 에 --md-num-scenarios 추가 (기본 100). 파일럿에서 워커당 시나리오가 1이면
+   같은 교통배치를 암기해 버리는 것을 확인해 분리했다.
+6. 벽시계 측정 오염 제거 (수식·난수 불변, 데이터 이동/커널 선택만 변경):
+   (a) 미니배치 인덱스를 에폭당 1회만 GPU 로 옮긴다. 원본은 numpy 인덱스로 CUDA
+       텐서 6개를 매 스텝 색인해 스텝마다 호스트→디바이스 전송과 동기화가 걸린다.
+       셔플은 원본 numpy 난수 그대로라 미니배치 구성은 한 톨도 바뀌지 않는다.
+   (b) Adam 을 fused 커널로. 기본 Adam 은 bias correction 에서 파라미터마다
+       step.item() 을 불러 스텝당 26회 디바이스 동기화를 일으킨다.
+   근거(RTX 5080 / Windows 실측): .item() 1회 72.5us vs 비동기 커널 11.1us —
+   윈도우 WDDM 은 동기화 비용이 리눅스보다 한 자릿수 크다. 반복당 3.11s → 1.15s,
+   학습포함 SPS 19.2K → 45.3K. 두 시뮬에 같은 ppo.py 가 쓰이므로 비교는 공정하다.
 
 리셋 의미론: 양쪽 모두 gymnasium 표준 NEXT_STEP (stateful 벡터 래퍼가 SAME_STEP 미지원).
 truncation 부트스트랩은 원본 CleanRL 과 동일하게 생략 — 두 시뮬에 같은 처리라 비교는 공정.
@@ -246,7 +257,9 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     agent = Agent(envs).to(device)
-    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
+    # 수정 6(b): fused Adam — 기본 구현의 step.item() 동기화 제거. CPU 에서는 미지원.
+    optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5,
+                           fused=(device.type == "cuda"))
 
     # ALGO Logic: Storage setup
     obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
@@ -337,9 +350,12 @@ if __name__ == "__main__":
         clipfracs = []
         for epoch in range(args.update_epochs):
             np.random.shuffle(b_inds)
+            # 수정 6(a): 셔플 결과를 에폭당 1회만 디바이스로. 아래 색인이 매 스텝
+            # numpy→GPU 전송을 일으키던 것을 없앤다 (순열 자체는 원본과 동일).
+            b_inds_dev = torch.as_tensor(b_inds, device=device)
             for start in range(0, args.batch_size, args.minibatch_size):
                 end = start + args.minibatch_size
-                mb_inds = b_inds[start:end]
+                mb_inds = b_inds_dev[start:end]
 
                 _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
