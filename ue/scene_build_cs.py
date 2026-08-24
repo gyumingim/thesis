@@ -228,6 +228,20 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     fog.component.set_editor_property("fog_density", random.uniform(0.001, 0.006))
     fog.component.set_editor_property("fog_height_falloff", 0.2)
 
+    # 카메라/센서 층 (크롭 판정 2026-08-24 밤: 게임 티 1순위 = 노이즈·광학결함·롤오프 부재)
+    ppv = act.spawn_actor_from_class(unreal.PostProcessVolume,
+                                     unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+    ppv.set_editor_property("unbound", True)
+    st = ppv.get_editor_property("settings")            # 구조체 복사본 — 재설정 필수
+    def ov(name, val):
+        st.set_editor_property("override_" + name, True)
+        st.set_editor_property(name, val)
+    ov("film_grain_intensity", random.uniform(0.15, 0.35))
+    ov("scene_fringe_intensity", random.uniform(0.15, 0.4))   # 색수차 — 1.2 는 엣지 글리치(실측)
+    ov("vignette_intensity", random.uniform(0.3, 0.5))
+    ov("bloom_intensity", random.uniform(0.4, 0.7))          # 백화 클리핑 완화
+    ppv.set_editor_property("settings", st)
+
     sun_pitch = random.uniform(-65, -15)
     sun_yaw = random.uniform(0, 360)
     sun = act.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 1000),
