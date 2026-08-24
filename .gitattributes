@@ -1,0 +1,2 @@
+# 배치 스크립트는 반드시 LF — CRLF 가 붙으면 bash 가 파싱에 실패한다.
+*.sh text eol=lf
