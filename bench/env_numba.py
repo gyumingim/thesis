@@ -41,6 +41,12 @@ HOR = spec.HORIZON
 NPC_V = np.float32(8.0)      # NPC 목표 속도 m/s
 LOOKAHEAD = np.float32(6.0)  # 순수추종 전방주시거리 m
 RW = np.float32(10.5)             # 로드웨이 폭 (편도 3차선)
+# 처방 (ii) 경계 보수화: 학습 시에만 합법 영역을 δ 만큼 수축시켜 §6.3 의 경계 착취를
+# 차단한다. 평가(evaluate.py)는 이 변수를 켜지 않으므로 표준 경계 그대로다.
+# numba njit 은 모듈 전역을 컴파일 상수로 굽기 때문에 임포트 시점 환경변수로 주입한다.
+import os as _os
+B_EXTRA = np.float32(float(_os.environ.get("BOUNDARY_EXTRA_M", "0.0")))
+
 OFFLANE_TOL = np.float32(1.95)    # 내부 거리장 on_lane 근사 임계
 MARGIN = np.float32(1.852 / 2)    # 차폭 절반 (MD WIDTH=1.852 실측)
 HALF_LEN = np.float32(2.3)        # 전장 절반 — MD는 차체 폴리곤으로 선 접촉 판정 (사망거리 1.26~1.35m 실측)
@@ -359,7 +365,7 @@ def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO, RECTS, BOX, CELL, DG
                 if a0 - 0.01 <= acoord <= a1 + 0.01 and rlo <= latc <= rhi:
                     dev = np.sin(eh) if ax_ < 0.5 else np.cos(eh)
                     dev = dev if dev > 0 else -dev
-                    m_eff = MARGIN + HALF_LEN * dev + LINE_W2
+                    m_eff = MARGIN + HALF_LEN * dev + LINE_W2 + B_EXTRA
                     rect_alive = not (latc < rlo + m_eff or latc > rhi - m_eff)
                     break
             grid_alive = False
@@ -368,7 +374,7 @@ def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO, RECTS, BOX, CELL, DG
                 gj = np.int64((ey - BOX[2]) / CELL)
                 gi = 0 if gi < 0 else (DGRID.shape[0] - 1 if gi >= DGRID.shape[0] else gi)
                 gj = 0 if gj < 0 else (DGRID.shape[1] - 1 if gj >= DGRID.shape[1] else gj)
-                grid_alive = DGRID[gi, gj] <= OFFLANE_TOL
+                grid_alive = DGRID[gi, gj] <= OFFLANE_TOL - B_EXTRA
             line_kill = not (rect_alive or grid_alive)
             crashed = min_d < CR
             arrived = lng >= RLEN[rid] - np.float32(2.0)
