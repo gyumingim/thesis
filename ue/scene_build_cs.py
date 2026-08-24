@@ -121,6 +121,13 @@ def spawn_bldg(path, x, y, yaw):
                                     unreal.Rotator(0, 0, yaw))
     bl.set_editor_property("world_asset", w)
     wo, we = bl.get_actor_bounds(False)
+    log("BLDG %s e(%.0f,%.0f,%.0f)m" % (path.split("/")[-1], we.x / 100, we.y / 100, we.z / 100))
+    if we.x < 300 or we.y < 300 or we.z < 500:
+        # 인스턴스 레벨이 아직 로드되지 않아 바운드가 미형성 — 접지/회랑 로직이 전부
+        # 오작동한다(scene_5 부유 건물 실측). 이 상태의 건물은 쓰지 않는다.
+        log("BLDG %s 퇴출 (바운드 미형성)" % path.split("/")[-1])
+        act.destroy_actor(bl)
+        return None
     if we.y > 4500:                          # 회랑을 지킬 수 없는 초대형 — 퇴출
         act.destroy_actor(bl)
         return None

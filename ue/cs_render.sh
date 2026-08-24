@@ -15,7 +15,7 @@ for i in $(seq 0 $((N-1))); do
   SHOT_LEVEL="/Game/GenScenes/gen_$i" SHOT_OUT="C:/ue/out_cs2/scene_$i" \
   MSYS_NO_PATHCONV=1 timeout -k 30 300 "$UE" "$PROJ" "/Game/GenScenes/gen_$i" \
     -game -RenderOffscreen -unattended -nosplash -ResX=1280 -ResY=720 \
-    -ExecCmds="py C:/ue/scripts/shot_once.py" -abslog="$OUT/render_$i.log" > /dev/null 2>&1
+    -ExecCmds="py C:/ue/scripts/shot_once.py" -abslog="C:/ue/out_cs2/render_$i.log" > /dev/null 2>&1
   [ -f "$OUT/scene_$i.png" ] && echo "  OK scene_$i.png" || echo "  !! scene_$i 실패 (render_$i.log)"
 done
 echo "RENDER_ALL_DONE $(date +%H:%M:%S)"
