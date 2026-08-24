@@ -107,9 +107,12 @@ ue/cs_render.sh + ue/shot_once.py(렌더, -game). 도시 협곡 장면 — 도�
 인도, 점등 가로등, 히어로 빌딩 양측, 차량 3~8대(도색 랜덤·겹침 배제·접지), 태양/안개
 장면별 랜덤, 라벨 = 3D 상대위치·요각·크기 + bbox2d(핀홀 투영).
 
-검증 세트: v2.2 10장면 (scene_21~31, C:/ue/out_cs2/). bbox2d 정합 45/45 통과,
-percept_v0 가 UE 라벨을 무수정 소화(63건) — CARLA 와 데이터 소스 혼용 목표 달성.
-**검수 갤러리**: https://claude.ai/code/artifact/f9f74705-39ee-4afa-becb-e13f6e1aaac5
+검증 세트 2세대: v2.5+카메라층+ISP+차량오염, scene_80~90 (C:/ue/out_cs2/isp/).
+사용자 1세대 판정("게임 같다") 반영 — 크롭 판정으로 원인 축 특정(노이즈·스펙큘러·오염·원경)
+후 카메라/센서 계층(빌더 PPV + ue/isp_post.py)과 차량 오염(ue/grime_on.py, 공유 MIC 스위치)
+구현. 실사도 3층 판정 구축: 쌍대/크롭 판정 + KID·CMMD(ue/realism_metric.py, 실사 참조
+24장 C:/ue/ref_real/) + CLIP 프로브 AUC(ue/probe_auc.py). 1차 실측 KID 0.075→0.084
+(n=10, 구성 잡음 우세 — 대량 세트에서 유의), AUC 1.000(내용 교란 주의).
 **사용자 육안 판정 대기** — 합격 시 대량 생성 진행 (HARNESS 규칙).
 추가 실측 함정: 특정 레벨명(gen_0/gen_5)이 구성 무관 D3D12 페이탈 재현 — 신선한
 인덱스 대역으로 우회(빌더 독스트링 기록).
