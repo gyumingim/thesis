@@ -104,6 +104,12 @@ for label, pat in MAIN.items():
     m = c.mean(0)
     ax.plot(grid / 60, m, lw=1.8, label=f"{label} (n={len(curves)})")
     ax.fill_between(grid / 60, c.min(0), c.max(0), alpha=0.18)
+ext = glob.glob("bench_results/main/eval_md__ext3h.json")
+if ext:
+    rows = sorted(json.load(open(ext[0])), key=lambda r: r["elapsed_s"])
+    te = np.array([r["elapsed_s"] for r in rows])
+    se = np.array([r["success_rate"] for r in rows])
+    ax.plot(te / 60, se, lw=1.4, ls="--", label="lightweight V=3, 3h budget (n=1)")
 ax.set_xlabel("wall-clock training time (min)")
 ax.set_ylabel("success rate on MetaDrive (30 ep, deterministic)")
 ax.set_title("Zero-shot transfer vs. wall-clock budget (same GPU)")
