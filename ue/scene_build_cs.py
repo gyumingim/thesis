@@ -73,7 +73,7 @@ PROP_POOL = [   # (경로, 인도 배치 확률)
     ("/Game/Prop/Kit_StopSign_A/Mesh/SM_StopSign_A", 0.3),
     ("/Game/Prop/Kit_Cone_C_A/Mesh/SM_Cone_C_A", 0.25),
 ]
-VEH_EXCLUDE = ("Wheel", "Brake", "Door", "MotionBlur", "Trans", "No_Wheel", "Steering",
+VEH_EXCLUDE = ("trailer", "Trailer", "Wheel", "Brake", "Door", "MotionBlur", "Trans", "No_Wheel", "Steering",
                "Caliper", "Rotor", "Glass", "Mirror", "Bumper", "Hood", "Trunk", "seat", "Seat")
 
 eal = unreal.EditorAssetLibrary
@@ -183,6 +183,12 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     seg = 2 * rb.box_extent.x
     for k in range(ROAD_TILES):
         top0(spawn_sm(road, k * seg - rb.origin.x, -rb.origin.y))
+    # 건물 하부 채움: 지면이 인도까지만 있으면 건물이 허공 위에 떠 보인다(scene_75 공극 실측).
+    # 도로 타일을 측면 스트립으로 깔아 블록 전체를 아스팔트로 채운다 (도심 주차장/뒷길 외관).
+    for k in range(ROAD_TILES):
+        for yc in (-4200, -2100, 2100, 4200):
+            a = top0(spawn_sm(road, k * seg - rb.origin.x, yc - rb.origin.y))
+            a.add_actor_world_offset(unreal.Vector(0, 0, -3), False, False)  # 본도로보다 3cm 아래
     if crosswalk and random.random() < 0.6:       # 횡단보도를 도로 위에 겹쳐 깔기 (데칼처럼 2cm 위)
         cw_x = random.uniform(8, ROAD_TILES * 20 - 15) * 100
         cb = crosswalk.get_bounds()
