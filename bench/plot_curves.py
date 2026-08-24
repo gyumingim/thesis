@@ -38,8 +38,12 @@ for label, pat in runs.items():
 ax.set_xlabel("wall-clock (min)"); ax.set_ylabel("episodic return")
 ax.set_title("In-domain learning curves (30-min budget each)")
 ax.legend(fontsize=8); ax.grid(alpha=0.3)
-fig.tight_layout(); fig.savefig("figs/fig_learning_curves.png")
-print("fig_learning_curves.png 저장")
+if ax.lines:                              # 데이터 0건이면 git 추적 그림을 빈 축으로 덮지 않는다
+    fig.tight_layout(); fig.savefig("figs/fig_learning_curves.png")
+    print("fig_learning_curves.png 저장")
+else:
+    print("[skip] fig_learning_curves: 파일럿 런 없음 (기존 그림 보존)")
+plt.close(fig)
 
 # ── 그림 2: 교차 평가(→MetaDrive) 성공률·이탈률 라운드별 ──
 fig, ax = plt.subplots(figsize=(7, 4.2), dpi=140)
@@ -65,8 +69,12 @@ ax.set_xticks(x); ax.set_xticklabels(xs); ax.set_ylim(0, 1.05)
 ax.set_ylabel("rate"); ax2.set_ylabel("mean return (raw)")
 ax.set_title("Transfer to MetaDrive across alignment rounds")
 ax.legend(loc="upper left", fontsize=8); ax.grid(alpha=0.3)
-fig.tight_layout(); fig.savefig("figs/fig_transfer.png")
-print("fig_transfer.png 저장 (라운드:", xs, ")")
+if xs:
+    fig.tight_layout(); fig.savefig("figs/fig_transfer.png")
+    print("fig_transfer.png 저장 (라운드:", xs, ")")
+else:
+    print("[skip] fig_transfer: 파일럿 평가 없음 (기존 그림 보존)")
+plt.close(fig)
 
 # ── 그림 3: 본판 — 전이 성공률 vs 벽시계 (시드 평균 ± 범위) ──
 # MD s3은 워커 스톨로 final 이 벽시계 12,857s → 3,600s 초과 항목 제외 (PAPER 부록 A)
@@ -116,9 +124,16 @@ def _finals(pat, ckpt="final.pt"):
 md = []
 for f in sorted(glob.glob("bench_results/main/eval_md__main_md__*.json")):
     rows = json.load(open(f))
-    fin = [r for r in rows if r["ckpt"] == "final.pt"][0]
-    if fin["elapsed_s"] > 3660:            # s3 스톨 → 벽시계 3600s 시점 = t002700
-        fin = [r for r in rows if r["ckpt"] == "t002700.pt"][0]
+    fin = next((r for r in rows if r["ckpt"] == "final.pt"), None)
+    if fin is None:                        # 반쪽 런/빈 JSON — 크래시 대신 건너뛴다
+        print(f"[skip] {f}: final.pt 행 없음")
+        continue
+    if fin["elapsed_s"] > 3660:            # 워커 스톨 → 예산 3600s 이내 마지막 ckpt 로 대체 (부록 A)
+        inb = [r for r in rows if r["elapsed_s"] <= 3660 and r["ckpt"] != "final.pt"]
+        if not inb:
+            print(f"[skip] {f}: 3660s 이내 ckpt 없음")
+            continue
+        fin = max(inb, key=lambda r: r["elapsed_s"])
     md.append(fin["success_rate"])
 bars = [("MetaDrive\n(native)", md),
         ("V=2\n(defective)", _finals("bench_results/main/eval_md__main_custom__*.json")),
@@ -137,3 +152,31 @@ ax.set_ylim(0, 1.0); ax.grid(alpha=0.3, axis="y")
 ax.set_title("Main comparison: equal wall-clock, transfer to MetaDrive")
 fig.tight_layout(); fig.savefig("figs/fig_main_bars.png")
 print("fig_main_bars.png 저장:", {b[0].replace(chr(10), ' '): [round(v, 2) for v in b[1]] for b in bars})
+
+# ── 그림 5: 예산확장 — V=3 을 3시간까지 (1h 본판 곡선 위에 연장점) ──
+ext = sorted(glob.glob("bench_results/main/eval_md__ext3h.json"))
+if ext:
+    fig, ax = plt.subplots(figsize=(7, 4.2), dpi=140)
+    # 본판 V=3 (1h, 3시드) 평균을 배경으로
+    curves = []
+    for f in sorted(glob.glob("bench_results/main/eval_md__final_custom_s*.json")):
+        rows = sorted((r for r in json.load(open(f)) if r["elapsed_s"] <= 3660),
+                      key=lambda r: r["elapsed_s"])
+        if len(rows) >= 2:
+            curves.append(np.interp(grid, [r["elapsed_s"] for r in rows],
+                                    [r["success_rate"] for r in rows]))
+    if curves:
+        c = np.array(curves)
+        ax.plot(grid / 60, c.mean(0), lw=1.6, label=f"V=3 1h (n={len(curves)})")
+        ax.fill_between(grid / 60, c.min(0), c.max(0), alpha=0.15)
+    rows = sorted(json.load(open(ext[0])), key=lambda r: r["elapsed_s"])
+    t = np.array([r["elapsed_s"] for r in rows]); v = np.array([r["success_rate"] for r in rows])
+    ax.plot(t / 60, v, "o-", ms=3.5, lw=1.6, label="V=3 3h (seed 7)")
+    ax.set_xlabel("wall-clock training time (min)")
+    ax.set_ylabel("success rate on MetaDrive (30 ep, deterministic)")
+    ax.set_title("Budget extension: does more wall-clock help?")
+    ax.set_ylim(0, 1.0); ax.legend(fontsize=9); ax.grid(alpha=0.3)
+    fig.tight_layout(); fig.savefig("figs/fig_budget_ext.png")
+    print("fig_budget_ext.png 저장")
+else:
+    print("[skip] fig_budget_ext: eval_md__ext3h.json 없음")

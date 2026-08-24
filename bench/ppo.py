@@ -27,6 +27,8 @@
    근거(RTX 5080 / Windows 실측): .item() 1회 72.5us vs 비동기 커널 11.1us —
    윈도우 WDDM 은 동기화 비용이 리눅스보다 한 자릿수 크다. 반복당 3.11s → 1.15s,
    학습포함 SPS 19.2K → 45.3K. 두 시뮬에 같은 ppo.py 가 쓰이므로 비교는 공정하다.
+   (c) 벽시계 예산 시계를 첫 reset 뒤에 시작. reset 앞에서 재면 MetaDrive 만
+   12엔진 초기화 수십 초를 예산 안에서 잃는다 (동일 예산 비교의 공정성).
 
 리셋 의미론: 양쪽 모두 gymnasium 표준 NEXT_STEP (stateful 벡터 래퍼가 SAME_STEP 미지원).
 truncation 부트스트랩은 원본 CleanRL 과 동일하게 생략 — 두 시뮬에 같은 처리라 비교는 공정.
@@ -271,10 +273,12 @@ if __name__ == "__main__":
 
     # TRY NOT TO MODIFY: start the game
     global_step = 0
-    start_time = time.time()
     next_obs, _ = envs.reset(seed=args.seed)
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
+    # 수정 6(c): 벽시계 예산은 첫 reset 완료 후부터 잰다. reset 앞에서 재면 MetaDrive 만
+    # 12엔진 초기화·맵 생성 수십 초를 예산 안에서 잃어 동일 예산 비교가 비대칭이 된다.
+    start_time = time.time()
 
     ckpt_dir = f"runs/{run_name}/ckpt"
     os.makedirs(ckpt_dir, exist_ok=True)
@@ -286,7 +290,10 @@ if __name__ == "__main__":
             print(f"time budget reached: {elapsed:.0f}s @ global_step={global_step}")
             break
         if elapsed >= next_ckpt_at:
-            save_checkpoint(f"{ckpt_dir}/t{int(elapsed):06d}.pt", agent, envs, global_step, elapsed)
+            # 파일명은 예정 시각(300 배수)으로 고정한다. int(elapsed) 를 쓰면 반복 경계에
+            # 따라 t002700/t002701/... 로 흔들려 plot_curves 의 이름 기반 조회가 깨진다
+            # (실제 elapsed 는 ckpt 내부 elapsed_s 에 그대로 저장된다).
+            save_checkpoint(f"{ckpt_dir}/t{int(next_ckpt_at):06d}.pt", agent, envs, global_step, elapsed)
             next_ckpt_at += args.checkpoint_every_s
 
         # Annealing the rate if instructed to do so.

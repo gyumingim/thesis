@@ -114,18 +114,34 @@ def main():
     ap.add_argument("--seed", type=int, default=1000)   # 학습 시드와 분리
     ap.add_argument("--mask-degenerate", action="store_true",
                     help="학습 σ=0 차원을 0으로 (V부족 학습런의 전이 구제 실험)")
+    ap.add_argument("--n-vehicles", type=int, default=3,
+                    help="custom 타깃 평가 환경의 NPC 수 (V=2 정책의 in-domain 평가엔 2 필수)")
     ap.add_argument("--out")
     a = ap.parse_args()
 
     global MASK_DEGENERATE
     MASK_DEGENERATE = a.mask_degenerate
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # batch<=64 의 초소형 MLP 는 CPU 가 빠르다 (이 장비 실측: cuda 0.812ms vs cpu 0.0711ms
+    # / 스텝 — 윈도우 WDDM 동기화가 지배). MetaDrive 평가는 정책 호출과 직렬이라 그대로 병목이 된다.
+    device = torch.device("cpu")
     ckpts = [a.ckpt] if a.ckpt else sorted(glob.glob(f"{a.run_dir}/ckpt/*.pt"))
+    def flush(rows):
+        if a.out:
+            os.makedirs(os.path.dirname(a.out), exist_ok=True)
+            with open(a.out, "w") as f:
+                json.dump(rows, f, indent=2)
+
     rows = []
     for cp in ckpts:
-        agent, mean, std, meta = load_agent(cp, device)
-        fn = eval_custom if a.target == "custom" else eval_metadrive
-        counts, rets, lens = fn(agent, mean, std, a.episodes, a.seed, device)
+        try:
+            agent, mean, std, meta = load_agent(cp, device)
+            fn = eval_custom if a.target == "custom" else eval_metadrive
+            kw = dict(n_vehicles=a.n_vehicles) if a.target == "custom" else {}
+            counts, rets, lens = fn(agent, mean, std, a.episodes, a.seed, device, **kw)
+        except Exception as e:
+            # ckpt 하나의 실패(엔진 재초기화, 잘린 파일)로 나머지 결과까지 잃지 않는다.
+            print(f"[skip] {os.path.basename(cp)}: {type(e).__name__}: {e}", flush=True)
+            continue
         n = counts.sum()
         row = dict(ckpt=os.path.basename(cp), elapsed_s=meta["elapsed_s"],
                    global_step=int(meta["global_step"]), target=a.target, episodes=int(n),
@@ -133,13 +149,11 @@ def main():
                    out_of_road_rate=float(counts[2] / n), timeout_rate=float(counts[4] / n),
                    mean_return=float(np.mean(rets)), mean_length=float(np.mean(lens)))
         rows.append(row)
+        flush(rows)   # 증분 저장 — 도중 사망 시에도 완료분은 남는다
         print(f"{os.path.basename(cp):>14} t={meta['elapsed_s']:6.0f}s steps={meta['global_step']:>10,} "
               f"| 성공 {row['success_rate']:.2f} 충돌 {row['crash_rate']:.2f} "
               f"이탈 {row['out_of_road_rate']:.2f} | R {row['mean_return']:.1f}", flush=True)
-    if a.out:
-        os.makedirs(os.path.dirname(a.out), exist_ok=True)
-        with open(a.out, "w") as f:
-            json.dump(rows, f, indent=2)
+    flush(rows)
 
 
 if __name__ == "__main__":
