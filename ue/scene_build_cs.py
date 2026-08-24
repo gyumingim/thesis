@@ -74,7 +74,8 @@ PROP_POOL = [   # (경로, 인도 배치 확률)
     ("/Game/Prop/Kit_StopSign_A/Mesh/SM_StopSign_A", 0.3),
     ("/Game/Prop/Kit_Cone_C_A/Mesh/SM_Cone_C_A", 0.25),
 ]
-VEH_EXCLUDE = ("trailer", "Trailer", "Wheel", "Brake", "Door", "MotionBlur", "Trans", "No_Wheel", "Steering",
+VEH_EXCLUDE = ("vehCar_vehicle02",  # 후면 저폴리 붕괴 (3심 v3 판정 실측)
+               "trailer", "Trailer", "Wheel", "Brake", "Door", "MotionBlur", "Trans", "No_Wheel", "Steering",
                "Caliper", "Rotor", "Glass", "Mirror", "Bumper", "Hood", "Trunk", "seat", "Seat")
 
 eal = unreal.EditorAssetLibrary
@@ -205,7 +206,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
 
     overcast = random.random() < 0.7          # 젖은 노면(재질 고정)과 정합하는 흐림 우세
     sun_int = random.uniform(1.5, 4.0) if overcast else random.uniform(7.0, 12.0)
-    fog_d = random.uniform(0.004, 0.009) if overcast else random.uniform(0.001, 0.003)
+    fog_d = random.uniform(0.003, 0.006) if overcast else random.uniform(0.0008, 0.002)
     lamps_on = overcast or random.random() < 0.3   # 쨍한 날 점등 가로등 = 렌더 티 (3심 지적)
     if lamps_on:
         for k in range(1, ROAD_TILES):
@@ -229,6 +230,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     for k in range(3):
         spawn_bldg(random.choice(list(BLDG_POOL)), BLDG_POOL[list(BLDG_POOL)[0]],
                    endx + 2000 + k * 3500, random.choice((-1, 1)) * random.uniform(0, 0.25),
+                   random.uniform(0, 360))
+    for k in range(3):                        # 2열 — 측면 틈으로 새는 수평선 봉쇄
+        spawn_bldg(random.choice(list(BLDG_POOL)), 30.0,
+                   endx + 9000 + k * 4000, random.choice((-1, 1)) * random.uniform(0.3, 0.8),
                    random.uniform(0, 360))
     x = 2000.0
     n_bldg = 0
@@ -257,7 +262,8 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     ov("film_grain_intensity", random.uniform(0.15, 0.35))
     ov("scene_fringe_intensity", random.uniform(0.15, 0.4))   # 색수차 — 1.2 는 엣지 글리치(실측)
     ov("vignette_intensity", random.uniform(0.3, 0.5))
-    ov("bloom_intensity", random.uniform(0.4, 0.7))          # 백화 클리핑 완화
+    ov("bloom_intensity", random.uniform(0.12, 0.28))        # 0.4~0.7 은 소실점 백화(3심 재지적)
+    ov("auto_exposure_bias", random.uniform(-1.1, -0.5))     # 하이라이트 보존 (백화 억제)
     ppv.set_editor_property("settings", st)
 
     sun_pitch = random.uniform(-55, -12) if not overcast else random.uniform(-65, -20)
@@ -265,9 +271,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     sun = act.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 1000),
                                      unreal.Rotator(0, sun_pitch, sun_yaw))
     sun.light_component.set_intensity(sun_int)
-    # 시안 단색조 완화 — 태양 색온도 미세 변주 (난색 편향)
-    warm = random.uniform(0.0, 0.12)
-    sun.light_component.set_light_color(unreal.LinearColor(1.0, 1.0 - warm * 0.4, 1.0 - warm, 1.0))
+    # 시안 단색조 타파 — 물리 색온도 사용 (3심: 청백 일변도 재지적)
+    sun.light_component.set_editor_property("use_temperature", True)
+    sun.light_component.set_editor_property("temperature",
+        random.uniform(4200.0, 5600.0) if not overcast else random.uniform(5200.0, 6800.0))
     act.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 1000), unreal.Rotator(0, 0, 0))
     act.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
 
@@ -277,6 +284,17 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                                      unreal.Rotator(0, 0, cam_yaw))
     cam.set_editor_property("auto_activate_for_player", unreal.AutoReceiveInput.PLAYER0)
 
+    # 차로 경계: 도로 키트의 도색 buffer 스트립 (플레인+기본머티리얼은 저대비로 비가시 실측)
+    buf = unreal.load_asset("/Game/Road/Kit_City_Road/SM_ROAD_19_5_0_19_buffer")
+    if buf:
+        bb2 = buf.get_bounds()
+        for ly in (-350.0, 350.0):
+            lx = 0.0
+            while lx < ROAD_TILES * 2000:
+                a = spawn_sm(buf, lx - bb2.origin.x, ly - bb2.origin.y, 0, 0)
+                wo, we = a.get_actor_bounds(False)
+                a.add_actor_world_offset(unreal.Vector(0, 0, 1.5 - (wo.z + we.z)), False, False)
+                lx += 2 * bb2.box_extent.x
     decals = [m for m in (unreal.load_asset(a) for a in
               (find_asset(DECAL_DIR, ("Painted_Arrow",)) + find_asset(DECAL_DIR, ("Parking_Line",))
                + find_asset(DECAL_DIR, ("SprayPaint",))[:6])) if m]
