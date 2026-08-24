@@ -120,24 +120,37 @@ def spawn_bldg(path, x, y, yaw):
     bl = act.spawn_actor_from_class(unreal.LevelInstance, unreal.Vector(x, y, 0),
                                     unreal.Rotator(0, 0, yaw))
     bl.set_editor_property("world_asset", w)
+    return bl
+
+
+def flush_streaming(any_actor):
+    """LevelInstance 로드는 비동기 — 신선한 커맨드릿에서는 스폰 직후 바운드가 미형성이다
+    (v7/v8 에서 즉시 나온 것은 이전 실험이 같은 세션에 레벨을 이미 올려둔 덕이었다).
+    스트리밍을 동기 플러시해 바운드를 확정시킨다."""
+    try:
+        unreal.GameplayStatics.flush_level_streaming(any_actor.get_world())
+        return "flush_level_streaming"
+    except Exception as e:
+        return "flush 실패: %s" % e
+
+
+def settle_bldg(bl):
+    """플러시 후 접지 + 회랑 보정. 바운드가 여전히 미형성이면 퇴출."""
     wo, we = bl.get_actor_bounds(False)
-    log("BLDG %s e(%.0f,%.0f,%.0f)m" % (path.split("/")[-1], we.x / 100, we.y / 100, we.z / 100))
     if we.x < 300 or we.y < 300 or we.z < 500:
-        # 인스턴스 레벨이 아직 로드되지 않아 바운드가 미형성 — 접지/회랑 로직이 전부
-        # 오작동한다(scene_5 부유 건물 실측). 이 상태의 건물은 쓰지 않는다.
-        log("BLDG %s 퇴출 (바운드 미형성)" % path.split("/")[-1])
+        log("BLDG 퇴출 (플러시 후에도 바운드 미형성 e=%.0f,%.0f,%.0f)" % (we.x, we.y, we.z))
         act.destroy_actor(bl)
-        return None
-    if we.y > 4500:                          # 회랑을 지킬 수 없는 초대형 — 퇴출
+        return False
+    if we.y > 4500:
         act.destroy_actor(bl)
-        return None
+        return False
     bl.add_actor_world_offset(unreal.Vector(0, 0, -(wo.z - we.z)), False, False)
     wo, we = bl.get_actor_bounds(False)
     near = abs(wo.y) - we.y
-    if near < CORRIDOR_CM:                   # 도로 침범 → 바깥으로
+    if near < CORRIDOR_CM:
         push = (CORRIDOR_CM - near) * (1 if wo.y >= 0 else -1)
         bl.add_actor_world_offset(unreal.Vector(0, push, 0), False, False)
-    return bl
+    return True
 
 
 def bbox2d(lb):
@@ -186,15 +199,19 @@ def build_scene(i, road, sw, pole, vehicles):
             ground(spawn_sm(pole, k * 2200, side * (ROAD_HALF_W_CM + 150), 0, yaw))
 
     x = 2000.0
-    n_bldg = 0
+    pending = []
     while x < ROAD_TILES * 2000 + 4000:
         for side in (-1, 1):
             if random.random() < 0.8:
-                if spawn_bldg(random.choice(BLDG_POOL), x + random.uniform(-500, 500),
-                              side * random.uniform(2400, 3600),
-                              random.uniform(-10, 10) + (0 if side < 0 else 180)):
-                    n_bldg += 1
+                b = spawn_bldg(random.choice(BLDG_POOL), x + random.uniform(-500, 500),
+                               side * random.uniform(2400, 3600),
+                               random.uniform(-10, 10) + (0 if side < 0 else 180))
+                if b:
+                    pending.append(b)
         x += random.uniform(3500, 5500)
+    if pending:
+        log("streaming: " + flush_streaming(pending[0]))
+    n_bldg = sum(1 for b in pending if settle_bldg(b))
 
     fog = act.spawn_actor_from_class(unreal.ExponentialHeightFog,
                                      unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
