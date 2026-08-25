@@ -20,10 +20,12 @@ from PIL import Image
 
 PROMPT = ("a real photograph taken from a dashcam, real-world street scene, "
           "photorealistic, natural lighting, detailed asphalt texture, DSLR photo, "
-          "high dynamic range")
+          "high dynamic range, a few pedestrians walking on the sidewalk, "
+          "storefront signs, urban street life")
 NEGATIVE = ("cartoon, anime, illustration, painting, 3d render, cgi, video game, "
             "unreal engine, low quality, blurry, deformed car, warped geometry, "
-            "extra vehicles, watermark, text, bad anatomy, deformed")
+            "extra vehicles, people on the road, person in front of car, "
+            "watermark, bad anatomy, deformed")
 
 
 def build_pipe():

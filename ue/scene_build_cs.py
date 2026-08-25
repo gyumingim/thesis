@@ -69,10 +69,12 @@ TREE_POOL = [
     "/Game/Prop/Kit_Tree_Birch/Mesh/SM_Tree_Birch_a",
     "/Game/Prop/Kit_Tree_Birch/Mesh/SM_Tree_Birch_c",
 ]
-PROP_POOL = [   # (경로, 인도 배치 확률)
-    ("/Game/Prop/Kit_Trashcan_A/Mesh/SM_Trashcan_A_01", 0.5),
-    ("/Game/Prop/Kit_StopSign_A/Mesh/SM_StopSign_A", 0.3),
-    ("/Game/Prop/Kit_Cone_C_A/Mesh/SM_Cone_C_A", 0.25),
+PROP_POOL = [   # (경로, 인도 배치 확률) — v5: 생활감 증량 (판정단: 공허함이 최대 감점)
+    ("/Game/Prop/Kit_Trashcan_A/Mesh/SM_Trashcan_A_01", 0.7),
+    ("/Game/Prop/Kit_StopSign_A/Mesh/SM_StopSign_A", 0.4),
+    ("/Game/Prop/Kit_Cone_C_A/Mesh/SM_Cone_C_A", 0.35),
+    ("/Game/Prop/Kit_NewsDispenser_A/Mesh/SM_NewsDispenser_A_01", 0.5),
+    ("/Game/Prop/Kit_BusStopSign_A/Mesh/SM_BusStopSign_A", 0.3),
 ]
 VEH_EXCLUDE = ("vehCar_vehicle02",  # 후면 저폴리 붕괴 (3심 v3 판정 실측)
                "trailer", "Trailer", "Wheel", "Brake", "Door", "MotionBlur", "Trans", "No_Wheel", "Steering",
@@ -316,14 +318,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         e = m.get_bounds().box_extent
         r = math.hypot(e.x / 100, e.y / 100)
         mode = random.random()
-        if mode < 0.30 and len(labels) >= 2:
+        if mode < 0.34 and len(labels) >= 2:
             # 정체 열: 직전 차량 뒤 6~9m 같은 차선 (실도로 밀도의 핵심 — 3심 지적)
             prev = labels[-1]["relative_position_m"]
             x = prev["x"] + random.uniform(6.0, 9.0)
             y = prev["y"] + random.uniform(-0.3, 0.3)
             yaw = (0.0 if y < 0 else 180.0) + random.uniform(-4, 4)
             if x > 55: continue
-        elif mode < 0.42:
+        elif mode < 0.52:   # 노변 주차열 증량 (생활감)
             # 평행주차: 갓길(|y|≈8.2m)에 차선과 나란히
             x = random.uniform(6, 48)
             side = random.choice((-1, 1))
