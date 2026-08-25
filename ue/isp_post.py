@@ -31,11 +31,14 @@ def match_histogram(a, ref_paths, rng, strength=0.5):
     return out.astype(np.float32)
 
 
-def isp(im, rng, ref_paths=None):
-    """Poisson(샷) + Gaussian(리드) 노이즈, 미세 색온도 흔들림, 감마 왜곡, (선택) 실사 색정합."""
+def isp(im, rng, ref_paths=None, hist_only=False):
+    """Poisson(샷)+Gaussian(리드) 노이즈, WB 오차, 감마 왜곡, (선택) 실사 색정합.
+    hist_only=True 면 색정합만 (디퓨전 전처리용 — 노이즈는 디퓨전 뒤 마지막에)."""
     a = np.asarray(im, dtype=np.float32) / 255.0
     if ref_paths:
         a = match_histogram(a, ref_paths, rng, strength=rng.uniform(0.35, 0.6))
+    if hist_only:
+        return Image.fromarray((np.clip(a, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8))
 
     # 미세 화이트밸런스 오차 (실카메라 AWB 불완전)
     wb = 1.0 + rng.uniform(-0.02, 0.02, size=3).astype(np.float32)
@@ -62,13 +65,14 @@ def main():
         return
     out_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(files[0]), "isp")
     ref_paths = sorted(glob.glob(sys.argv[3])) if len(sys.argv) > 3 else None   # 3번째 인자 = 실사 글롭
+    hist_only = "--hist-only" in sys.argv
     os.makedirs(out_dir, exist_ok=True)
     for f in files:
         rng = np.random.default_rng(abs(hash(os.path.basename(f))) % (2**32))
-        im = isp(Image.open(f).convert("RGB"), rng, ref_paths)
+        im = isp(Image.open(f).convert("RGB"), rng, ref_paths, hist_only)
         out = os.path.join(out_dir, os.path.splitext(os.path.basename(f))[0] + ".jpg")
         # JPEG 재압축 — 실사진의 압축 흔적 통계를 부여 (q 85~92 랜덤)
-        im.save(out, "JPEG", quality=int(rng.integers(85, 93)), optimize=True)
+        im.save(out, "JPEG", quality=95 if hist_only else int(rng.integers(85, 93)), optimize=True)
         print("isp:", os.path.basename(out))
 
 
