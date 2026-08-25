@@ -60,6 +60,26 @@ def isp(im, rng, ref_paths=None, hist_only=False):
     return Image.fromarray((np.clip(a, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8))
 
 
+def stamp_osd(img, seed):
+    """대시캠 타임스탬프 OSD — 실제 대시캠 분포 특유의 노란 모노스페이스 시각 표시.
+    진짜 숫자를 렌더하므로 의사문자 문제 없음. 다운스트림 평가셋(Udacity, 연구 카메라)엔
+    OSD 가 없으므로 4-arm 프로덕션에선 기본 꺼짐 — 판정/갤러리용 사실 신호. --osd 로 켬."""
+    from PIL import ImageDraw, ImageFont
+    rng = np.random.default_rng(seed)
+    txt = (f"2026-{int(rng.integers(3, 9)):02d}-{int(rng.integers(1, 29)):02d} "
+           f"{int(rng.integers(6, 20)):02d}:{int(rng.integers(60)):02d}:{int(rng.integers(60)):02d}")
+    try:
+        font = ImageFont.truetype("C:/Windows/Fonts/consola.ttf", max(16, img.height // 36))
+    except OSError:
+        font = ImageFont.load_default()
+    dr = ImageDraw.Draw(img)
+    x, y = img.width // 40, img.height - img.height // 14
+    for dx, dy in ((1, 1), (-1, 1), (1, -1), (-1, -1)):
+        dr.text((x + dx, y + dy), txt, font=font, fill=(20, 20, 10))
+    dr.text((x, y), txt, font=font, fill=(235, 210, 60))
+    return img
+
+
 def main():
     pattern = sys.argv[1]
     files = sorted(glob.glob(pattern))
@@ -69,10 +89,13 @@ def main():
     out_dir = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(files[0]), "isp")
     ref_paths = sorted(glob.glob(sys.argv[3])) if len(sys.argv) > 3 else None   # 3번째 인자 = 실사 글롭
     hist_only = "--hist-only" in sys.argv
+    osd = "--osd" in sys.argv
     os.makedirs(out_dir, exist_ok=True)
     for f in files:
         rng = np.random.default_rng(abs(hash(os.path.basename(f))) % (2**32))
         im = isp(Image.open(f).convert("RGB"), rng, ref_paths, hist_only)
+        if osd:
+            im = stamp_osd(im, abs(hash(f)) % 2**31)
         out = os.path.join(out_dir, os.path.splitext(os.path.basename(f))[0] + ".jpg")
         # JPEG 재압축 — 실사진의 압축 흔적 통계를 부여 (q 85~92 랜덤)
         im.save(out, "JPEG", quality=95 if hist_only else int(rng.integers(85, 93)), optimize=True)
