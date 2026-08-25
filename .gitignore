@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 bench_results_run_all_console.log
 nohup.out
+tools/auto_resume.log
