@@ -18,14 +18,30 @@ import numpy as np
 import torch
 from PIL import Image
 
-PROMPT = ("a real photograph taken from a dashcam, real-world street scene, "
-          "photorealistic, natural lighting, detailed asphalt texture, DSLR photo, "
-          "high dynamic range, a few pedestrians walking on the sidewalk, "
-          "storefront signs, urban street life")
-NEGATIVE = ("cartoon, anime, illustration, painting, 3d render, cgi, video game, "
-            "unreal engine, low quality, blurry, deformed car, warped geometry, "
-            "extra vehicles, people on the road, person in front of car, "
-            "watermark, bad anatomy, deformed")
+# 프리셋 2종 (2026-08-25 사용자 원칙: "예쁜 사진이 아니라 실제와 똑같은 사진").
+# default: v5 까지 쓰던 프롬프트. mundane: 미적 유도어(DSLR/HDR) 제거, "평범하고 지루한
+# 실제 대시캠 프레임"으로 유도 — 미적 튜닝 모델의 '멋있게 만들기' 편향을 프롬프트로 상쇄.
+PRESETS = {
+    "default": (
+        "a real photograph taken from a dashcam, real-world street scene, "
+        "photorealistic, natural lighting, detailed asphalt texture, DSLR photo, "
+        "high dynamic range, a few pedestrians walking on the sidewalk, "
+        "storefront signs, urban street life",
+        "cartoon, anime, illustration, painting, 3d render, cgi, video game, "
+        "unreal engine, low quality, blurry, deformed car, warped geometry, "
+        "extra vehicles, people on the road, person in front of car, "
+        "watermark, bad anatomy, deformed"),
+    "mundane": (
+        "an ordinary unremarkable frame from real dashcam footage, boring everyday "
+        "street, overcast flat lighting, slightly faded colors, mild motion blur, "
+        "worn asphalt with patches, dusty parked cars, a few pedestrians on the "
+        "sidewalk, cluttered storefronts, mundane real-world photo, amateur snapshot",
+        "beautiful, cinematic, dramatic lighting, vivid colors, DSLR, bokeh, "
+        "professional photography, cartoon, anime, illustration, painting, "
+        "3d render, cgi, video game, unreal engine, deformed car, warped geometry, "
+        "extra vehicles, people on the road, watermark, bad anatomy"),
+}
+PROMPT, NEGATIVE = PRESETS["default"]
 
 
 def build_pipe():
@@ -69,7 +85,10 @@ def main():
     ap.add_argument("--steps", type=int, default=40)
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--sweep", action="store_true", help="strength 0.3/0.4/0.5 3판")
+    ap.add_argument("--preset", default="default", choices=sorted(PRESETS))
     a = ap.parse_args()
+    global PROMPT, NEGATIVE
+    PROMPT, NEGATIVE = PRESETS[a.preset]
     files = sorted(glob.glob(a.src))
     assert files, "입력 없음"
     os.makedirs(a.out, exist_ok=True)
