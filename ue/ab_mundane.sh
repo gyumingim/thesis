@@ -11,7 +11,7 @@ for P in default mundane; do
   $PY ue/neural_refine.py --src "C:/ue/out_ab/hist/*.jpg" --out /c/ue/out_ab/nr_$P --strength 0.3 --cn 0.6 --preset $P
   $PY ue/isp_post.py "C:/ue/out_ab/nr_$P/*.jpg" C:/ue/out_ab/fin_$P
   echo "== $P =="
-  $PY ue/realism_metric.py --fake "C:/ue/out_ab/fin_$P/*.jpg" --real "C:/ue/ref_all/*.jpg" || echo "metric-fail realism $P"
+  $PY ue/realism_metric.py --syn "C:/ue/out_ab/fin_$P/*.jpg" --device cuda --ref "C:/ue/ref_all/*.jpg" || echo "metric-fail realism $P"
   $PY ue/skvd_metric.py --fake "C:/ue/out_ab/fin_$P/*.jpg" --real "C:/ue/ref_all/*.jpg" || echo "metric-fail skvd $P"
 done
 echo AB_DONE
