@@ -48,8 +48,11 @@ def isp(im, rng, ref_paths=None, hist_only=False):
     full_well = rng.uniform(500.0, 1500.0)
     a = rng.poisson(a * full_well).astype(np.float32) / full_well
 
-    # 리드 노이즈 (가우시안, 어두운 곳에서 상대적으로 두드러짐)
-    a += rng.normal(0.0, rng.uniform(0.006, 0.014), size=a.shape).astype(np.float32)
+    # 리드 노이즈 — 하이라이트 억제: 실카메라는 톤커브 압축으로 밝은 영역 노이즈가 급감
+    # (판정 A 정량: 실사 밝은부 HF-std 8.7 vs 본 파이프라인 13.8 → 물리 오류 지적 반영)
+    lum = a.mean(axis=2, keepdims=True)
+    atten = np.clip(1.15 - lum, 0.25, 1.0)
+    a += (rng.normal(0.0, rng.uniform(0.006, 0.014), size=a.shape).astype(np.float32) * atten)
 
     # 톤 미세 왜곡 (감마 ±3%)
     a = np.clip(a, 0.0, 1.0) ** rng.uniform(0.97, 1.03)
