@@ -74,6 +74,9 @@ class Args:
     """metadrive 의 traffic_density"""
     md_num_scenarios: int = 100
     """metadrive 학습 워커당 시나리오 수 (수정 5 — 파일럿: 1이면 같은 교통배치 암기)"""
+    init_ckpt: str = ""
+    """비어있지 않으면 학습 시작 전 이 체크포인트의 가중치와 obs 정규화 통계를 로드
+    (처방 iii 캐스케이드: 경량 사전학습 → 고충실도 미세조정). 관측공간 51차원 동일 전제."""
     time_budget_s: float = 0.0
     """0 보다 크면 wall-clock 이 이 값(초)을 넘는 순간 학습 종료 (수정 4)"""
     checkpoint_every_s: float = 0.0
@@ -246,6 +249,16 @@ if __name__ == "__main__":
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     agent = Agent(envs).to(device)
+    if args.init_ckpt:
+        _ck = torch.load(args.init_ckpt, map_location=device)
+        agent.load_state_dict(_ck["model"])
+        _rms = find_obs_rms(envs)
+        if _rms is not None and _ck.get("obs_mean") is not None:
+            _rms.mean[:] = _ck["obs_mean"]
+            _rms.var[:] = _ck["obs_var"]
+            _rms.count = _ck["obs_count"]
+        print(f"init from {args.init_ckpt} (t={_ck.get('elapsed_s',0):.0f}s, "
+              f"steps={_ck.get('global_step',0):,}, rms={'ok' if _rms is not None else 'none'})")
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
