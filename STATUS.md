@@ -100,6 +100,17 @@
 공간 경계 잔차가 아님. 남는 처방 = 조기정지·(iii) 캐스케이드. PAPER §7 반영 [리뷰 대기].
 원자료: 노트북 bench_results/exp_boundary/, 브랜치 origin/exp-boundary.
 
+## 프로덕션 데이터셋 완성 (2026-08-26 새벽)
+
+- 360장 렌더(scene_200~559) + bbox JSON 360 — 이중 실행 사고(상호 taskkill)는 잠금장치로 봉인
+- 프롬프트 A/B: mundane(미적어 제거) 가설 **지표 기각**(sKVD .280 vs .263, KDD/CMMD도 열세) → default 채택
+- 정제 파이프라인: 색정합→깊이CN 디퓨전 0.3→ISP, 2팔 산출 `C:/ue/out_prod/fin_refined|fin_plain`(각 360)
+- 색기움 전수 감사: 19장(>28) 검출 → 저강도 0.25 재처리(최악 54→37, 잔여는 날씨 프리셋 기인 수용)
+- sKVD 지표 가동(ue/skvd_metric.py, SegFormer+VGG 패치 MMD) · 참조 실사 170장 체제(ref_all)
+- Udacity CrowdAI 라벨셋 확보(MIT, 1,570프레임/11,970박스) `C:/ue/real_labeled/`
+- 갤러리(같은 URL): https://claude.ai/code/artifact/f9f74705-39ee-4afa-becb-e13f6e1aaac5
+- 다음: percept v1 2D 차량 검출 4-arm(UE bbox→YOLO 변환, Udacity 평가 — 도메인 갭은 상대비교 통제)
+
 ## 처방 실험 최종 결산 (2026-08-25 오후) — RL 트랙 실험 완결
 
 - (ii) 경계 보수화: **기각** (δ0.3/0.5 전 시드 붕괴 재현)
