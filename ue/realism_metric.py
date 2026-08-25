@@ -171,6 +171,21 @@ def kid(x, y, n_subsets, rng):
 
 # ---------------------------------------------------------------- 메인
 
+def dinov2_features(paths, device):
+    """DINOv2 ViT-L/14 특징 (torch.hub) — KDD 용. Inception 대비 인간 지각 상관 우수
+    (Stein et al. NeurIPS 2023, 'Speedrunning ImageNet Diffusion' 의 KDD 관행)."""
+    import torchvision.transforms as T
+    model = torch.hub.load("facebookresearch/dinov2", "dinov2_vitl14").to(device).eval()
+    tf = T.Compose([T.Resize(256), T.CenterCrop(224), T.ToTensor(),
+                    T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
+    feats = []
+    with torch.no_grad():
+        for i in range(0, len(paths), 8):
+            batch = torch.stack([tf(Image.open(q).convert("RGB")) for q in paths[i:i + 8]]).to(device)
+            feats.append(model(batch).cpu())
+    return torch.cat(feats).numpy()
+
+
 def main():
     ap = argparse.ArgumentParser(description="CMMD/KID 실사-유사도 측정 (소표본용)")
     ap.add_argument("--syn", required=True, help='합성 이미지 글롭, 예: "C:/ue/out_cs2/isp/scene_7*.jpg"')
@@ -220,7 +235,18 @@ def main():
         *feats[id(kid_ex)], args.kid_subsets, np.random.default_rng(args.seed)
     )
 
+    # KDD: DINOv2 특징 + KID 커널 — 지각 상관 최상급 (SOTA 조사 채택 #1). 실패해도 치명 아님.
+    kdd_mean = kdd_std = None
+    try:
+        fs = dinov2_features(syn_paths, device)
+        fr = dinov2_features(ref_paths, device)
+        kdd_mean, kdd_std, _ = kid(fs, fr, args.kid_subsets, np.random.default_rng(args.seed))
+    except Exception as e:
+        print(f"[경고] KDD(DINOv2) 실패: {e}", file=sys.stderr)
+
     result = {
+        "kdd_mean": None if kdd_mean is None else round(float(kdd_mean), 8),
+        "kdd_std": None if kdd_std is None else round(float(kdd_std), 8),
         "n_syn": len(syn_pils),
         "n_ref": len(ref_pils),
         "cmmd": round(cmmd_val, 6),
