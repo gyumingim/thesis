@@ -250,7 +250,7 @@ if __name__ == "__main__":
 
     agent = Agent(envs).to(device)
     if args.init_ckpt:
-        _ck = torch.load(args.init_ckpt, map_location=device)
+        _ck = torch.load(args.init_ckpt, map_location=device, weights_only=False)  # 자가 ckpt (numpy 포함)
         agent.load_state_dict(_ck["model"])
         _rms = find_obs_rms(envs)
         if _rms is not None and _ck.get("obs_mean") is not None:
