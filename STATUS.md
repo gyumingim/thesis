@@ -100,6 +100,14 @@
 공간 경계 잔차가 아님. 남는 처방 = 조기정지·(iii) 캐스케이드. PAPER §7 반영 [리뷰 대기].
 원자료: 노트북 bench_results/exp_boundary/, 브랜치 origin/exp-boundary.
 
+## 번호판 복원 v2 + 그림 3종 (2026-08-28 새벽)
+
+- 진실 정정: UE 번호판은 원래 진짜 텍스트 17종(UDIM 타일) — 의사문자는 디퓨전 산물. "6MT776 성공"은 거짓 양성(레이어 파라미터 연관 함정)
+- 해법 = 흰-패스 마스크(gain>550 + 형상 필터) → fin_plain 픽셀 되붙임 → **fin_refined_v2** (291장 복원, 반사 오검은 형상 필터로 제거)
+- 논문 그림: figs/fig_4arm.png, fig_ft.png, fig_dpc.png (한글 폰트·rliable 문법)
+- few-shot 파인튜닝 §6.4 반영: 25장 구간 합성 사전학습 +47.7pp·분산 1/32
+- union_ds(depth+seg, SAM색) 소표본 -4.5% 우세 → 360장 전체 검증 진행 중 (out_g6full)
+
 ## percept v1 4-arm 완료 (2026-08-26 01:50) — 인지 트랙 핵심 실험 완결
 
 - Udacity 실사 532프레임 mAP50: raw 46.5 / plain 45.2 / **refined 53.7** / real 상한 89.7
