@@ -6,3 +6,5 @@ __pycache__/
 bench_results_run_all_console.log
 nohup.out
 tools/auto_resume.log
+weights/
+yolov8n.pt

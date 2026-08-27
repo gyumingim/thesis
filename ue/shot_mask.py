@@ -34,7 +34,7 @@ def swap():
             comp.set_material(i, wm if "licenseplate" in sn.lower() else bm)
         n += 1
     for cmd in ("ShowFlag.Bloom 0", "ShowFlag.Fog 0", "ShowFlag.MotionBlur 0",
-                "ShowFlag.Decals 0", "r.TonemapperFilm 0"):
+                "ShowFlag.Decals 0", "r.TonemapperFilm 0", "ShowFlag.Atmosphere 0", "ShowFlag.SkyLighting 0"):
         unreal.SystemLibrary.execute_console_command(w, cmd)
     L("스왑 %d액터" % n)
 

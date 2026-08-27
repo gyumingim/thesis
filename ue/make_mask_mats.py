@@ -17,5 +17,5 @@ def mk(name, rgb):
     unreal.EditorAssetLibrary.save_loaded_asset(m)
     unreal.log_warning(f"[mask] {name} 생성")
 
-mk("M_mask_white", (1.0, 1.0, 1.0))
+mk("M_mask_white", (200.0, 200.0, 200.0))   # 자동노출 하에서도 포화 확보
 mk("M_mask_black", (0.0, 0.0, 0.0))
