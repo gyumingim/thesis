@@ -472,3 +472,174 @@
 1. [지표 1 — S2CC: 정합 버전 수준의 정적 Sim2Sim Correlation Coefficient (Kadian 직계 재현)] 표본 단위 = 정합 버전 v=1..6 (SRCC의 '설계 변형' 단위에 정확 대응). 각 (v, 시드 s)에서 실사용 선택 절차를 모사해 c*(v,s) = argmax_c L_{v,s,c} (경량 시뮬 점수 최고 체크포인트)를 고르고, x_v = (1/5)Σ_s L_{v,s,c*(v,s)}, y_v = (1/5)Σ_s M_{v,s,c*(v,s)} 로 집계. 정의: S2CC = Pearson r({(x_v, y_v)}_{v=1..6}) — Kadian과 동일하게 Pearson 유지하되, 원 논문에 없던 통계를 추가: (i) 완전 정확 순열검정 p_perm (6! = 720개 순열 전수, 양측), (ii) 시드 계층 부트스트랩 95% CI (시드 5개를 복원추출해 x,y 재집계 → r 분포), (iii) 동반 지표 MMRV = (1/6)Σ_i max_j |y_i − y_j|·1[(x_i<x_j) ≠ (y_i<y_j)] (SIMPLER 2405.05941 정의 그대로, '순위 실수의 실질 비용' 보고) 와 Regret@1 = max_v y_v − y_{argmax_v x_v} (DOPE 2103.16596 차용, '경량 시뮬로 버전을 골랐을 때의 손해'). 이 지표가 '경량 시뮬은 버전 간 설계 결정에 대해 진단적'이라는 주장의 정적 증거가 된다.
 2. [지표 2 — DPC(t): Diagnostic Predictivity Curve, 체크포인트 시계열 위의 동적 순위상관 (신규성 핵심)] 각 시드 s와 슬라이딩 윈도 W_t = {t−w+1,…,t} (w=6 체크포인트 = 30분; 민감도 분석으로 w∈{4,6,8})에서 τ^(s)(t) = Kendall τ-b({(L_{s,c}, M_{s,c}) : c ∈ W_t}) 를 계산하되, 윈도 내 M 또는 L의 동률 쌍 비율 > 50%면 해당 (s,t)는 미정의로 마스킹. 정의: DPC(t) = (1/|S_t|) Σ_{s∈S_t} τ^(s)(t) (S_t = 미정의 아닌 시드 집합), 불확실성 대역은 시드 부트스트랩. 유의성: 자기상관 보존을 위해 각 시드의 M 시계열을 임의 오프셋으로 순환 이동(circular shift)하는 순열을 시드 독립적으로 10^4회 → 창별 p는 sup_t |DPC(t)| max-통계로 다중검정 보정. 핵심 보고 통계: 부호 전환 시점 t* = min{t > t_sat : DPC(t) < 0, 보정 p < 0.05} 를 '착취 개시점(exploitation onset)'으로 정의 — '초기 양의 상관 → 포화 후 음의 상관'을 하나의 검정 가능한 곡선과 하나의 시점 통계로 만든다. 이것이 SOB(1907.04685, 스칼라 편향)와 Goodhart 곡선(2210.10760, 상관 아님)이 하지 않은 정식화다.
 3. [지표 3 — Δτ: 포화 전/후 위상 대비 층화 순위상관 (단일 수치 요약 + 함정 방어 내장)] 포화 시점을 시드별로 t_sat(s) = min{c : L_{s,c} ≥ 0.9 · max_{c'} L_{s,c'}} 로 정의(θ=0.9, 민감도 분석 θ∈{0.8,0.9,0.95}). 위상 P ∈ {pre: c < t_sat(s), post: c ≥ t_sat(s)} 각각에서 시드 내(within-seed) 쌍만 세는 층화 Kendall: τ_strat(P) = Σ_s (C_s^P − D_s^P) / Σ_s D_denom_s^P, 여기서 C_s/D_s = 시드 s 내 일치/불일치 쌍 수, D_denom_s = τ-b 동률 보정 분모 √((n₀−n₁)(n₀−n₂)) 의 시드별 값 — 시드 혼합의 Simpson 역설을 원천 차단(풀링 60점 상관은 절대 주지표로 쓰지 말 것; 부록에 rmcorr 병기). 주장 통계: Δτ = τ_strat(pre) − τ_strat(post), 유의성은 시드 내에서 위상 구조를 보존한 채 M의 체크포인트 라벨을 순환 이동하는 순열 10^4회로 Δτ 널 분포 생성, 양측 p 보고. 보고 의무 사항(바닥 효과 방어): 위상별 M=0 비율, 동률 쌍 비율, 위상 내 분산을 Δτ 옆에 표로 병기하고, M이 전부 0인 시드-위상은 제외 수와 함께 명시. Δτ > 0 유의 = '포화 후 경량 점수의 진단력 반전'의 논문 헤드라인 수치.
+
+---
+
+# 문헌 확장 사이클 7 (2026-08-27)
+
+## UE 합성 데이터 선행
+
+### 1. 합성 사전학습 + 실사 N장(10~100) 파인튜닝 스펙트럼 — 우리 25장 +21.4pp의 위치
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| Transfer learning with generative models for object detection on limited dataset | 2024 | arXiv:2402.06784 | O | 우리 N=25에 가장 가까운 공표 수치. GLIGEN(디퓨전 layout-to-image) 생성 9,000장 사전학습 + Faster R-CNN. OzFish(수중 어류, 1클래스): 실사 50장 단독 mAP 0.024 → +생성데이터 0.48 (+45pp, 단 바닥 베이스라인). NuImages(차량): 실사 300장 0.43 → 0.66 (+23pp), 실사 4,500장 단독 0.70에 근접. 함정: 베이스라인이 사실상 붕괴 상태(0.024)라 절대 이득이 부풀려짐. |
+| ODGEN: Domain-specific Object Detection Data Generation with Diffusion Models (N | 2024 | arXiv:2405.15199 | O | 실사 200장 + 디퓨전 합성 5,000장, YOLOv5s/YOLOv7, RF7 도메인 벤치마크, 지표는 mAP@50:95(주의: 우리 mAP50과 다름). Cotton 16.7→42.0(+25.3), Robomaster 27.2→39.6(+12.4), MRI 37.6→46.1(+8.5), Underwater 16.7→19.2(+2.5). 도메인별 편차가 크다는 점이 핵심 — 이득은 도메인 갭·클래스 난이도에 좌우. |
+| Sim-to-Real Fruit Detection Using Synthetic Data (Isaac Sim) | 2026 | arXiv:2603.28670 | O | 정확히 N=50/100 스윕. YOLOv8s(COCO 초기화), 과일 검출. 실사 50장 단독으로 이미 mAP50 0.978(천장), 합성 1k~5k 사전학습을 더해도 0.974~0.984로 무이득. 반례로 중요: COCO 초기화 + 쉬운 in-domain 과제에서는 N=50에서 합성 효과가 0으로 수렴. 우리 +21.4pp는 베이스라인 53.7이 천장에서 멀다는 것(어려운 도메인 갭)의 방증. |
+| PeopleSansPeople: A Synthetic Data Generator for Human-Centric Computer Vision ( | 2021 | arXiv:2112.09290 | O | Keypoint R-CNN R50-FPN, COCO-person, 지표는 keypoint AP(bbox 아님 — 직접 비교 금지). 최소 실사 641장(1%)에서 scratch 6.40 / ImageNet 사전학습 21.90 / 합성 사전학습 44.43(+38.0 vs scratch, +22.5 vs ImageNet). 64,115장(100%)에서는 격차가 +1.47/+1.07로 축소. '저데이터일수록 합성 사전학습 이득이 커진다' 곡선의 대표 근거이나 그들의 최소 N=641로 우리 25장보다 25배 큼. |
+| RarePlanes: Synthetic Data Takes Flight (WACV 2021) | 2020 | arXiv:2006.02963 | O | 위성영상 항공기 검출. 합성 5만장 사전학습 후 실사 10%만 파인튜닝하면 실사 100% 학습과 동등 — '실사 앞부분 소량이 가장 가파른 이득' 서사의 고전 앵커. 단, 실사 총량이 253 위성이미지(~14.7k 어노테이션)라 10%도 우리 25장보단 큰 규모. |
+| Reducing the Amount of Real World Data for Object Detector Training with Synthet | 2022 | arXiv:2202.00632 | O | 자율주행 도메인(우리와 동일 계열). 합성+실사 혼합으로 실사 필요량 70% 절감, 실사 비율 5~20% 혼합이 최적 구간이라 보고. 절대 mAP는 초록 미기재 — 본문 표 인용 시 재확인 필요. |
+| Can Synthetic Data Improve Object Detection Results for Remote Sensing Images? | 2020 | arXiv:2006.05015 | O | 합성 생성 + CycleGAN 픽셀 정제 + 소량 실사 파인튜닝 — 우리 '절차 생성→디퓨전 정제→파인튜닝' 파이프라인의 GAN 시대 직계 조상. 실사 1%만 파인튜닝 시 48.23% mAP로 순수 실사 대비 +6.08%p(검색 결과 기반 수치, 본문 표에서 재확인 권장). 평가셋 NWPU VHR-10/UCAS-AOD/DIOR. |
+| Synthetic and Derived Training Images for Campus Waste Detection: A Multi-Seed E | 2026 | arXiv:2607.19535 | O | 부정 결과 대조군. 실사 86장(우리 N과 동급) + 전통적 배경치환/변형 증강 695장, YOLOv8n 멀티시드: 모든 증강 구성이 실사 단독 mAP50 0.691을 넘지 못함(최악 0.487). N=10~100 구간에서 '저품질 합성은 오히려 해악'을 보여줘, 우리 디퓨전 정제 단계의 필요성을 정당화하는 인용처. |
+
+**시사점**: N≤100 문헌 이득 스펙트럼은 음수(캠퍼스 폐기물, 저품질 증강)부터 +45pp(OzFish, 바닥 베이스라인)까지 퍼져 있고, 이득 크기를 결정하는 축은 (a) 베이스라인이 천장에서 얼마나 먼가, (b) 도메인 갭 크기, (c) 합성 데이터 품질이다. 우리 '25장으로 53.7→75.1 mAP50(+21.4pp)'은 이 스펙트럼에서 강한 편이지만 이상치가 아니다 — ODGEN Cotton(+25.3 mAP50:95, 200장), FSOD 1-shot(+15 AP50)과 같은 '큰 도메인 갭 + 비천장 베이스라인' 대역에 정확히 놓인다. 반대로 과일 검출(N=50에서 +0)과 나란히 놓으면 '이득 0인 조건'과의 대비로 우리 세팅의 난이도를 입증할 수 있다. 비교 함정 필수 명기: (1) mAP50 vs mAP50:95(ODGEN) vs keypoint AP(PSP)는 서로 환산 불가, (2) FSOD의 K-shot은 클래스당 장수이고 우리는 총 25장, (3) COCO 초기화 여부에 따라 합성 이득 크기가 완전히 달라짐(scratch면 +38, COCO-init+쉬운 과제면 0), (4) in-domain 평가 vs domain-shift 평가 구분.
+
+### 2. 합성 사전학습 vs COCO/ImageNet 사전학습 few-shot 대결 — COCO 대조군 해석 프레임
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| PeopleSansPeople (합성 vs ImageNet 사전학습 직접 대결) | 2021 | arXiv:2112.09290 | O | 가장 깨끗한 직접 대결 수치: 실사 641장에서 합성 사전학습 44.43 vs ImageNet 21.90(+22.53 kp AP), 실사 전량(64k)에서는 63.47 vs 62.40(+1.07). '합성이 이기는 폭은 실사 N이 줄수록 커지고, N이 커지면 소멸'하는 교차 곡선의 정량 근거. |
+| Transfer learning with generative models (생성데이터 사전학습 vs COCO 사전학습) | 2024 | arXiv:2402.06784 | O | COCO 사전학습 대조군을 명시적으로 둔 드문 논문. OzFish에서 생성데이터(GLIGEN) 사전학습 모델이 실사 300장만으로 COCO 사전학습 레퍼런스 성능에 도달('실사 라벨 3자릿수 절감'), 실사 1,500+생성 1,500이면 COCO 사전학습 베이스라인(~0.60 mAP)을 추월. 합성이 이기는 조건 = 타깃 도메인(수중)이 COCO 분포에서 멀 때. |
+| Explore the Power of Synthetic Data on Few-shot Object Detection (CVPR-W 2023) | 2023 | arXiv:2303.13221 | O | 대결이 아닌 '보완' 구도의 근거: COCO-base 사전학습된 DeFRCN/MFDC(Faster R-CNN R101) 위에 Stable Diffusion 생성 이미지 클래스당 ~20장을 얹으면 VOC split1 novel AP50이 1-shot 52.5→67.5(+15.0), 10-shot 61.9→71.5(+9.6), COCO에서 +0.5~+12.6. CLIP 유사도 필터로 FP 90% 제거 — 우리 '정제/필터링' 단계와 논리 동일. |
+| Rethinking Pre-training and Self-training (NeurIPS 2020, Zoph et al.) | 2020 | arXiv:2006.06882 | O | COCO 대조군 해석의 이론 프레임: 사전학습은 라벨 데이터가 1/5로 적을 때만 이득이고 데이터가 충분하고 증강이 강하면 오히려 해악(-AP). 즉 '사전학습의 가치는 저데이터 구간에 응축된다'는 일반 법칙 — 우리 N=25 구간에서 사전학습 소스(합성 vs COCO)의 품질 차이가 극대화되어 보이는 이유를 설명. |
+| Training Deep Networks with Synthetic Data: Bridging the Reality Gap by Domain R | 2018 | arXiv:1804.06516 | O | KITTI 차량 검출: DR 합성 사전학습 + 실사 전량(6,000장) 파인튜닝 98.5 AP50 vs 실사 단독 96.4 vs VKITTI 사전학습 96.9 — 실사가 많아도 합성 사전학습이 소폭 가산적(+2.1). 또한 Hinterstoisser식 백본 동결이 오히려 성능을 최대 13.5% 깎는다고 반박 — 파인튜닝 전략 자체가 논쟁 지점임을 보여줌. |
+| On Pre-Trained Image Features and Synthetic Images for Deep Learning (Hinterstoi | 2017 | arXiv:1710.10710 | O | 반대 진영의 고전: 실사(ImageNet/COCO) 사전학습 특징추출기를 동결하고 검출 헤드만 합성으로 학습하는 게 낫다는 주장(Faster R-CNN/R-FCN/Mask R-CNN). Tremblay의 반박과 쌍으로 인용하면 '실사 특징 vs 합성 특징 어디를 신뢰할 것인가' 논쟁의 양극을 커버. |
+| Label-Free Synthetic Pretraining of Object Detectors (SOLID) | 2022 | arXiv:2208.04268 | O | 라벨 없는 3D 렌더링 합성 사전학습이 실사 이미지 사전학습과 경쟁 가능하다고 보고(검색 결과에서는 소량 실사 파인튜닝 시 82.05 AP로 무작위 합성 대비 +10 AP라는 수치도 인용됨 — 본문 재확인 필요). 합성 사전학습의 '설계된 장면 배치'가 중요하다는 근거. |
+
+**시사점**: 문헌 종합: 합성 사전학습이 COCO/ImageNet을 이기는 조건은 (1) 실사 N이 작을수록(PSP: 641장에서 +22.5, 전량에서 +1.1), (2) 타깃 도메인이 COCO 분포에서 멀수록(OzFish 수중), (3) 합성이 타깃 도메인을 직접 모사할수록(도메인 특화 렌더링). 지는/무승부 조건은 (1) 과제가 쉬워 소량 실사로 천장 도달(과일 N=50에서 0.978), (2) 타깃이 COCO 클래스·시점과 겹칠 때(도심 차량·보행자는 COCO에 이미 풍부 — 우리 CitySample 도메인은 여기에 걸쳐 있어 COCO 대조군이 만만치 않을 것), (3) 실사 N이 커질 때. 우리 4-arm 해석 시나리오: COCO 대조군이 25장 파인튜닝 후에도 우리 합성 사전학습에 뒤지면 '도메인 특화 합성의 가치' 입증이고, 근접하면 Zoph 프레임(저데이터 구간에서 사전학습 소스 간 순위는 도메인 근접도가 결정)으로 설명. 주의: PSP는 keypoint AP·사람 1클래스, 2402.06784는 1클래스 어류 — 우리 다클래스 mAP50과 직접 수치 비교는 불가하고 '경향 곡선'만 인용할 것.
+
+### 3. 디퓨전 생성/정제 데이터의 검출 증강 2023→2026 — X-Paste 이후 계보와 우리 '정제' 단계의 위치
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| DiverGen: Improving Instance Segmentation by Learning Wider Data Distribution wi | 2024 | arXiv:2405.10185 | O | X-Paste 직계 후속이자 최초의 명시적 추월: LVIS에서 X-Paste 대비 +1.1 box/+1.1 mask AP, 희소 클래스 +1.9 box/+2.5 mask. 핵심 주장은 '다양성(카테고리·프롬프트·생성모델)이 스케일링을 지속시킨다' — 생성 데이터를 수백만 장까지 늘려도 성능 향상 추세 유지. X-Paste 대비 생성 비용 문제(4.3배 GPU시간)도 지적. |
+| DiffusionEngine: Diffusion Model is Scalable Data Engine for Object Detection (P | 2023 | arXiv:2309.03893 | O | 디퓨전을 '검출 데이터 엔진'으로 쓰는 대표작. Detection-Adapter로 생성과 동시에 박스 라벨 획득. DINO 기반 검출기에서 COCO +3.1, VOC +7.6, Clipart(도메인 시프트) +11.5 mAP. 도메인 갭이 클수록 이득이 커지는 패턴 — 우리 4-arm +7.2pp가 이 대역(+3.1~+11.5)의 한가운데라는 맥락화에 사용 가능. |
+| Synthetic Object Compositions for Scalable and Accurate Learning in Detection, S | 2025 | arXiv:2510.09110 | O | 2025년형 object-centric 합성: 디퓨전 세그먼트 + 3D 기하 레이아웃/카메라 증강 + 생성적 harmonization. 합성 10만장만으로 LVIS +10.9 AP, Copy-Paste·X-Paste·SynGround·SegGen 모두 추월. 저데이터 세팅(1% COCO)에서 +6.59 AP — 소량 실사 구간에서의 합성 이득이라는 점에서 우리와 접점. |
+| Gen-n-Val: Agentic Image Data Generation and Validation | 2025 | arXiv:2506.04676 | O | 2025-2026 트렌드 '생성 후 검증': LLM 프롬프트 에이전트 + VLM 품질 검증 에이전트로 무효 합성 데이터를 50%→7%로 감축(MosaicFusion 대비). LVIS 희소 클래스 +7.6 mAP(Mask R-CNN), YOLO-Worldv2 대비 +7.1 mAP. '생성량보다 검증·필터링이 성능을 결정한다'는 우리 디퓨전 정제 단계의 최신 방증. |
+| Do We Need All the Synthetic Data? Targeted Image Augmentation via Diffusion Mod | 2025 | arXiv:2505.21574 | O | 전량 증강보다 학습 초기에 못 배우는 30~40% 샘플만 선택적 디퓨전 증강이 우수(최대 +2.8%, 10~30배 데이터 확장 대비 저비용). 주의: 주 실험은 분류(CIFAR/TinyImageNet/ImageNet, ResNet~Swin)이고 검출은 부차적 — 검출 수치로 직접 인용하지 말고 '선택적 생성' 원리 인용에 한정. |
+| REGEN: Real-Time Photorealism Enhancement in Games via a Dual-Stage Generative N | 2025 | arXiv:2508.17061 | O | 게임엔진 렌더 이미지의 사실감 향상(photorealism enhancement) 계보의 2025년판 — 우리 'UE5 CitySample 렌더→디퓨전 정제'와 문제 설정이 가장 가까운 계열. 비페어드 번역으로 만든 출력을 경량 페어드 모델에 증류해 12배 고속화·시간적 일관성 유지. CARLA를 FLUX 계열 디퓨전 출력으로 번역하는 실험도 진행 중이며 디퓨전의 시맨틱 불안정(차량 색 변화 등)을 명시 — 우리가 디퓨전 정제에서 라벨-픽셀 정합을 지킨 방법을 차별점으로 세울 수 있음. |
+| Preserve the Hard, Regenerate the Rest: Uncertainty-Guided Synthetic Training Da | 2026 | arXiv:2606.31603 | O | 2026년 최신 '정제' 철학: 예측 엔트로피로 불확실 영역을 찾아 그 부분은 보존하고 주변 맥락만 디퓨전 인페인팅으로 재생성, 라벨은 원본 유지. 과제는 시맨틱 분할(Cityscapes/UAVID/BDD100K, mIoU)이라 검출 수치 비교는 불가 — '라벨 안전 디퓨전 재생성'이라는 개념 인용용. |
+| ODGEN (도메인 특화 저데이터 디퓨전 생성) | 2024 | arXiv:2405.15199 | O | 3번 주제에서의 역할: 실사 200장만으로 디퓨전을 도메인에 파인튜닝해 5,000장을 생성하는 '저데이터 도메인 특화 생성'의 대표 수치(위 표 참조). COCO-2014에서도 기존 방법 대비 최대 +5.6 mAP@50:95. |
+
+**시사점**: X-Paste(ICML 2023) 이후 계보는 세 갈래로 정리된다: (1) 다양성·스케일 — DiverGen(수백만 장 스케일링 지속), SOC(10만장 고품질 구성으로 X-Paste 추월), (2) 생성-라벨 동시 획득 엔진 — DiffusionEngine, GeoDiffusion, ODGEN, (3) 2025-2026의 지배적 전환인 '선별과 정제' — Gen-n-Val(VLM 검증으로 무효율 50%→7%), TADA(30-40%만 선택 증강), Preserve-the-Hard(라벨 보존 인페인팅). 우리 파이프라인(UE5 절차 생성→디퓨전 정제)은 (3)의 흐름에 정확히 부합하되, '순수 생성'이 아니라 '시뮬레이터 렌더의 사실감 정제'라는 점에서 REGEN/photorealism-enhancement 계보와 교차하는 독자 위치 — 이 교차점(기하·라벨은 엔진이 보증, 외观은 디퓨전이 정제)을 관련연구 절의 프레임으로 쓸 것. 우리 4-arm +7.2pp는 DiffusionEngine의 +3.1(COCO)~+11.5(Clipart), ODGEN의 도메인별 +2.5~+25.3 대역 안에 있어 '문헌 정합적' 수치로 제시 가능. 함정: 이 계보 수치 다수가 LVIS mask AP·mAP@50:95·mIoU 등 이종 지표이며, 벤치마크도 대용량(LVIS/COCO)이라 우리 소규모 실사 평가셋과 절대 비교는 금물 — 상대 이득(pp)과 조건(도메인 갭, 실사 N)만 병렬 배치할 것.
+
+### 권고
+
+1. 논문의 수치 맥락화 표를 3축(실사 N / 지표 / 이득 pp)으로 구성하라: OzFish 50장 0.024→0.48(mAP, 바닥 베이스라인), ODGEN 200장 +2.5~+25.3(mAP50:95), 과일검출 50장 +0(천장), 캠퍼스폐기물 86장 음수(저품질 증강), 그 안에 우리 '25장 53.7→75.1 mAP50(+21.4pp)'을 배치 — 우리 수치는 강한 편이지만 '큰 도메인 갭 + 비천장 베이스라인' 대역의 문헌 정합적 값임을 보인다.
+2. COCO 대조군 해석은 Zoph et al.(arXiv:2006.06882) 프레임으로 열어라: 사전학습 가치는 저데이터 구간에 응축되므로 N=25에서 사전학습 소스 간 순위가 극대화된다. 이어서 PeopleSansPeople(641장에서 합성이 ImageNet에 +22.5, 전량에서 +1.1)과 2402.06784(생성 사전학습이 실사 300장으로 COCO 사전학습에 도달)를 '합성이 이기는 조건 = 저N + 큰 도메인 근접도 격차'의 근거로 인용하라. 단 우리 도심 차량·보행자 도메인은 COCO와 겹치므로 COCO 대조군이 선전해도 문헌과 모순이 아니다.
+3. 관련연구 절의 디퓨전 파트는 X-Paste 이후 3갈래 계보(다양성·스케일: DiverGen/SOC, 생성 엔진: DiffusionEngine/ODGEN, 선별·정제: Gen-n-Val/TADA/Preserve-the-Hard)로 구조화하고, 우리 파이프라인을 '정제 갈래 × photorealism-enhancement(REGEN) 계보의 교차점'으로 자리매김하라 — 기하·라벨은 UE5가 보증하고 외관만 디퓨전이 정제한다는 라벨-안전성 논거가 차별점이다. 4-arm +7.2pp는 DiffusionEngine +3.1~+11.5 대역 내 수치로 병기하라.
+4. 비교 함정을 표 각주로 명시하라: (1) mAP50 vs mAP50:95 vs keypoint AP vs mask AP는 환산 불가, (2) FSOD의 K-shot은 클래스당 장수·우리는 총 장수, (3) COCO 초기화 여부가 합성 이득 크기를 지배(scratch +38 vs COCO-init 0), (4) in-domain 평가와 domain-shift 평가를 구분, (5) 합성 데이터 규모(5천~수백만 장)가 논문마다 3자릿수 차이.
+5. 부정 결과 인용을 빼먹지 마라: 캠퍼스 폐기물(arXiv:2607.19535, 실사 86장에서 모든 저품질 증강이 실사 단독 0.691 mAP50 이하)과 Gen-n-Val의 '무효 합성 50%' 통계는 '합성은 양이 아니라 품질·검증이 결정한다'는 우리 디퓨전 정제 단계의 존재 이유를 문헌으로 뒷받침한다.
+6. 인용 전 재확인 2건: arXiv:2006.05015의 '1% 실사 48.23 mAP(+6.08)'과 arXiv:2208.04268의 '82.05 AP' 수치는 검색 스니펫 기반이므로 본문 표에서 세팅(백본·평가셋)을 확인한 뒤 인용하라. 나머지 수치는 원문(초록/본문 표)에서 직접 확인했다.
+
+## 벤치마크 지형·균형 문헌
+
+### 1. 주행 RL 시뮬레이터/벤치마크 지형 2023-2026 — 'MetaDrive를 왜 골랐나' 방어
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| MetaDrive: Composing Diverse Driving Scenarios for Generalizable Reinforcement L | 2021 | arXiv:2109.12674 | O | 기준점. 절차 생성으로 시나리오 분포를 실험자가 통제할 수 있는 유일한 경량 closed-loop RL 시뮬. TPAMI 2022 게재, 2024-26에도 후속 생태계(ScenarioNet 등)가 현역. |
+| Waymax: An Accelerated, Data-Driven Simulator for Large-Scale Autonomous Driving | 2023 | arXiv:2310.08710 | O | NeurIPS 2023. Waymo 실데이터 log-replay + JAX 가속. 핵심 방어 소재: 동역학은 의도적으로 kinematic bicycle(저충실도) — 필드 최전선조차 물리 충실도가 아니라 시나리오 현실성에 투자. |
+| GPUDrive: Data-driven, multi-agent driving simulation at 1 million FPS | 2024 | arXiv:2408.01584 | O | ICLR 2025. Madrona 엔진, A100에서 2.3M agent-steps/s, MARL/self-play 특화. 역시 kinematic bicycle. '속도·규모' 축의 현재 극단. |
+| NuPlan: A closed-loop ML-based planning benchmark for autonomous vehicles | 2021 | arXiv:2106.11810 | O | 실데이터 closed-loop 평가 관행의 표준: 안전(하드 마스크)·규정·진행·승차감 가중 평균으로 [0,1] 점수. 우리 평가 프로토콜과 대비할 때 인용. |
+| nuPlan-R: A Closed-Loop Planning Benchmark for Autonomous Driving via Reactive M | 2025 | arXiv:2511.10403 | O | 평가 관행의 최신 진화: 규칙 기반 IDM 반응 에이전트를 디퓨전 기반 반응 에이전트로 교체. 서베이 최신성(2025) 확보용. |
+| ScenarioNet: Open-Source Platform for Large-Scale Traffic Scenario Simulation an | 2023 | arXiv:2306.12241 | O | NeurIPS 2023. MetaDrive 위에 Waymo/nuPlan/nuScenes/Argoverse 실데이터를 재생하는 플랫폼 — MetaDrive 선택이 고립된 구식 선택이 아니라 현역 생태계임을 보이는 직접 증거. |
+| Bench2Drive: Towards Multi-Ability Benchmarking of Closed-Loop End-To-End Autono | 2024 | arXiv:2406.03877 | O | NeurIPS 2024 D&B. CARLA Leaderboard 2.0 기반 44 시나리오×220 루트 closed-loop, 능력별 분해 평가. 고시각충실도 축의 현행 표준 벤치마크. |
+| The Waymo Open Sim Agents Challenge | 2023 | arXiv:2305.12032 | O | 시뮬레이션 '에이전트 현실성' 자체를 평가하는 관행(분포 매칭 지표)의 표준 — 충실도 평가가 물리에서 행동 분포로 이동했음을 보여줌. |
+| V-Max: A Reinforcement Learning Framework for Autonomous Driving | 2025 | arXiv:2503.08388 | O | Waymax 위 RL 학습·평가 관행 표준화 시도(2025). 가속 시뮬 진영의 RL 평가 프로토콜 비교 대상. |
+| VISTA 2.0: An Open, Data-driven Simulator for Multimodal Sensing and Policy Lear | 2021 | arXiv:2111.12083 | O | MIT CSAIL. 실주행 데이터 재합성으로 photorealistic 센서 시뮬 — '센서 충실도' 축의 극단. 지형표에서 우리 접근(절차생성+디퓨전 정제)과 대비되는 데이터 기반 노선. |
+| BeamNG.tech 학술 활용 목록 (Publications based on BeamNG.tech) | 2026 | https://beamng.tech/research/ | O | soft-body 동역학 충실도의 극단. 80+ 논문이 있으나 대부분 AV '테스트/검증·시나리오 생성' 용도이며 RL 학습 벤치마크로는 비주류 — 고충실도 물리 시뮬의 실제 학술적 용처가 학습이 아니라 검증임을 보여주는 근거. |
+
+**시사점**: 2023-26 지형은 두 축으로 분화했다: (a) 하드웨어 가속 데이터 기반 시뮬(Waymax·GPUDrive)은 물리 충실도를 의도적으로 kinematic bicycle 수준으로 낮추고 실데이터 시나리오 현실성에 투자, (b) 고시각충실도 closed-loop(CARLA Leaderboard 2.0/Bench2Drive)는 인지 포함 E2E 평가에 특화. MetaDrive는 '절차 생성으로 시나리오 분포를 통제하는 경량 closed-loop RL'이라는 제3의 위치를 여전히 독점하며, ScenarioNet이 이를 실데이터로 연장한다. 방어 논리: 통제된 전이·일반화 실험에는 분포 통제가 필수인데 그 조합은 MetaDrive가 유일하고, 최신 SOTA 시뮬들조차 동역학 충실도를 버렸으므로 'MetaDrive가 낡았다'는 공격은 필드 자체의 선택과 모순된다. 평가 관행 면에서 AD 벤치마크 표준은 driving score/success rate의 시나리오별 분해이며 IQM은 아직 비표준 — 우리의 동일 벽시계 + IQM 프로토콜이 필드 관행보다 엄격함을 명시적으로 주장할 수 있다.
+
+### 2. 반대편 균형 문헌 — 경량/추상 시뮬이 성공한 사례와 그 경계조건 (우리 부정 결과의 적용 범위 획정)
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| Driving Policy Transfer via Modularity and Abstraction | 2018 | arXiv:1804.09364 | O | CoRL 2018 (Müller et al.). 세그멘테이션→웨이포인트라는 추상 인터페이스 덕에 저충실도 시뮬에서 학습한 정책이 1/5 스케일 실차에 무파인튜닝 전이 성공. 성공 조건 = 시뮬 충실도가 아니라 인터페이스 추상화. |
+| Rethinking Sim2Real: Lower Fidelity Simulation Leads to Higher Sim2Real Transfer | 2022 | arXiv:2207.10821 | O | CoRL 2022 (Truong et al.). 충실도를 올리면 오히려 전이가 나빠짐 — 시뮬 물리 부정확성에 대한 과적합 + 느린 속도로 규모 학습 불가. 우리 '착취 규명'과 정확히 같은 계열의 기제를 정면으로 보고한 대표 문헌. |
+| Learning to Drive in a Day | 2018 | arXiv:1807.00412 | O | Kendall et al. 시뮬을 아예 생략하고 실차에서 직접 RL. 경계조건: 차선 유지라는 과제 단순성. '시뮬 충실도 논쟁의 영점' 인용용. |
+| Robust Autonomy Emerges from Self-Play | 2025 | arXiv:2502.03349 | O | Apple GIGAFLOW. 의도적으로 단순화한 초고속 자체 시뮬 + 대규모 self-play만으로 CARLA·nuPlan·Waymax 전부에서 SOTA — 경량 자체 시뮬 성공의 가장 강력한 최신(2025) 사례. 단 평가가 sim-to-sim이며 속도 이점을 표본 규모로 환전한 경우라는 점이 우리와의 결정적 차이. |
+| Domain Randomization for Transferring Deep Neural Networks from Simulation to th | 2017 | arXiv:1703.06907 | O | Tobin et al. 저충실도 렌더링 + 무작위화 분산으로 실세계 전이 — '충실도 대신 분산' 노선의 원조. 우리 UE5 절차생성→디퓨전 정제 파이프라인의 대조 계보. |
+| Reinforcement Learning Within the Classical Robotics Stack: A Case Study in Robo | 2024 | arXiv:2412.09417 | O | 추상(저충실도) 시뮬 + 모듈 분해로 RoboCup 실로봇 우승 — 추상화 계층이 있을 때 경량 시뮬이 이긴다는 2024년 증거. |
+| Multi-Robot Collaboration through Reinforcement Learning and Abstract Simulation | 2025 | arXiv:2503.05092 | O | 2025. 추상 시뮬 학습→실로봇 협업 전이. 경량 시뮬 성공 사례의 최신 연장. |
+
+**시사점**: 경량/추상 시뮬의 성공 사례는 조건이 3가지로 수렴한다: (1) 정책 인터페이스가 원시 센서·동역학에서 추상화되어 있을 것(Müller, RoboCup), (2) 과제 성패가 동역학 정밀도가 아니라 의사결정 수준에서 갈릴 것(Truong), (3) 시뮬 속도를 표본 규모·분포 다양성으로 환전할 것(GIGAFLOW, domain randomization). 우리 실험은 동일 벽시계 예산으로 (3)을 의도적으로 봉쇄했고 추상 인터페이스 없이 학습했으므로 (1)도 부재 — 따라서 전이 IQM 0% 부정 결과는 이 문헌들과 모순이 아니라 '경량 시뮬의 알려진 승리 조건이 모두 제거된 지점에서 전이가 소멸함'을 보인 경계 획정이다. 특히 Truong의 '시뮬 부정확성 과적합'은 우리의 착취(exploitation) 규명과 동일 기제의 선행 보고이므로, 논의 장에서 우리 진단이 이를 주행 도메인에서 정량화(DPC)한 것으로 접속시키면 부정 결과가 정직하고 강해진다.
+
+### 3. 다중충실도(multi-fidelity) RL 계보 — Cutler & How 2014 이후 2024-2026, 캐스케이드 기각의 대조군
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| Reinforcement learning with multi-fidelity simulators | 2014 | DOI:10.1109/ICRA.2014.6907423 | O | 계보의 기점(Cutler, Walsh, How; ICRA 2014, TRO 2015 확장판 DOI:10.1109/TRO.2015.2419431). 충실도 사슬에서 낮은 층이 높은 층의 탐색을 지도하고 불확실성 기반 규칙으로 층간 전환. Semantic Scholar API로 DOI·서지 검증 완료(비arXiv). |
+| Virtual vs. Real: Trading Off Simulations and Physical Experiments in Reinforcem | 2017 | arXiv:1703.01250 | O | Marco et al., ICRA 2017. 시뮬/실험 표본 배분을 multi-fidelity Bayesian optimization으로 — '어느 충실도에서 뽑을까' 문제의 정식화. |
+| Multifidelity Reinforcement Learning with Control Variates | 2022 | arXiv:2206.05165 | O | Khairy & Balaprakash. 저충실도를 제어변량(분산 감소 장치)으로 사용. 저널판 Neurocomputing 2024 게재 — 계보가 2024년까지 살아있다는 증거. |
+| Multi-Fidelity Reinforcement Learning for Time-Optimal Quadrotor Re-planning | 2024 | arXiv:2403.08152 | O | Ryou, Wang, Karaman (MIT); IJRR 2025/26 게재. MF-BO로 저충실도 기반 위에 고충실도 보정 모델을 공동 학습 — 계보의 현행 대표작. |
+| A Multi-Fidelity Control Variate Approach for Policy Gradient Estimation | 2025 | arXiv:2503.05696 | O | 2025. 정책 그래디언트 추정 자체에 다중충실도 제어변량 적용 — 방법론 축의 최신. |
+| Multi-Fidelity Hybrid Reinforcement Learning via Information Gain Maximization | 2025 | arXiv:2509.14848 | O | 2025. 어느 충실도에서 샘플할지를 정보 이득 최대화로 결정 — Cutler의 전환 규칙의 가장 최신 후계. |
+| MultiDrive: co-simulation framework bridging 2D and 3D driving simulators for mu | 2025 | https://github.com/TUM-AVS/MultiDrive | O | TUM(비arXiv, GitHub 접근 검증). 주행 도메인에서 2D/3D 다중충실도 인프라가 '학습'이 아닌 '검증' 용도로 지어지고 있음을 보여주는 방증. |
+
+**시사점**: 이 계보 전체의 암묵 전제는 '충실도 간 상관이 존재하고 저충실도의 편향이 추정 가능하다'는 것이며, 제어변량·BO·정보이득은 모두 이 전제의 변주다. 2024-26 최신작조차 검증 도메인이 UAV·연속제어에 머물러 있고 주행 RL의 표준 다중충실도 벤치마크는 부재하다. 우리의 캐스케이드 기각 결과는 바로 이 전제가 깨지는 사례(충실도 간 상관 붕괴 → 전이 0%)이고, DPC 진단지표는 '해당 저충실도가 사슬에 넣을 가치가 있는지'를 사전 판정하는 도구로 포지셔닝하면 Cutler(전환 규칙)→정보이득(2509.14848)으로 이어지는 계보의 빠진 고리에 정확히 접속된다. 즉 우리는 계보를 부정하는 것이 아니라 계보의 적용 가능 조건을 판별하는 진단을 제공하는 것으로 서술해야 한다.
+
+### 권고
+
+1. 관련연구 장을 '충실도 2축 분해'(동역학 충실도 vs 시나리오/시각 충실도)로 구조화하고, Waymax(2310.08710)·GPUDrive(2408.01584)가 kinematic bicycle 동역학을 쓴다는 사실을 MetaDrive 방어의 첫 문장으로 배치 — 필드 최전선도 물리 충실도를 버렸으므로 '경량이라 낡았다'는 공격이 성립하지 않음. ScenarioNet(2306.12241)으로 MetaDrive 생태계의 현역성을 보강.
+2. GIGAFLOW 'Robust Autonomy Emerges from Self-Play'(2502.03349)를 반드시 인용하되 명시적으로 구별: 그들은 시뮬 속도를 표본 규모로 환전 + sim-to-sim 평가, 우리는 동일 벽시계 통제 + 교차 시뮬 전이 측정 — 질문 자체가 다르며 우리 부정 결과와 상보적.
+3. Truong et al.(2207.10821)을 부정 결과의 프레이밍 앵커로 사용: 우리 IQM 0%는 '경량 시뮬 무용론'이 아니라 승리 조건(추상 인터페이스, 규모 환전)이 제거된 경계에서의 소멸 증명이고, 착취 규명은 그들의 '시뮬 부정확성 과적합'을 주행 도메인에서 정량화한 것.
+4. DPC 진단지표를 Cutler & How(ICRA 2014, DOI:10.1109/ICRA.2014.6907423)에서 정보이득 기반 최신작(2509.14848)으로 이어지는 다중충실도 계보의 '사전 적합성 판정'이라는 빠진 고리로 포지셔닝 — 계보 부정이 아니라 적용 조건 판별 도구로 서술.
+5. 평가 프로토콜 절에서 AD 벤치마크 표준(nuPlan 2106.11810의 가중 driving score, Bench2Drive 2406.03877의 능력별 분해)과 대비해 우리의 동일 벽시계 + IQM(rliable) 프로토콜이 필드 관행보다 엄격함을 명시.
+6. 지형 표에 2025년 항목(nuPlan-R 2511.10403, V-Max 2503.08388)까지 포함해 서베이 최신성을 확보하고, BeamNG.tech(beamng.tech/research, 80+ 논문)는 '학습용이 아닌 테스트/검증용 고충실도'로 분류해 고충실도 물리의 실제 학술 용처를 근거로 제시.
+7. 모든 arXiv ID 22건은 export.arxiv.org API로 제목·연도 일치 검증 완료, Cutler & How는 Semantic Scholar DOI 조회로, BeamNG·MultiDrive는 URL 접근으로 검증 — 논문 인용 시 이 ID들을 그대로 사용해도 안전.
+
+## 국내 문헌
+
+### 국내 학위논문 — 자율주행 강화학습 시뮬레이션 / Sim2Real (신규성 방어용)
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| 드라이빙 시뮬레이터 기반의 Sim2Real 문제에 관한 연구: 자율주행 개발 단계별 적용 기법을 중심으로 (이용하, 인하대 석사) | 2025 | https://m.riss.kr/search/Search.do?query=sim-to-real+자율주행 (RISS 검색결과 접 | O | 가장 최근의 국내 sim2real 학위논문. 개발 단계별 sim2real 기법 정리 수준이며, 시뮬레이터 간 동일 벽시계 비교나 전이 정량화(IQM)는 없음 — 우리 신규성의 경계선을 긋기에 최적. |
+| 자율주행 드라이빙 시뮬레이터의 Sim2Real 문제 해결 방안에 대한 연구: 항법 센서와 차량 동역학을 중심으로 (박동혁, 인하대 석사) | 2023 | https://m.riss.kr/search/Search.do?query=sim-to-real+자율주행 (RISS 검색결과 접 | O | 국내 학위논문 수준에서 sim2real 문제의식을 공유하되 센서·동역학 충실도 관점. 우리는 학습 정책 전이·착취 규명 관점이므로 상호보완적 인용 가능. |
+| 강화 학습 기반의 딥 러닝을 이용한 자율주행 시뮬레이션에 관한 연구 (정하엽, 국민대 석사; Unity+CNN+DDPG) | 2018 | https://scienceon.kisti.re.kr/srch/selectPORSrchArticle.do?cn=DIKO0014 | O | 단일 시뮬레이터(Unity) 내 RL 주행 학습이라는 국내 학위논문의 전형적 형태 — 우리와의 차별점(시뮬레이터 자체를 통제변인으로 삼는 비교 설계)을 부각하는 대조 사례. |
+| 가상환경 시뮬레이션을 활용한 강화학습 기반 자율주행 차량 제어 (이훈기, 성균관대 석사) | 2023 | https://m.riss.kr/search/Search.do?query=자율주행+강화학습+시뮬레이션 (RISS 검색결과 접근 | O | 최근 국내 석사논문도 여전히 단일 가상환경 내 제어 학습에 머묾을 보여주는 근거. |
+| 자율주행 상황에서 특수 상황 검출을 위한 이미지 데이터 생성 및 증량 방법 (이상용, 연세대 석사) | 2021 | https://m.riss.kr/search/Search.do?query=합성데이터+자율주행+객체+검출 (RISS 검색결과 접 | O | 검출용 합성 이미지 생성·증강 국내 학위논문 선행. 절차 생성→디퓨전 정제→실사 전이라는 우리 파이프라인과 구성이 다름을 명시하며 인용. |
+
+**시사점**: RISS에서 '자율주행 강화학습 시뮬레이션' 학위논문 142건, 'sim-to-real 자율주행' 31건(학위논문 17건)을 확인. 그러나 전부 (i) 단일 시뮬레이터 내 학습/제어, (ii) 센서·동역학 충실도 관점 sim2real, (iii) 단순 합성 이미지 증강 중 하나에 속함. '동일 벽시계 예산 하 경량 자체 시뮬 vs MetaDrive 비교 + 전이 IQM + 착취 규명 + DPC 진단지표'와 'UE5 절차생성→디퓨전 정제→실사 검출 4-arm + 소량 실사 파인튜닝' 조합의 선행 학위논문은 검색되지 않음 → 신규성 방어 가능. 관련연구 절에 인하대 2편(2023/2025)을 국내 sim2real 문제의식의 근거로 인용하면 심사에 유리.
+
+### 국내 학회 논문 — 시뮬레이션 기반 강화학습 (우리 RL 비교 파트의 로컬 맥락)
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| 자율주행 차량 시뮬레이션에서의 강화학습을 위한 상태표현 성능 비교 (안지환·권태수, 한양대), 한국컴퓨터그래픽스학회논문지 30(3), pp.10 | 2024 | https://www.kci.go.kr/kciportal/ci/sereArticleSearch/ciSereArtiView.kc | O | CARLA에서 RGB vs 세만틱 분할, VAE vs ViT 상태표현이 RL 학습 효율에 미치는 영향을 비교한 KCI 논문. '시뮬레이션 설계 선택이 RL 성능을 좌우한다'는 우리 핵심 주장의 국내 근거로 직접 인용 가능 — 최우선 인용 후보. |
+| 심층강화학습 라이브러리 기술동향 (신승재 외, ETRI 지능네트워크연구실), 전자통신동향분석 34(6), pp.87-99 | 2019 | https://ettrends.etri.re.kr/ettrends/180/0905180008/ | O | 국책연구기관(ETRI)이 자율주행(CARLA)을 심층 RL의 주요 응용·환경 지원성 기준으로 명시한 동향 논문. 서론의 국내 연구 맥락 인용에 적합. |
+| 자율주행 차량을 위한 Latent Diffusion Model 기반의 주행 시나리오 생성 (전명환·조건희·이형철, 한양대), 제어로봇시스템학회  | 2025 | https://jicrs.icros.org/_PR/view/?aidx=46855&bidx=4237 | O | VAE+LDM으로 현실적 주행 시나리오를 생성하는 ICROS 논문. 디퓨전 모델을 자율주행 데이터 생성에 쓰는 국내 최신 흐름 — 우리 '디퓨전 정제' 단계의 국내 맥락 연결고리로 최적. |
+| CARLA 시뮬레이터를 이용한 자율주행 시나리오 설계 (KCI 등재) | 2025 | https://www.kci.go.kr/kciportal/ci/sereArticleSearch/ciSereArtiView.kc | X | CARLA 기반 시나리오 설계 국내 논문. 검색결과로만 확인, 상세 페이지 미열람 — 인용 전 접근 확인 필요. |
+
+**시사점**: 국내 학회에도 '시뮬레이션 환경/표현 설계가 RL 성능에 미치는 영향'을 다룬 논문(안지환·권태수 2024)이 존재하나, 시뮬레이터 자체를 동일 연산 예산으로 맞대어 비교하고 전이 실패를 착취로 규명한 연구는 없음. 안지환·권태수(2024)와 ETRI(2019)를 배경으로 깔고 '우리는 표현이 아니라 시뮬레이터-환경 분포 자체를 통제변인으로 삼는다'로 위치 지으면 심사위원에게 익숙한 구도가 됨.
+
+### 국내 합성데이터·가상환경 기반 인지 학습 (우리 4-arm 검출 파트의 로컬 선행)
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| 가상 3D 라이다 기반 객체 분류 딥러닝 학습 데이터셋 구축 방법에 관한 연구 (장형준 외, 국민대), 한국자동차공학회논문집 28(6) | 2020 | https://www.dbpia.co.kr/Journal/articleDetail?nodeId=NODE09346001 | O | 가상환경 라이다 데이터로 학습해 Waymo 실데이터로 평가, 시간·비용 절감하며 벤치마크급 성능 달성 — '가상 데이터 학습→실데이터 평가'라는 우리 4-arm 설계의 국내 직계 선행(단, 라이다·분류이고 카메라·검출·디퓨전 정제는 없음). KSAE 논문집이라 심사위원 인지도 높음 — 최우선 인용 후보. |
+| 디퓨전 모델을 활용한 생성 기반의 이미지 분류기 편향 제거 연구 (노경래 외), 한국지능시스템학회 논문지 | 2024 | https://www.kci.go.kr/kciportal/ci/sereArticleSearch/ciSereArtiView.kc | X | 사전학습 디퓨전으로 학습용 이미지를 생성하는 국내 연구. 디퓨전 기반 학습데이터 생성의 국내 사례로 보조 인용 가능 — 상세 페이지 미열람, 인용 전 확인 필요. |
+
+**시사점**: 국내에는 가상 라이다→실데이터 평가(2020), 합성 이미지 증강 학위논문(2021), 디퓨전 시나리오 생성(2025)이 각각 따로 존재. '절차 생성 도시(UE5 CitySample)→디퓨전 실사화 정제→실사 검출 성능(+7.2pp) + 25장 파인튜닝(53.7→75.1 mAP50)'처럼 파이프라인 전체를 잇고 정량 절제(ablation)한 국내 연구는 미발견 — 기여 주장 시 이 세 갈래를 묶어 '국내에서는 개별 요소만 연구됨'으로 서술 가능.
+
+### 국산 시뮬레이터(MORAI)·국내 기관의 주행 시뮬레이션 활용
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| MORAI 시뮬레이터를 이용한 Six-Wheeled Robot 자율주행 연구 (신종현·김규현·문대영·전형석, MORAI), 제어로봇시스템학회 국 | 2024 | https://www.dbpia.co.kr/journal/articleDetail?nodeId=NODE11909098 | O | 국산 시뮬레이터 MORAI의 학술 활용 사례(ICROS 학술대회). '국내에서도 시뮬레이션 기반 자율주행 개발이 산업·학술 양면에서 활발'하다는 배경 인용에 적합. |
+| MORAI–NAVER LABS 기술협력: 판교·상암 자율주행 테스트베드 정밀지도 기반 시뮬레이션 환경 구축 및 ALT 자율주행 시스템 고도화 ( | 2021 | https://www.morai.ai/post/morai-and-naver-labs-combine-efforts-to-adva | O | NAVER LABS가 디지털트윈 시뮬레이션 반복 검증으로 실차(ALT) 시스템을 고도화한 국내 산업 사례 — 시뮬레이션→실환경 전이의 실무적 중요성을 보여주는 비학술 근거. |
+| KATECH 대구 디지털트윈: VIRES VTD 기반 자율주행 가상 검증 환경 구축 (대구 테크노폴리스·국가산단 모델링) | 2019 | https://www.mscsoftware.com/kr/katech-vtd-adamsrt | X | 한국자동차연구원의 가상 검증 인프라 사례. 검색결과로만 확인, 페이지 직접 접근 미실시 — 인용 전 확인 필요(벤더 홍보 페이지 성격이므로 보조 인용 권장). |
+| 자율주행 오픈소스 플랫폼 기반 디지털 트윈 시뮬레이션 환경 구현, 한국자동차공학회논문집 (CARLA 기반 VILS) | 2023 | https://www.dbpia.co.kr/journal/articleDetail?nodeId=NODE12140378 | X | KSAE 논문집의 디지털트윈·VILS 구현 논문. 검색결과로만 확인 — 인용 전 접근·서지 확인 필요. |
+
+**시사점**: 국내 생태계(MORAI, NAVER LABS, KATECH)는 시뮬레이션을 '검증 도구'로 쓰는 흐름이 주류이고, 시뮬레이터 선택이 학습된 정책의 품질·전이에 미치는 영향을 정량 분석한 연구는 부재. 우리 논문의 '경량 자체 시뮬 vs MetaDrive 동일 벽시계 비교'는 이 생태계에 시뮬레이터 선택 기준(진단지표 DPC 포함)을 제공한다는 실용적 의의로 연결 가능.
+
+### 권고
+
+1. 1순위 인용: 안지환·권태수(2024), 자율주행 차량 시뮬레이션에서의 강화학습을 위한 상태표현 성능 비교, 한국컴퓨터그래픽스학회논문지 30(3) — CARLA RL에서 시뮬레이션 설계 선택이 학습 성능을 좌우함을 보인 KCI 논문. 우리 RL 비교 파트의 국내 앵커. (KCI ART003103434, 접근 확인)
+2. 2순위 인용: 장형준 외(2020), 가상 3D 라이다 기반 객체 분류 딥러닝 학습 데이터셋 구축, 한국자동차공학회논문집 28(6) — 가상 데이터 학습→실데이터(Waymo) 평가의 국내 직계 선행. 우리 합성데이터 4-arm 파트의 국내 앵커. (DBpia NODE09346001, 접근 확인)
+3. 3순위 인용: 전명환·조건희·이형철(2025), Latent Diffusion Model 기반 주행 시나리오 생성, 제어로봇시스템학회 논문지 31(1) — 디퓨전을 자율주행 데이터 생성에 쓰는 국내 최신 흐름. 우리 디퓨전 정제 단계의 국내 맥락. (jicrs.icros.org aidx=46855, 접근 확인)
+4. 4순위 인용: 신승재 외(2019), 심층강화학습 라이브러리 기술동향, ETRI 전자통신동향분석 34(6) — 국책기관이 CARLA/자율주행을 RL 핵심 응용으로 다룬 동향 논문, 서론 배경용. (ettrends.etri.re.kr/180/0905180008, 접근 확인)
+5. 5순위 인용(신규성 방어 겸용): 인하대 sim2real 학위논문 2편 — 박동혁(2023, 항법센서·차량동역학 중심), 이용하(2025, 개발 단계별 기법 중심). 국내 학위논문의 sim2real 접근이 충실도·센서 관점에 머묾을 보여 '동일 벽시계 RL 비교+IQM 전이+착취 규명+DPC'의 신규성 경계를 명확히 함. (RISS 검색결과 접근 확인, 최종 인용 전 RISS 상세페이지에서 서지 재확인 권장)
+6. 신규성 결론: RISS 기준 '자율주행 강화학습 시뮬레이션' 학위논문 142건·'sim-to-real 자율주행' 31건을 훑은 결과, 우리 두 축(동일 벽시계 시뮬레이터 비교 RL + UE5 절차생성→디퓨전 정제→실사 검출 파이프라인)을 결합한 선행 학위논문은 미발견 — 다만 심사 대비로 인하대 2편과 연세대 이상용(2021)을 관련연구에서 선제적으로 구분해 둘 것.
