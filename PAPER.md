@@ -457,6 +457,8 @@ bottleneck 등 과제 일반화와 CARLA 시험장, (3) 실사 소량 파인튜�
 - Gao et al., *Scaling Laws for Reward Model Overoptimization*, ICML 2023. arXiv:2210.10760
 - Pan, Bhatia, Steinhardt, *The Effects of Reward Misspecification*, ICLR 2022. arXiv:2201.03544
 - Li et al., *SIMPLER (MMRV)*, CoRL 2024. arXiv:2405.05941
+- Khor & Weng, *Post-Convergence Sim-to-Real Policy Transfer*, 2025. arXiv:2504.15414
+- *Interactive World Simulator for Robot Policy Training and Evaluation*, RSS 2026. arXiv:2603.08546
 - *Policy-Aware Simulator Learning*, 2026. arXiv:2605.29032
 - Zhang et al., *A Study on Overfitting in Deep RL*, 2018. arXiv:1804.06893
 - Lambert et al., *Objective Mismatch in MBRL*, L4DC 2020. arXiv:2002.04523
