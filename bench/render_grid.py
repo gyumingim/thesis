@@ -34,25 +34,52 @@ def act_fn(ckpt):
 
 # 도로 폴리라인 (36 경로) — 좌표계가 원점 중심이 아니므로 waypoint 로부터 직접 구성
 _ROUTES = [EN._WPS[r, :EN._NWP[r]] for r in range(len(EN._NWP))]
-_ALL = np.concatenate(_ROUTES)
-_VIEW = (_ALL[:, 0].min() - 6, _ALL[:, 0].max() + 6, _ALL[:, 1].min() - 6, _ALL[:, 1].max() + 6)
+# 차선 점선은 직선 구간에만 (교차로 안에서 곡선 경로들이 뒤엉키는 것 방지)
+def _straight(rt):
+    d = rt[-1] - rt[0]
+    n = np.linalg.norm(d)
+    if n < 1:
+        return False
+    u = d / n
+    dev = np.abs((rt - rt[0]) @ np.array([-u[1], u[0]]))
+    return float(dev.max()) < 2.0
+_LANES = [r for r in _ROUTES if _straight(r)]
+CAR_L, CAR_W = 4.6, 2.0          # 차체 치수 (m) — spec 의 HALF_LEN*2 근사
 
 
-def draw(ax, env, e):
-    """환경 e 하나를 축에 그린다 (도로 + ego + NPC + 결과 테두리)."""
+def _car(ax, x, y, h, color, z=3, alpha=1.0):
+    """차량을 진행 방향에 맞춘 사각형으로 그린다."""
+    from matplotlib.patches import Polygon
+    c, s_ = np.cos(h), np.sin(h)
+    hl, hw = CAR_L / 2, CAR_W / 2
+    pts = np.array([[hl, hw], [hl, -hw], [-hl, -hw], [-hl, hw]])
+    R = np.array([[c, -s_], [s_, c]])
+    ax.add_patch(Polygon(pts @ R.T + [x, y], closed=True, fc=color, ec="none",
+                         zorder=z, alpha=alpha))
+
+
+def draw(ax, env, e, trail=None, span=38.0):
+    """환경 e 를 ego 추적 시점으로 그린다 (도로 + 궤적 + NPC + ego + 결과 테두리)."""
     from matplotlib.collections import LineCollection
-    ax.add_collection(LineCollection(_ROUTES, colors="#e3e6ea", linewidths=3.2, zorder=0))
+    x, y, h = float(env.ego[e, 0]), float(env.ego[e, 1]), float(env.ego[e, 2])
+    ax.add_collection(LineCollection(_ROUTES, colors="#aeb6c2", linewidths=11,
+                                     zorder=0, capstyle="round"))
+    ax.add_collection(LineCollection(_LANES, colors="#ffffff", linewidths=1.1,
+                                     zorder=1, linestyles=(0, (5, 7)), alpha=0.8))
+    if trail is not None and len(trail) > 1:
+        tr = np.asarray(trail)
+        ax.plot(tr[:, 0], tr[:, 1], color="#0b57d0", lw=2.0, alpha=0.7, zorder=2)
     npc = env.npc[e]
     live = np.abs(npc[:, 0]) + np.abs(npc[:, 1]) > 1e-3
-    if live.any():
-        ax.scatter(npc[live, 0], npc[live, 1], s=13, c="#5f6368", marker="s", zorder=2)
-    x, y, h = float(env.ego[e, 0]), float(env.ego[e, 1]), float(env.ego[e, 2])
-    ax.arrow(x, y, 9 * np.cos(h), 9 * np.sin(h), width=1.8, color="#1a73e8",
-             length_includes_head=True, zorder=3)
-    ax.set_xlim(_VIEW[0], _VIEW[1]); ax.set_ylim(_VIEW[2], _VIEW[3])
+    for k in np.nonzero(live)[0]:
+        _car(ax, float(npc[k, 0]), float(npc[k, 1]), float(npc[k, 2]), "#374151", z=3)
+    _car(ax, x, y, h, "#0b57d0", z=4)
+    ax.scatter([x], [y], s=90, facecolors="none", edgecolors="#0b57d0", lw=1.2, alpha=0.5, zorder=4)
+    ax.set_xlim(x - span, x + span); ax.set_ylim(y - span, y + span)
     ax.set_xticks([]); ax.set_yticks([]); ax.set_aspect("equal")
+    ax.set_facecolor("#eef1f5")
     for sp in ax.spines.values():
-        sp.set_color(FLAG_COLOR[int(env.flags[e])]); sp.set_linewidth(2.4)
+        sp.set_color(FLAG_COLOR[int(env.flags[e])]); sp.set_linewidth(2.6)
 
 
 def main():
@@ -90,18 +117,31 @@ def main():
 
     import time
     t0, done_counts = time.time(), np.zeros(5, int)
+    trails = [[] for _ in range(a.show)]
     for t in range(a.steps):
         obs, *_ = env.step(policy(obs))
         for f in range(1, 5):
             done_counts[f] += int((env.flags == f).sum())
+        for k in range(a.show):                       # 궤적 잔상(에피소드 종료 시 초기화)
+            if env.flags[k] != 0 or env.t[k] <= 1:
+                trails[k] = []
+            trails[k].append((float(env.ego[k, 0]), float(env.ego[k, 1])))
+            if len(trails[k]) > 90:
+                trails[k].pop(0)
         if t in snap_at or (a.gif and t % 4 == 0):
-            fig, axes = plt.subplots(side, side, figsize=(side * 1.15, side * 1.15))
+            fig, axes = plt.subplots(side, side, figsize=(side * 1.5, side * 1.5))
             for k, ax in enumerate(np.array(axes).ravel()):
-                draw(ax, env, k)
+                draw(ax, env, k, trails[k])
             sps = int(a.envs * (t + 1) / max(time.time() - t0, 1e-6))
-            fig.suptitle(f"경량 시뮬 {a.envs}개 환경 동시 실행 · {tag} · t={t}  (측정 {sps:,} steps/s)",
-                         fontsize=11, y=0.995)
-            fig.tight_layout(rect=(0, 0, 1, 0.97))
+            tot = max(int(done_counts[1:].sum()), 1)
+            done_txt = (f"누적 종료 {done_counts[1:].sum():,}건 중 "
+                        f"성공 {done_counts[3] / tot:.0%} · 충돌 {done_counts[1] / tot:.0%} · "
+                        f"이탈 {done_counts[2] / tot:.0%}")
+            head = f"경량 시뮬 {a.envs:,}개 환경 동시 실행 · {tag} · t={t}"
+            fig.suptitle(head + chr(10) + done_txt, fontsize=11, y=0.995)
+            fig.tight_layout(rect=(0, 0, 1, 0.955))
+            fig.canvas.draw()
+            fig.set_dpi(150)
             fig.canvas.draw()
             arr = np.asarray(fig.canvas.buffer_rgba())[..., :3].copy()
             if t in snap_at:
