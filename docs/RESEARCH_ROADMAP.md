@@ -475,64 +475,63 @@
 
 ---
 
-# 문헌 확장 사이클 7 (2026-08-27)
+# 문헌 확장 사이클 7 (2026-08-27) — 4축
 
-## UE 합성 데이터 선행
+## 축 1: UE5/CitySample 기반 학술 합성 데이터 연구 (2023-2026)...
 
-### 1. 합성 사전학습 + 실사 N장(10~100) 파인튜닝 스펙트럼 — 우리 25장 +21.4pp의 위치
-
-| 논문 | 연도 | ID | 검증 | 관련성 |
-|---|---|---|---|---|
-| Transfer learning with generative models for object detection on limited dataset | 2024 | arXiv:2402.06784 | O | 우리 N=25에 가장 가까운 공표 수치. GLIGEN(디퓨전 layout-to-image) 생성 9,000장 사전학습 + Faster R-CNN. OzFish(수중 어류, 1클래스): 실사 50장 단독 mAP 0.024 → +생성데이터 0.48 (+45pp, 단 바닥 베이스라인). NuImages(차량): 실사 300장 0.43 → 0.66 (+23pp), 실사 4,500장 단독 0.70에 근접. 함정: 베이스라인이 사실상 붕괴 상태(0.024)라 절대 이득이 부풀려짐. |
-| ODGEN: Domain-specific Object Detection Data Generation with Diffusion Models (N | 2024 | arXiv:2405.15199 | O | 실사 200장 + 디퓨전 합성 5,000장, YOLOv5s/YOLOv7, RF7 도메인 벤치마크, 지표는 mAP@50:95(주의: 우리 mAP50과 다름). Cotton 16.7→42.0(+25.3), Robomaster 27.2→39.6(+12.4), MRI 37.6→46.1(+8.5), Underwater 16.7→19.2(+2.5). 도메인별 편차가 크다는 점이 핵심 — 이득은 도메인 갭·클래스 난이도에 좌우. |
-| Sim-to-Real Fruit Detection Using Synthetic Data (Isaac Sim) | 2026 | arXiv:2603.28670 | O | 정확히 N=50/100 스윕. YOLOv8s(COCO 초기화), 과일 검출. 실사 50장 단독으로 이미 mAP50 0.978(천장), 합성 1k~5k 사전학습을 더해도 0.974~0.984로 무이득. 반례로 중요: COCO 초기화 + 쉬운 in-domain 과제에서는 N=50에서 합성 효과가 0으로 수렴. 우리 +21.4pp는 베이스라인 53.7이 천장에서 멀다는 것(어려운 도메인 갭)의 방증. |
-| PeopleSansPeople: A Synthetic Data Generator for Human-Centric Computer Vision ( | 2021 | arXiv:2112.09290 | O | Keypoint R-CNN R50-FPN, COCO-person, 지표는 keypoint AP(bbox 아님 — 직접 비교 금지). 최소 실사 641장(1%)에서 scratch 6.40 / ImageNet 사전학습 21.90 / 합성 사전학습 44.43(+38.0 vs scratch, +22.5 vs ImageNet). 64,115장(100%)에서는 격차가 +1.47/+1.07로 축소. '저데이터일수록 합성 사전학습 이득이 커진다' 곡선의 대표 근거이나 그들의 최소 N=641로 우리 25장보다 25배 큼. |
-| RarePlanes: Synthetic Data Takes Flight (WACV 2021) | 2020 | arXiv:2006.02963 | O | 위성영상 항공기 검출. 합성 5만장 사전학습 후 실사 10%만 파인튜닝하면 실사 100% 학습과 동등 — '실사 앞부분 소량이 가장 가파른 이득' 서사의 고전 앵커. 단, 실사 총량이 253 위성이미지(~14.7k 어노테이션)라 10%도 우리 25장보단 큰 규모. |
-| Reducing the Amount of Real World Data for Object Detector Training with Synthet | 2022 | arXiv:2202.00632 | O | 자율주행 도메인(우리와 동일 계열). 합성+실사 혼합으로 실사 필요량 70% 절감, 실사 비율 5~20% 혼합이 최적 구간이라 보고. 절대 mAP는 초록 미기재 — 본문 표 인용 시 재확인 필요. |
-| Can Synthetic Data Improve Object Detection Results for Remote Sensing Images? | 2020 | arXiv:2006.05015 | O | 합성 생성 + CycleGAN 픽셀 정제 + 소량 실사 파인튜닝 — 우리 '절차 생성→디퓨전 정제→파인튜닝' 파이프라인의 GAN 시대 직계 조상. 실사 1%만 파인튜닝 시 48.23% mAP로 순수 실사 대비 +6.08%p(검색 결과 기반 수치, 본문 표에서 재확인 권장). 평가셋 NWPU VHR-10/UCAS-AOD/DIOR. |
-| Synthetic and Derived Training Images for Campus Waste Detection: A Multi-Seed E | 2026 | arXiv:2607.19535 | O | 부정 결과 대조군. 실사 86장(우리 N과 동급) + 전통적 배경치환/변형 증강 695장, YOLOv8n 멀티시드: 모든 증강 구성이 실사 단독 mAP50 0.691을 넘지 못함(최악 0.487). N=10~100 구간에서 '저품질 합성은 오히려 해악'을 보여줘, 우리 디퓨전 정제 단계의 필요성을 정당화하는 인용처. |
-
-**시사점**: N≤100 문헌 이득 스펙트럼은 음수(캠퍼스 폐기물, 저품질 증강)부터 +45pp(OzFish, 바닥 베이스라인)까지 퍼져 있고, 이득 크기를 결정하는 축은 (a) 베이스라인이 천장에서 얼마나 먼가, (b) 도메인 갭 크기, (c) 합성 데이터 품질이다. 우리 '25장으로 53.7→75.1 mAP50(+21.4pp)'은 이 스펙트럼에서 강한 편이지만 이상치가 아니다 — ODGEN Cotton(+25.3 mAP50:95, 200장), FSOD 1-shot(+15 AP50)과 같은 '큰 도메인 갭 + 비천장 베이스라인' 대역에 정확히 놓인다. 반대로 과일 검출(N=50에서 +0)과 나란히 놓으면 '이득 0인 조건'과의 대비로 우리 세팅의 난이도를 입증할 수 있다. 비교 함정 필수 명기: (1) mAP50 vs mAP50:95(ODGEN) vs keypoint AP(PSP)는 서로 환산 불가, (2) FSOD의 K-shot은 클래스당 장수이고 우리는 총 25장, (3) COCO 초기화 여부에 따라 합성 이득 크기가 완전히 달라짐(scratch면 +38, COCO-init+쉬운 과제면 0), (4) in-domain 평가 vs domain-shift 평가 구분.
-
-### 2. 합성 사전학습 vs COCO/ImageNet 사전학습 few-shot 대결 — COCO 대조군 해석 프레임
+### UE5/CitySample 기반 학술 합성 데이터 연구 (2023-2026)
 
 | 논문 | 연도 | ID | 검증 | 관련성 |
 |---|---|---|---|---|
-| PeopleSansPeople (합성 vs ImageNet 사전학습 직접 대결) | 2021 | arXiv:2112.09290 | O | 가장 깨끗한 직접 대결 수치: 실사 641장에서 합성 사전학습 44.43 vs ImageNet 21.90(+22.53 kp AP), 실사 전량(64k)에서는 63.47 vs 62.40(+1.07). '합성이 이기는 폭은 실사 N이 줄수록 커지고, N이 커지면 소멸'하는 교차 곡선의 정량 근거. |
-| Transfer learning with generative models (생성데이터 사전학습 vs COCO 사전학습) | 2024 | arXiv:2402.06784 | O | COCO 사전학습 대조군을 명시적으로 둔 드문 논문. OzFish에서 생성데이터(GLIGEN) 사전학습 모델이 실사 300장만으로 COCO 사전학습 레퍼런스 성능에 도달('실사 라벨 3자릿수 절감'), 실사 1,500+생성 1,500이면 COCO 사전학습 베이스라인(~0.60 mAP)을 추월. 합성이 이기는 조건 = 타깃 도메인(수중)이 COCO 분포에서 멀 때. |
-| Explore the Power of Synthetic Data on Few-shot Object Detection (CVPR-W 2023) | 2023 | arXiv:2303.13221 | O | 대결이 아닌 '보완' 구도의 근거: COCO-base 사전학습된 DeFRCN/MFDC(Faster R-CNN R101) 위에 Stable Diffusion 생성 이미지 클래스당 ~20장을 얹으면 VOC split1 novel AP50이 1-shot 52.5→67.5(+15.0), 10-shot 61.9→71.5(+9.6), COCO에서 +0.5~+12.6. CLIP 유사도 필터로 FP 90% 제거 — 우리 '정제/필터링' 단계와 논리 동일. |
-| Rethinking Pre-training and Self-training (NeurIPS 2020, Zoph et al.) | 2020 | arXiv:2006.06882 | O | COCO 대조군 해석의 이론 프레임: 사전학습은 라벨 데이터가 1/5로 적을 때만 이득이고 데이터가 충분하고 증강이 강하면 오히려 해악(-AP). 즉 '사전학습의 가치는 저데이터 구간에 응축된다'는 일반 법칙 — 우리 N=25 구간에서 사전학습 소스(합성 vs COCO)의 품질 차이가 극대화되어 보이는 이유를 설명. |
-| Training Deep Networks with Synthetic Data: Bridging the Reality Gap by Domain R | 2018 | arXiv:1804.06516 | O | KITTI 차량 검출: DR 합성 사전학습 + 실사 전량(6,000장) 파인튜닝 98.5 AP50 vs 실사 단독 96.4 vs VKITTI 사전학습 96.9 — 실사가 많아도 합성 사전학습이 소폭 가산적(+2.1). 또한 Hinterstoisser식 백본 동결이 오히려 성능을 최대 13.5% 깎는다고 반박 — 파인튜닝 전략 자체가 논쟁 지점임을 보여줌. |
-| On Pre-Trained Image Features and Synthetic Images for Deep Learning (Hinterstoi | 2017 | arXiv:1710.10710 | O | 반대 진영의 고전: 실사(ImageNet/COCO) 사전학습 특징추출기를 동결하고 검출 헤드만 합성으로 학습하는 게 낫다는 주장(Faster R-CNN/R-FCN/Mask R-CNN). Tremblay의 반박과 쌍으로 인용하면 '실사 특징 vs 합성 특징 어디를 신뢰할 것인가' 논쟁의 양극을 커버. |
-| Label-Free Synthetic Pretraining of Object Detectors (SOLID) | 2022 | arXiv:2208.04268 | O | 라벨 없는 3D 렌더링 합성 사전학습이 실사 이미지 사전학습과 경쟁 가능하다고 보고(검색 결과에서는 소량 실사 파인튜닝 시 82.05 AP로 무작위 합성 대비 +10 AP라는 수치도 인용됨 — 본문 재확인 필요). 합성 사전학습의 '설계된 장면 배치'가 중요하다는 근거. |
+| MatrixCity: A Large-scale City Dataset for City-scale Neural Rendering and Beyon | 2023 | arXiv:2309.16553 | O | UE5 City Sample을 학술 데이터셋 소스로 쓴 대표 선행. 67k 항공 + 452k 거리 이미지, 총 28km^2, 조명/날씨/군중 제어 파이프라인과 depth/normal/BRDF 부가 모달리티 제공. 우리가 'CitySample은 이미 ICCV급 학술 연구에서 검증된 자산'이라고 주장할 직접 근거. |
+| Boundless: Generating Photorealistic Synthetic Data for Object Detection in Urba | 2024 | arXiv:2409.03022 | O | 가장 가까운 경쟁 선행: UE5 City Sample 기반 검출용 합성 데이터 시스템, 조명/장면 변동 하에서 3D bbox 수집을 보정, CARLA 학습 모델 대비 +7.8 mAP (중고도 실사 카메라 평가). 우리 +7.2pp와 수치 규모가 유사하므로 반드시 인용하고 차별점(디퓨전 정제 단계, 4-arm 통제 비교, 25장 실사 파인튜닝)을 명시해야 함. 코드 공개: github.com/zk2172-columbia/boundless |
+| SHIFT: A Synthetic Driving Dataset for Continuous Multi-Task Domain Adaptation ( | 2022 | arXiv:2206.08367 | O | CARLA 기반 최대 멀티태스크 합성 주행 데이터셋(2.5M 라벨 이미지, 13개 과제). 날씨/시간대/밀도의 이산·연속 시프트 제어 — 도메인 갭을 축으로 통제한 데이터셋 설계의 표준 인용. |
+| CARLA: An Open Urban Driving Simulator | 2017 | arXiv:1711.03938 | O | 게임엔진(UE4) 기반 시뮬레이터의 기준점. related work에서 'CARLA 계열 대비 CitySample 직접 사용'의 위치를 잡는 앵커. |
+| Synscapes: A Photorealistic Synthetic Dataset for Street Scene Parsing | 2018 | arXiv:1810.08705 | O | 확인 완료: UE 아님. 7Dlabs의 자체 절차적 엔진 + 물리기반(경로추적) 렌더링으로 25k 이미지 각각을 고유 절차 생성. 우리 논문에서 '게임엔진 기반'으로 분류하면 오류이며, '전용 절차 엔진 + PBR' 분류로 정확히 인용해야 함. 단, 이미지당 고유 장면 절차 생성이라는 점은 우리 scene_build 서술의 좋은 선례. |
+| Synth It Like KITTI: Synthetic Data Generation for Object Detection in Driving S | 2025 | arXiv:2502.15076 | O | CARLA로 KITTI 스타일 검출 데이터를 생성해 무엇이 전이 성능을 좌우하는지 요인 분해한 최신 연구. 우리 4-arm 설계(요인별 기여 분리)와 방법론적으로 같은 정신 — 실험 설계 정당화에 인용 가치. Springer 버전은 로그인 게이트라 arXiv 버전 인용 권장. |
+| Synthetic Datasets for Autonomous Driving: A Survey | 2023 | arXiv:2304.12205 | O | 합성 주행 데이터셋 분류 체계를 제공하는 서베이. related work 절의 분류 구조(시뮬레이터 기반 / 절차 생성 / 생성모델 기반)를 이 서베이의 축을 따라 잡으면 안전. |
 
-**시사점**: 문헌 종합: 합성 사전학습이 COCO/ImageNet을 이기는 조건은 (1) 실사 N이 작을수록(PSP: 641장에서 +22.5, 전량에서 +1.1), (2) 타깃 도메인이 COCO 분포에서 멀수록(OzFish 수중), (3) 합성이 타깃 도메인을 직접 모사할수록(도메인 특화 렌더링). 지는/무승부 조건은 (1) 과제가 쉬워 소량 실사로 천장 도달(과일 N=50에서 0.978), (2) 타깃이 COCO 클래스·시점과 겹칠 때(도심 차량·보행자는 COCO에 이미 풍부 — 우리 CitySample 도메인은 여기에 걸쳐 있어 COCO 대조군이 만만치 않을 것), (3) 실사 N이 커질 때. 우리 4-arm 해석 시나리오: COCO 대조군이 25장 파인튜닝 후에도 우리 합성 사전학습에 뒤지면 '도메인 특화 합성의 가치' 입증이고, 근접하면 Zoph 프레임(저데이터 구간에서 사전학습 소스 간 순위는 도메인 근접도가 결정)으로 설명. 주의: PSP는 keypoint AP·사람 1클래스, 2402.06784는 1클래스 어류 — 우리 다클래스 mAP50과 직접 수치 비교는 불가하고 '경향 곡선'만 인용할 것.
+**시사점**: CitySample 직접 활용 선행은 MatrixCity(렌더링 목적)와 Boundless(검출 목적) 두 축으로 정리된다. Boundless가 구조적으로 가장 가까우므로 정면 인용 후 차별점 3가지(절차적 장면 재구성 scene_build, 디퓨전 정제 삽입, 극소량 실사 파인튜닝과의 결합 4-arm)를 명시해야 리뷰어 선점 공격을 막는다. Synscapes는 UE가 아님이 원문으로 확인되므로 분류 오류 없이 '전용 절차 엔진+경로추적'으로 인용할 것.
 
-### 3. 디퓨전 생성/정제 데이터의 검출 증강 2023→2026 — X-Paste 이후 계보와 우리 '정제' 단계의 위치
+### 절차적 장면 생성 + 자동 라벨 파이프라인의 표준 서술 관례
 
 | 논문 | 연도 | ID | 검증 | 관련성 |
 |---|---|---|---|---|
-| DiverGen: Improving Instance Segmentation by Learning Wider Data Distribution wi | 2024 | arXiv:2405.10185 | O | X-Paste 직계 후속이자 최초의 명시적 추월: LVIS에서 X-Paste 대비 +1.1 box/+1.1 mask AP, 희소 클래스 +1.9 box/+2.5 mask. 핵심 주장은 '다양성(카테고리·프롬프트·생성모델)이 스케일링을 지속시킨다' — 생성 데이터를 수백만 장까지 늘려도 성능 향상 추세 유지. X-Paste 대비 생성 비용 문제(4.3배 GPU시간)도 지적. |
-| DiffusionEngine: Diffusion Model is Scalable Data Engine for Object Detection (P | 2023 | arXiv:2309.03893 | O | 디퓨전을 '검출 데이터 엔진'으로 쓰는 대표작. Detection-Adapter로 생성과 동시에 박스 라벨 획득. DINO 기반 검출기에서 COCO +3.1, VOC +7.6, Clipart(도메인 시프트) +11.5 mAP. 도메인 갭이 클수록 이득이 커지는 패턴 — 우리 4-arm +7.2pp가 이 대역(+3.1~+11.5)의 한가운데라는 맥락화에 사용 가능. |
-| Synthetic Object Compositions for Scalable and Accurate Learning in Detection, S | 2025 | arXiv:2510.09110 | O | 2025년형 object-centric 합성: 디퓨전 세그먼트 + 3D 기하 레이아웃/카메라 증강 + 생성적 harmonization. 합성 10만장만으로 LVIS +10.9 AP, Copy-Paste·X-Paste·SynGround·SegGen 모두 추월. 저데이터 세팅(1% COCO)에서 +6.59 AP — 소량 실사 구간에서의 합성 이득이라는 점에서 우리와 접점. |
-| Gen-n-Val: Agentic Image Data Generation and Validation | 2025 | arXiv:2506.04676 | O | 2025-2026 트렌드 '생성 후 검증': LLM 프롬프트 에이전트 + VLM 품질 검증 에이전트로 무효 합성 데이터를 50%→7%로 감축(MosaicFusion 대비). LVIS 희소 클래스 +7.6 mAP(Mask R-CNN), YOLO-Worldv2 대비 +7.1 mAP. '생성량보다 검증·필터링이 성능을 결정한다'는 우리 디퓨전 정제 단계의 최신 방증. |
-| Do We Need All the Synthetic Data? Targeted Image Augmentation via Diffusion Mod | 2025 | arXiv:2505.21574 | O | 전량 증강보다 학습 초기에 못 배우는 30~40% 샘플만 선택적 디퓨전 증강이 우수(최대 +2.8%, 10~30배 데이터 확장 대비 저비용). 주의: 주 실험은 분류(CIFAR/TinyImageNet/ImageNet, ResNet~Swin)이고 검출은 부차적 — 검출 수치로 직접 인용하지 말고 '선택적 생성' 원리 인용에 한정. |
-| REGEN: Real-Time Photorealism Enhancement in Games via a Dual-Stage Generative N | 2025 | arXiv:2508.17061 | O | 게임엔진 렌더 이미지의 사실감 향상(photorealism enhancement) 계보의 2025년판 — 우리 'UE5 CitySample 렌더→디퓨전 정제'와 문제 설정이 가장 가까운 계열. 비페어드 번역으로 만든 출력을 경량 페어드 모델에 증류해 12배 고속화·시간적 일관성 유지. CARLA를 FLUX 계열 디퓨전 출력으로 번역하는 실험도 진행 중이며 디퓨전의 시맨틱 불안정(차량 색 변화 등)을 명시 — 우리가 디퓨전 정제에서 라벨-픽셀 정합을 지킨 방법을 차별점으로 세울 수 있음. |
-| Preserve the Hard, Regenerate the Rest: Uncertainty-Guided Synthetic Training Da | 2026 | arXiv:2606.31603 | O | 2026년 최신 '정제' 철학: 예측 엔트로피로 불확실 영역을 찾아 그 부분은 보존하고 주변 맥락만 디퓨전 인페인팅으로 재생성, 라벨은 원본 유지. 과제는 시맨틱 분할(Cityscapes/UAVID/BDD100K, mIoU)이라 검출 수치 비교는 불가 — '라벨 안전 디퓨전 재생성'이라는 개념 인용용. |
-| ODGEN (도메인 특화 저데이터 디퓨전 생성) | 2024 | arXiv:2405.15199 | O | 3번 주제에서의 역할: 실사 200장만으로 디퓨전을 도메인에 파인튜닝해 5,000장을 생성하는 '저데이터 도메인 특화 생성'의 대표 수치(위 표 참조). COCO-2014에서도 기존 방법 대비 최대 +5.6 mAP@50:95. |
+| Infinite Photorealistic Worlds using Procedural Generation (Infinigen, CVPR 2023 | 2023 | arXiv:2306.09310 | O | 파이프라인 서술의 모범 템플릿: (1) 자산 생성, (2) 배치/인스턴싱, (3) 렌더링+GT 추출(depth/normal/seg/flow), (4) 내보내기 단계로 모듈화해 서술하고, 모든 랜덤 규칙을 파라미터화된 프로그램으로 명시. |
+| Kubric: A scalable dataset generator | 2022 | arXiv:2203.03570 | O | 렌더러 버퍼로부터 instance seg/depth/optical flow 라벨을 자동 도출하는 서술 방식의 표준. '라벨은 렌더링 부산물로 정의상 정확(pixel-perfect)'이라는 논리 전개의 인용점. |
+| Hypersim: A Photorealistic Synthetic Dataset for Holistic Indoor Scene Understan | 2020 | arXiv:2011.02523 | O | 자산/장면/이미지 수량 보고 관례의 표본(구매 자산 461개 장면, 77.4k 이미지 등 인벤토리를 표로 명시). 외부 자산 기반 파이프라인(우리처럼 CitySample 자산 활용)의 자산 출처·라이선스 서술 선례. |
+| Boundless (라벨 검증 관점 재인용) | 2024 | arXiv:2409.03022 | O | UE5에서 자동 수집한 bbox가 조명/가림 조건에서 틀어지는 문제를 명시하고 재보정(recalibration) 절차를 서술 — '엔진산 라벨도 검증이 필요하다'는 서술 관례의 근거. |
+| Synscapes (파라미터 보고 관점 재인용) | 2018 | arXiv:1810.08705 | O | 시나리오 파라미터(차량/보행자 수, 도로 폭, 노면 재질, 시간대, 날씨)를 명시적 파라미터 목록으로 보고하는 관례의 원형. |
 
-**시사점**: X-Paste(ICML 2023) 이후 계보는 세 갈래로 정리된다: (1) 다양성·스케일 — DiverGen(수백만 장 스케일링 지속), SOC(10만장 고품질 구성으로 X-Paste 추월), (2) 생성-라벨 동시 획득 엔진 — DiffusionEngine, GeoDiffusion, ODGEN, (3) 2025-2026의 지배적 전환인 '선별과 정제' — Gen-n-Val(VLM 검증으로 무효율 50%→7%), TADA(30-40%만 선택 증강), Preserve-the-Hard(라벨 보존 인페인팅). 우리 파이프라인(UE5 절차 생성→디퓨전 정제)은 (3)의 흐름에 정확히 부합하되, '순수 생성'이 아니라 '시뮬레이터 렌더의 사실감 정제'라는 점에서 REGEN/photorealism-enhancement 계보와 교차하는 독자 위치 — 이 교차점(기하·라벨은 엔진이 보증, 외观은 디퓨전이 정제)을 관련연구 절의 프레임으로 쓸 것. 우리 4-arm +7.2pp는 DiffusionEngine의 +3.1(COCO)~+11.5(Clipart), ODGEN의 도메인별 +2.5~+25.3 대역 안에 있어 '문헌 정합적' 수치로 제시 가능. 함정: 이 계보 수치 다수가 LVIS mask AP·mAP@50:95·mIoU 등 이종 지표이며, 벤치마크도 대용량(LVIS/COCO)이라 우리 소규모 실사 평가셋과 절대 비교는 금물 — 상대 이득(pp)과 조건(도메인 갭, 실사 N)만 병렬 배치할 것.
+**시사점**: 우리 scene_build 절은 다음 6요소를 관례대로 보고하면 된다: (1) 자산 인벤토리 — 클래스별 자산 수, 출처(CitySample 기본/추가), 변형(재질·LOD) 수; (2) 배치 규칙 — 스폰 영역 정의, 밀도 분포, 충돌·겹침 제약, 클래스별 배치 로직(차도/보도), 난수 시드 관리; (3) 카메라·조명 샘플링 범위(높이/각도/시간대/날씨); (4) 라벨 도출 방식 — 엔진 버퍼(custom stencil) 또는 3D->2D 투영 중 무엇인지와 occlusion/truncation 가시성 임계값; (5) 라벨 검증 — 자동 검증 규칙(최소 픽셀 수, 마스크-박스 일치) + 소표본 수동 검수 결과; (6) 데이터셋 통계 — 클래스별 인스턴스 수, 박스 크기 분포, 장면 수/이미지 수/시드 수. Infinigen식 단계 분해 + Hypersim식 인벤토리 표 + Boundless식 라벨 재보정 서술을 조합하는 것이 2023-2026 관례에 부합.
+
+### 디퓨전 정제의 데이터셋 파이프라인 통합 (2024-2026)
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| A Hybrid Approach for Closing the Sim2real Appearance Gap in Game Engine Synthet | 2026 | arXiv:2605.02291 | O | 이미 확보한 핵심 선행(Pasios, 2026-05). 게임엔진 합성 데이터에 FLUX.2-4B Klein 디퓨전 편집 + im2im 번역(EPE 계열)의 하이브리드. 핵심 논점: depth/edge 다중 제어에도 디퓨전 환각으로 라벨-이미지 불일치가 발생 — 우리도 정제 전후 라벨 보존 검증을 서술해야 함. |
+| A Scalable Pipeline Combining Procedural 3D Graphics and Guided Diffusion for Ph | 2025 | arXiv:2512.08747 | O | 우리 파이프라인의 구조적 쌍둥이: 절차적 3D 장면 생성 -> guided diffusion 정제 -> segmentation 학습. 도메인(농업)만 다르고 2단계 구성이 동일 — '절차 생성+디퓨전 정제'가 2025-26에 독립적으로 수렴 중임을 보여주는 인용점. |
+| Enhancing Photorealism Enhancement | 2021 | arXiv:2105.04619 | O | 렌더링 후 정제(im2im) 계보의 기준점(G-buffer 조건 GAN, GTA V). 디퓨전 정제의 전사(前史)로 related work 첫머리에 인용. |
+| Ontology-Guided Diffusion for Zero-Shot Visual Sim2Real Transfer | 2026 | arXiv:2603.18719 | O | 정적 프롬프트 ControlNet/InstructPix2Pix 대비 온톨로지 조건화가 우수함을 보임 — 정제 조건화 설계 선택지를 논할 때 최신 비교점. |
+| Sim2Real Diffusion: Leveraging Foundation Vision Language Models for Adaptive Au | 2025 | arXiv:2507.00236 | O | 주행 도메인에서 파운데이션 VLM 조건 디퓨전으로 sim2real 갭 축소 — 주행 특화 디퓨전 정제의 2025년 대표. |
+| SimuScope: Realistic Endoscopic Synthetic Dataset Generation through Surgical Si | 2024 | arXiv:2412.02332 | O | 시뮬레이션 + Stable Diffusion/ControlNet img2img로 자동 라벨을 보존하며 사실감 향상 — '정제하되 라벨 보존'을 명시 서술한 의료 도메인 사례. |
+| ODGEN: Domain-specific Object Detection Data Generation with Diffusion Models (N | 2024 | arXiv:2405.15199 | O | 대비 축: 렌더링 없이 디퓨전이 검출 데이터를 직접 생성. 우리 접근(렌더링+정제)과의 구분선을 긋는 데 사용. |
+| DatasetDM: Synthesizing Data with Perception Annotations Using Diffusion Models | 2023 | arXiv:2308.06160 | O | 디퓨전에서 라벨까지 직접 생성하는 대안 축의 대표 — related work 분류에서 '생성모델 단독' 진영 앵커. |
+| S3OD: Towards Generalizable Salient Object Detection with Synthetic Data | 2025 | arXiv:2510.21605 | O | FLUX 계열 체크포인트 선택이 사실감(과채도 문제)에 미치는 영향을 논함 — 디퓨전 모델/체크포인트 선택 근거 서술 시 참고. |
+| ASTAD: Asymmetric Style Transfer for Synthetic-to-Real Adaptation in Autonomous  | 2026 | arXiv:2606.29286 | O | 2026년 스타일 전이 기반 대안 축 — 디퓨전 정제 대비 스타일 전이의 위치를 잡는 최신 비교점. |
+
+**시사점**: 2024-2026 문헌은 세 갈래로 정리된다: (a) 디퓨전 단독 생성(ODGEN, DatasetDM, S3OD), (b) 렌더링 후 디퓨전 정제(2605.02291, 2512.08747, SimuScope, 2507.00236), (c) 스타일 전이(ASTAD, 계보상 2105.04619). 우리는 (b) 축이며 가장 가까운 두 편은 2512.08747(절차 생성+guided diffusion, 도메인 상이)과 2605.02291(게임엔진+디퓨전, 하이브리드). (b) 축의 공통 우려는 정제 시 기하 환각으로 인한 라벨 붕괴로, ControlNet/depth/edge 조건화와 정제 전후 라벨 유효성 검증 보고가 관례화되는 중 — 우리 논문에 '정제 전후 bbox 보존 검증' 절차와 수치를 넣으면 2605.02291이 지적한 약점에 선제 대응이 된다.
 
 ### 권고
 
-1. 논문의 수치 맥락화 표를 3축(실사 N / 지표 / 이득 pp)으로 구성하라: OzFish 50장 0.024→0.48(mAP, 바닥 베이스라인), ODGEN 200장 +2.5~+25.3(mAP50:95), 과일검출 50장 +0(천장), 캠퍼스폐기물 86장 음수(저품질 증강), 그 안에 우리 '25장 53.7→75.1 mAP50(+21.4pp)'을 배치 — 우리 수치는 강한 편이지만 '큰 도메인 갭 + 비천장 베이스라인' 대역의 문헌 정합적 값임을 보인다.
-2. COCO 대조군 해석은 Zoph et al.(arXiv:2006.06882) 프레임으로 열어라: 사전학습 가치는 저데이터 구간에 응축되므로 N=25에서 사전학습 소스 간 순위가 극대화된다. 이어서 PeopleSansPeople(641장에서 합성이 ImageNet에 +22.5, 전량에서 +1.1)과 2402.06784(생성 사전학습이 실사 300장으로 COCO 사전학습에 도달)를 '합성이 이기는 조건 = 저N + 큰 도메인 근접도 격차'의 근거로 인용하라. 단 우리 도심 차량·보행자 도메인은 COCO와 겹치므로 COCO 대조군이 선전해도 문헌과 모순이 아니다.
-3. 관련연구 절의 디퓨전 파트는 X-Paste 이후 3갈래 계보(다양성·스케일: DiverGen/SOC, 생성 엔진: DiffusionEngine/ODGEN, 선별·정제: Gen-n-Val/TADA/Preserve-the-Hard)로 구조화하고, 우리 파이프라인을 '정제 갈래 × photorealism-enhancement(REGEN) 계보의 교차점'으로 자리매김하라 — 기하·라벨은 UE5가 보증하고 외관만 디퓨전이 정제한다는 라벨-안전성 논거가 차별점이다. 4-arm +7.2pp는 DiffusionEngine +3.1~+11.5 대역 내 수치로 병기하라.
-4. 비교 함정을 표 각주로 명시하라: (1) mAP50 vs mAP50:95 vs keypoint AP vs mask AP는 환산 불가, (2) FSOD의 K-shot은 클래스당 장수·우리는 총 장수, (3) COCO 초기화 여부가 합성 이득 크기를 지배(scratch +38 vs COCO-init 0), (4) in-domain 평가와 domain-shift 평가를 구분, (5) 합성 데이터 규모(5천~수백만 장)가 논문마다 3자릿수 차이.
-5. 부정 결과 인용을 빼먹지 마라: 캠퍼스 폐기물(arXiv:2607.19535, 실사 86장에서 모든 저품질 증강이 실사 단독 0.691 mAP50 이하)과 Gen-n-Val의 '무효 합성 50%' 통계는 '합성은 양이 아니라 품질·검증이 결정한다'는 우리 디퓨전 정제 단계의 존재 이유를 문헌으로 뒷받침한다.
-6. 인용 전 재확인 2건: arXiv:2006.05015의 '1% 실사 48.23 mAP(+6.08)'과 arXiv:2208.04268의 '82.05 AP' 수치는 검색 스니펫 기반이므로 본문 표에서 세팅(백본·평가셋)을 확인한 뒤 인용하라. 나머지 수치는 원문(초록/본문 표)에서 직접 확인했다.
+1. Boundless (arXiv:2409.03022, 2024) — 가장 가까운 선행(UE5 CitySample -> 검출, CARLA 대비 +7.8 mAP). 반드시 정면 인용하고 차별점(디퓨전 정제, 4-arm 통제, 25장 실사 파인튜닝)을 명시할 것.
+2. MatrixCity (arXiv:2309.16553, ICCV 2023) — CitySample을 학술 자산으로 정당화하는 근거 인용.
+3. Hybrid Sim2Real (arXiv:2605.02291, 2026) — 디퓨전 정제의 라벨 환각 문제를 명시한 최신 선행. 우리 정제 전후 라벨 보존 검증 서술의 근거로 활용.
+4. Mushroom pipeline (arXiv:2512.08747, 2025) — 절차 생성+guided diffusion 2단계 구조의 독립 수렴 사례로 인용해 우리 파이프라인 설계의 일반성 주장.
+5. Infinigen (arXiv:2306.09310) + Hypersim (arXiv:2011.02523) — scene_build 절 서술 템플릿: 단계 분해(자산->배치->렌더+GT) + 자산 인벤토리 표 + 라벨 검증 절차 6요소 보고.
+6. Synscapes (arXiv:1810.08705) — UE 아님 확인 완료(자체 절차 엔진 + 경로추적 PBR). '게임엔진 기반'으로 분류하지 말고 정확히 인용할 것.
 
-## 벤치마크 지형·균형 문헌
+## 축 2: 1. 주행 RL 시뮬레이터/벤치마크 지형 2023-2026 — 'MetaDrive를 왜 골랐나' 방어...
 
 ### 1. 주행 RL 시뮬레이터/벤치마크 지형 2023-2026 — 'MetaDrive를 왜 골랐나' 방어
 
@@ -590,7 +589,7 @@
 6. 지형 표에 2025년 항목(nuPlan-R 2511.10403, V-Max 2503.08388)까지 포함해 서베이 최신성을 확보하고, BeamNG.tech(beamng.tech/research, 80+ 논문)는 '학습용이 아닌 테스트/검증용 고충실도'로 분류해 고충실도 물리의 실제 학술 용처를 근거로 제시.
 7. 모든 arXiv ID 22건은 export.arxiv.org API로 제목·연도 일치 검증 완료, Cutler & How는 Semantic Scholar DOI 조회로, BeamNG·MultiDrive는 URL 접근으로 검증 — 논문 인용 시 이 ID들을 그대로 사용해도 안전.
 
-## 국내 문헌
+## 축 3: 국내 학위논문 — 자율주행 강화학습 시뮬레이션 / Sim2Real (신규성 방어용)...
 
 ### 국내 학위논문 — 자율주행 강화학습 시뮬레이션 / Sim2Real (신규성 방어용)
 
@@ -643,3 +642,58 @@
 4. 4순위 인용: 신승재 외(2019), 심층강화학습 라이브러리 기술동향, ETRI 전자통신동향분석 34(6) — 국책기관이 CARLA/자율주행을 RL 핵심 응용으로 다룬 동향 논문, 서론 배경용. (ettrends.etri.re.kr/180/0905180008, 접근 확인)
 5. 5순위 인용(신규성 방어 겸용): 인하대 sim2real 학위논문 2편 — 박동혁(2023, 항법센서·차량동역학 중심), 이용하(2025, 개발 단계별 기법 중심). 국내 학위논문의 sim2real 접근이 충실도·센서 관점에 머묾을 보여 '동일 벽시계 RL 비교+IQM 전이+착취 규명+DPC'의 신규성 경계를 명확히 함. (RISS 검색결과 접근 확인, 최종 인용 전 RISS 상세페이지에서 서지 재확인 권장)
 6. 신규성 결론: RISS 기준 '자율주행 강화학습 시뮬레이션' 학위논문 142건·'sim-to-real 자율주행' 31건을 훑은 결과, 우리 두 축(동일 벽시계 시뮬레이터 비교 RL + UE5 절차생성→디퓨전 정제→실사 검출 파이프라인)을 결합한 선행 학위논문은 미발견 — 다만 심사 대비로 인하대 2편과 연세대 이상용(2021)을 관련연구에서 선제적으로 구분해 둘 것.
+
+## 축 4: 1. 합성 사전학습 + 실사 N장(10~100) 파인튜닝 스펙트럼 — 우리 25장 +21.4pp의 위치...
+
+### 1. 합성 사전학습 + 실사 N장(10~100) 파인튜닝 스펙트럼 — 우리 25장 +21.4pp의 위치
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| Transfer learning with generative models for object detection on limited dataset | 2024 | arXiv:2402.06784 | O | 우리 N=25에 가장 가까운 공표 수치. GLIGEN(디퓨전 layout-to-image) 생성 9,000장 사전학습 + Faster R-CNN. OzFish(수중 어류, 1클래스): 실사 50장 단독 mAP 0.024 → +생성데이터 0.48 (+45pp, 단 바닥 베이스라인). NuImages(차량): 실사 300장 0.43 → 0.66 (+23pp), 실사 4,500장 단독 0.70에 근접. 함정: 베이스라인이 사실상 붕괴 상태(0.024)라 절대 이득이 부풀려짐. |
+| ODGEN: Domain-specific Object Detection Data Generation with Diffusion Models (N | 2024 | arXiv:2405.15199 | O | 실사 200장 + 디퓨전 합성 5,000장, YOLOv5s/YOLOv7, RF7 도메인 벤치마크, 지표는 mAP@50:95(주의: 우리 mAP50과 다름). Cotton 16.7→42.0(+25.3), Robomaster 27.2→39.6(+12.4), MRI 37.6→46.1(+8.5), Underwater 16.7→19.2(+2.5). 도메인별 편차가 크다는 점이 핵심 — 이득은 도메인 갭·클래스 난이도에 좌우. |
+| Sim-to-Real Fruit Detection Using Synthetic Data (Isaac Sim) | 2026 | arXiv:2603.28670 | O | 정확히 N=50/100 스윕. YOLOv8s(COCO 초기화), 과일 검출. 실사 50장 단독으로 이미 mAP50 0.978(천장), 합성 1k~5k 사전학습을 더해도 0.974~0.984로 무이득. 반례로 중요: COCO 초기화 + 쉬운 in-domain 과제에서는 N=50에서 합성 효과가 0으로 수렴. 우리 +21.4pp는 베이스라인 53.7이 천장에서 멀다는 것(어려운 도메인 갭)의 방증. |
+| PeopleSansPeople: A Synthetic Data Generator for Human-Centric Computer Vision ( | 2021 | arXiv:2112.09290 | O | Keypoint R-CNN R50-FPN, COCO-person, 지표는 keypoint AP(bbox 아님 — 직접 비교 금지). 최소 실사 641장(1%)에서 scratch 6.40 / ImageNet 사전학습 21.90 / 합성 사전학습 44.43(+38.0 vs scratch, +22.5 vs ImageNet). 64,115장(100%)에서는 격차가 +1.47/+1.07로 축소. '저데이터일수록 합성 사전학습 이득이 커진다' 곡선의 대표 근거이나 그들의 최소 N=641로 우리 25장보다 25배 큼. |
+| RarePlanes: Synthetic Data Takes Flight (WACV 2021) | 2020 | arXiv:2006.02963 | O | 위성영상 항공기 검출. 합성 5만장 사전학습 후 실사 10%만 파인튜닝하면 실사 100% 학습과 동등 — '실사 앞부분 소량이 가장 가파른 이득' 서사의 고전 앵커. 단, 실사 총량이 253 위성이미지(~14.7k 어노테이션)라 10%도 우리 25장보단 큰 규모. |
+| Reducing the Amount of Real World Data for Object Detector Training with Synthet | 2022 | arXiv:2202.00632 | O | 자율주행 도메인(우리와 동일 계열). 합성+실사 혼합으로 실사 필요량 70% 절감, 실사 비율 5~20% 혼합이 최적 구간이라 보고. 절대 mAP는 초록 미기재 — 본문 표 인용 시 재확인 필요. |
+| Can Synthetic Data Improve Object Detection Results for Remote Sensing Images? | 2020 | arXiv:2006.05015 | O | 합성 생성 + CycleGAN 픽셀 정제 + 소량 실사 파인튜닝 — 우리 '절차 생성→디퓨전 정제→파인튜닝' 파이프라인의 GAN 시대 직계 조상. 실사 1%만 파인튜닝 시 48.23% mAP로 순수 실사 대비 +6.08%p(검색 결과 기반 수치, 본문 표에서 재확인 권장). 평가셋 NWPU VHR-10/UCAS-AOD/DIOR. |
+| Synthetic and Derived Training Images for Campus Waste Detection: A Multi-Seed E | 2026 | arXiv:2607.19535 | O | 부정 결과 대조군. 실사 86장(우리 N과 동급) + 전통적 배경치환/변형 증강 695장, YOLOv8n 멀티시드: 모든 증강 구성이 실사 단독 mAP50 0.691을 넘지 못함(최악 0.487). N=10~100 구간에서 '저품질 합성은 오히려 해악'을 보여줘, 우리 디퓨전 정제 단계의 필요성을 정당화하는 인용처. |
+
+**시사점**: N≤100 문헌 이득 스펙트럼은 음수(캠퍼스 폐기물, 저품질 증강)부터 +45pp(OzFish, 바닥 베이스라인)까지 퍼져 있고, 이득 크기를 결정하는 축은 (a) 베이스라인이 천장에서 얼마나 먼가, (b) 도메인 갭 크기, (c) 합성 데이터 품질이다. 우리 '25장으로 53.7→75.1 mAP50(+21.4pp)'은 이 스펙트럼에서 강한 편이지만 이상치가 아니다 — ODGEN Cotton(+25.3 mAP50:95, 200장), FSOD 1-shot(+15 AP50)과 같은 '큰 도메인 갭 + 비천장 베이스라인' 대역에 정확히 놓인다. 반대로 과일 검출(N=50에서 +0)과 나란히 놓으면 '이득 0인 조건'과의 대비로 우리 세팅의 난이도를 입증할 수 있다. 비교 함정 필수 명기: (1) mAP50 vs mAP50:95(ODGEN) vs keypoint AP(PSP)는 서로 환산 불가, (2) FSOD의 K-shot은 클래스당 장수이고 우리는 총 25장, (3) COCO 초기화 여부에 따라 합성 이득 크기가 완전히 달라짐(scratch면 +38, COCO-init+쉬운 과제면 0), (4) in-domain 평가 vs domain-shift 평가 구분.
+
+### 2. 합성 사전학습 vs COCO/ImageNet 사전학습 few-shot 대결 — COCO 대조군 해석 프레임
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| PeopleSansPeople (합성 vs ImageNet 사전학습 직접 대결) | 2021 | arXiv:2112.09290 | O | 가장 깨끗한 직접 대결 수치: 실사 641장에서 합성 사전학습 44.43 vs ImageNet 21.90(+22.53 kp AP), 실사 전량(64k)에서는 63.47 vs 62.40(+1.07). '합성이 이기는 폭은 실사 N이 줄수록 커지고, N이 커지면 소멸'하는 교차 곡선의 정량 근거. |
+| Transfer learning with generative models (생성데이터 사전학습 vs COCO 사전학습) | 2024 | arXiv:2402.06784 | O | COCO 사전학습 대조군을 명시적으로 둔 드문 논문. OzFish에서 생성데이터(GLIGEN) 사전학습 모델이 실사 300장만으로 COCO 사전학습 레퍼런스 성능에 도달('실사 라벨 3자릿수 절감'), 실사 1,500+생성 1,500이면 COCO 사전학습 베이스라인(~0.60 mAP)을 추월. 합성이 이기는 조건 = 타깃 도메인(수중)이 COCO 분포에서 멀 때. |
+| Explore the Power of Synthetic Data on Few-shot Object Detection (CVPR-W 2023) | 2023 | arXiv:2303.13221 | O | 대결이 아닌 '보완' 구도의 근거: COCO-base 사전학습된 DeFRCN/MFDC(Faster R-CNN R101) 위에 Stable Diffusion 생성 이미지 클래스당 ~20장을 얹으면 VOC split1 novel AP50이 1-shot 52.5→67.5(+15.0), 10-shot 61.9→71.5(+9.6), COCO에서 +0.5~+12.6. CLIP 유사도 필터로 FP 90% 제거 — 우리 '정제/필터링' 단계와 논리 동일. |
+| Rethinking Pre-training and Self-training (NeurIPS 2020, Zoph et al.) | 2020 | arXiv:2006.06882 | O | COCO 대조군 해석의 이론 프레임: 사전학습은 라벨 데이터가 1/5로 적을 때만 이득이고 데이터가 충분하고 증강이 강하면 오히려 해악(-AP). 즉 '사전학습의 가치는 저데이터 구간에 응축된다'는 일반 법칙 — 우리 N=25 구간에서 사전학습 소스(합성 vs COCO)의 품질 차이가 극대화되어 보이는 이유를 설명. |
+| Training Deep Networks with Synthetic Data: Bridging the Reality Gap by Domain R | 2018 | arXiv:1804.06516 | O | KITTI 차량 검출: DR 합성 사전학습 + 실사 전량(6,000장) 파인튜닝 98.5 AP50 vs 실사 단독 96.4 vs VKITTI 사전학습 96.9 — 실사가 많아도 합성 사전학습이 소폭 가산적(+2.1). 또한 Hinterstoisser식 백본 동결이 오히려 성능을 최대 13.5% 깎는다고 반박 — 파인튜닝 전략 자체가 논쟁 지점임을 보여줌. |
+| On Pre-Trained Image Features and Synthetic Images for Deep Learning (Hinterstoi | 2017 | arXiv:1710.10710 | O | 반대 진영의 고전: 실사(ImageNet/COCO) 사전학습 특징추출기를 동결하고 검출 헤드만 합성으로 학습하는 게 낫다는 주장(Faster R-CNN/R-FCN/Mask R-CNN). Tremblay의 반박과 쌍으로 인용하면 '실사 특징 vs 합성 특징 어디를 신뢰할 것인가' 논쟁의 양극을 커버. |
+| Label-Free Synthetic Pretraining of Object Detectors (SOLID) | 2022 | arXiv:2208.04268 | O | 라벨 없는 3D 렌더링 합성 사전학습이 실사 이미지 사전학습과 경쟁 가능하다고 보고(검색 결과에서는 소량 실사 파인튜닝 시 82.05 AP로 무작위 합성 대비 +10 AP라는 수치도 인용됨 — 본문 재확인 필요). 합성 사전학습의 '설계된 장면 배치'가 중요하다는 근거. |
+
+**시사점**: 문헌 종합: 합성 사전학습이 COCO/ImageNet을 이기는 조건은 (1) 실사 N이 작을수록(PSP: 641장에서 +22.5, 전량에서 +1.1), (2) 타깃 도메인이 COCO 분포에서 멀수록(OzFish 수중), (3) 합성이 타깃 도메인을 직접 모사할수록(도메인 특화 렌더링). 지는/무승부 조건은 (1) 과제가 쉬워 소량 실사로 천장 도달(과일 N=50에서 0.978), (2) 타깃이 COCO 클래스·시점과 겹칠 때(도심 차량·보행자는 COCO에 이미 풍부 — 우리 CitySample 도메인은 여기에 걸쳐 있어 COCO 대조군이 만만치 않을 것), (3) 실사 N이 커질 때. 우리 4-arm 해석 시나리오: COCO 대조군이 25장 파인튜닝 후에도 우리 합성 사전학습에 뒤지면 '도메인 특화 합성의 가치' 입증이고, 근접하면 Zoph 프레임(저데이터 구간에서 사전학습 소스 간 순위는 도메인 근접도가 결정)으로 설명. 주의: PSP는 keypoint AP·사람 1클래스, 2402.06784는 1클래스 어류 — 우리 다클래스 mAP50과 직접 수치 비교는 불가하고 '경향 곡선'만 인용할 것.
+
+### 3. 디퓨전 생성/정제 데이터의 검출 증강 2023→2026 — X-Paste 이후 계보와 우리 '정제' 단계의 위치
+
+| 논문 | 연도 | ID | 검증 | 관련성 |
+|---|---|---|---|---|
+| DiverGen: Improving Instance Segmentation by Learning Wider Data Distribution wi | 2024 | arXiv:2405.10185 | O | X-Paste 직계 후속이자 최초의 명시적 추월: LVIS에서 X-Paste 대비 +1.1 box/+1.1 mask AP, 희소 클래스 +1.9 box/+2.5 mask. 핵심 주장은 '다양성(카테고리·프롬프트·생성모델)이 스케일링을 지속시킨다' — 생성 데이터를 수백만 장까지 늘려도 성능 향상 추세 유지. X-Paste 대비 생성 비용 문제(4.3배 GPU시간)도 지적. |
+| DiffusionEngine: Diffusion Model is Scalable Data Engine for Object Detection (P | 2023 | arXiv:2309.03893 | O | 디퓨전을 '검출 데이터 엔진'으로 쓰는 대표작. Detection-Adapter로 생성과 동시에 박스 라벨 획득. DINO 기반 검출기에서 COCO +3.1, VOC +7.6, Clipart(도메인 시프트) +11.5 mAP. 도메인 갭이 클수록 이득이 커지는 패턴 — 우리 4-arm +7.2pp가 이 대역(+3.1~+11.5)의 한가운데라는 맥락화에 사용 가능. |
+| Synthetic Object Compositions for Scalable and Accurate Learning in Detection, S | 2025 | arXiv:2510.09110 | O | 2025년형 object-centric 합성: 디퓨전 세그먼트 + 3D 기하 레이아웃/카메라 증강 + 생성적 harmonization. 합성 10만장만으로 LVIS +10.9 AP, Copy-Paste·X-Paste·SynGround·SegGen 모두 추월. 저데이터 세팅(1% COCO)에서 +6.59 AP — 소량 실사 구간에서의 합성 이득이라는 점에서 우리와 접점. |
+| Gen-n-Val: Agentic Image Data Generation and Validation | 2025 | arXiv:2506.04676 | O | 2025-2026 트렌드 '생성 후 검증': LLM 프롬프트 에이전트 + VLM 품질 검증 에이전트로 무효 합성 데이터를 50%→7%로 감축(MosaicFusion 대비). LVIS 희소 클래스 +7.6 mAP(Mask R-CNN), YOLO-Worldv2 대비 +7.1 mAP. '생성량보다 검증·필터링이 성능을 결정한다'는 우리 디퓨전 정제 단계의 최신 방증. |
+| Do We Need All the Synthetic Data? Targeted Image Augmentation via Diffusion Mod | 2025 | arXiv:2505.21574 | O | 전량 증강보다 학습 초기에 못 배우는 30~40% 샘플만 선택적 디퓨전 증강이 우수(최대 +2.8%, 10~30배 데이터 확장 대비 저비용). 주의: 주 실험은 분류(CIFAR/TinyImageNet/ImageNet, ResNet~Swin)이고 검출은 부차적 — 검출 수치로 직접 인용하지 말고 '선택적 생성' 원리 인용에 한정. |
+| REGEN: Real-Time Photorealism Enhancement in Games via a Dual-Stage Generative N | 2025 | arXiv:2508.17061 | O | 게임엔진 렌더 이미지의 사실감 향상(photorealism enhancement) 계보의 2025년판 — 우리 'UE5 CitySample 렌더→디퓨전 정제'와 문제 설정이 가장 가까운 계열. 비페어드 번역으로 만든 출력을 경량 페어드 모델에 증류해 12배 고속화·시간적 일관성 유지. CARLA를 FLUX 계열 디퓨전 출력으로 번역하는 실험도 진행 중이며 디퓨전의 시맨틱 불안정(차량 색 변화 등)을 명시 — 우리가 디퓨전 정제에서 라벨-픽셀 정합을 지킨 방법을 차별점으로 세울 수 있음. |
+| Preserve the Hard, Regenerate the Rest: Uncertainty-Guided Synthetic Training Da | 2026 | arXiv:2606.31603 | O | 2026년 최신 '정제' 철학: 예측 엔트로피로 불확실 영역을 찾아 그 부분은 보존하고 주변 맥락만 디퓨전 인페인팅으로 재생성, 라벨은 원본 유지. 과제는 시맨틱 분할(Cityscapes/UAVID/BDD100K, mIoU)이라 검출 수치 비교는 불가 — '라벨 안전 디퓨전 재생성'이라는 개념 인용용. |
+| ODGEN (도메인 특화 저데이터 디퓨전 생성) | 2024 | arXiv:2405.15199 | O | 3번 주제에서의 역할: 실사 200장만으로 디퓨전을 도메인에 파인튜닝해 5,000장을 생성하는 '저데이터 도메인 특화 생성'의 대표 수치(위 표 참조). COCO-2014에서도 기존 방법 대비 최대 +5.6 mAP@50:95. |
+
+**시사점**: X-Paste(ICML 2023) 이후 계보는 세 갈래로 정리된다: (1) 다양성·스케일 — DiverGen(수백만 장 스케일링 지속), SOC(10만장 고품질 구성으로 X-Paste 추월), (2) 생성-라벨 동시 획득 엔진 — DiffusionEngine, GeoDiffusion, ODGEN, (3) 2025-2026의 지배적 전환인 '선별과 정제' — Gen-n-Val(VLM 검증으로 무효율 50%→7%), TADA(30-40%만 선택 증강), Preserve-the-Hard(라벨 보존 인페인팅). 우리 파이프라인(UE5 절차 생성→디퓨전 정제)은 (3)의 흐름에 정확히 부합하되, '순수 생성'이 아니라 '시뮬레이터 렌더의 사실감 정제'라는 점에서 REGEN/photorealism-enhancement 계보와 교차하는 독자 위치 — 이 교차점(기하·라벨은 엔진이 보증, 외观은 디퓨전이 정제)을 관련연구 절의 프레임으로 쓸 것. 우리 4-arm +7.2pp는 DiffusionEngine의 +3.1(COCO)~+11.5(Clipart), ODGEN의 도메인별 +2.5~+25.3 대역 안에 있어 '문헌 정합적' 수치로 제시 가능. 함정: 이 계보 수치 다수가 LVIS mask AP·mAP@50:95·mIoU 등 이종 지표이며, 벤치마크도 대용량(LVIS/COCO)이라 우리 소규모 실사 평가셋과 절대 비교는 금물 — 상대 이득(pp)과 조건(도메인 갭, 실사 N)만 병렬 배치할 것.
+
+### 권고
+
+1. 논문의 수치 맥락화 표를 3축(실사 N / 지표 / 이득 pp)으로 구성하라: OzFish 50장 0.024→0.48(mAP, 바닥 베이스라인), ODGEN 200장 +2.5~+25.3(mAP50:95), 과일검출 50장 +0(천장), 캠퍼스폐기물 86장 음수(저품질 증강), 그 안에 우리 '25장 53.7→75.1 mAP50(+21.4pp)'을 배치 — 우리 수치는 강한 편이지만 '큰 도메인 갭 + 비천장 베이스라인' 대역의 문헌 정합적 값임을 보인다.
+2. COCO 대조군 해석은 Zoph et al.(arXiv:2006.06882) 프레임으로 열어라: 사전학습 가치는 저데이터 구간에 응축되므로 N=25에서 사전학습 소스 간 순위가 극대화된다. 이어서 PeopleSansPeople(641장에서 합성이 ImageNet에 +22.5, 전량에서 +1.1)과 2402.06784(생성 사전학습이 실사 300장으로 COCO 사전학습에 도달)를 '합성이 이기는 조건 = 저N + 큰 도메인 근접도 격차'의 근거로 인용하라. 단 우리 도심 차량·보행자 도메인은 COCO와 겹치므로 COCO 대조군이 선전해도 문헌과 모순이 아니다.
+3. 관련연구 절의 디퓨전 파트는 X-Paste 이후 3갈래 계보(다양성·스케일: DiverGen/SOC, 생성 엔진: DiffusionEngine/ODGEN, 선별·정제: Gen-n-Val/TADA/Preserve-the-Hard)로 구조화하고, 우리 파이프라인을 '정제 갈래 × photorealism-enhancement(REGEN) 계보의 교차점'으로 자리매김하라 — 기하·라벨은 UE5가 보증하고 외관만 디퓨전이 정제한다는 라벨-안전성 논거가 차별점이다. 4-arm +7.2pp는 DiffusionEngine +3.1~+11.5 대역 내 수치로 병기하라.
+4. 비교 함정을 표 각주로 명시하라: (1) mAP50 vs mAP50:95 vs keypoint AP vs mask AP는 환산 불가, (2) FSOD의 K-shot은 클래스당 장수·우리는 총 장수, (3) COCO 초기화 여부가 합성 이득 크기를 지배(scratch +38 vs COCO-init 0), (4) in-domain 평가와 domain-shift 평가를 구분, (5) 합성 데이터 규모(5천~수백만 장)가 논문마다 3자릿수 차이.
+5. 부정 결과 인용을 빼먹지 마라: 캠퍼스 폐기물(arXiv:2607.19535, 실사 86장에서 모든 저품질 증강이 실사 단독 0.691 mAP50 이하)과 Gen-n-Val의 '무효 합성 50%' 통계는 '합성은 양이 아니라 품질·검증이 결정한다'는 우리 디퓨전 정제 단계의 존재 이유를 문헌으로 뒷받침한다.
+6. 인용 전 재확인 2건: arXiv:2006.05015의 '1% 실사 48.23 mAP(+6.08)'과 arXiv:2208.04268의 '82.05 AP' 수치는 검색 스니펫 기반이므로 본문 표에서 세팅(백본·평가셋)을 확인한 뒤 인용하라. 나머지 수치는 원문(초록/본문 표)에서 직접 확인했다.
