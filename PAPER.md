@@ -400,7 +400,27 @@ gymnasium 벡터래퍼 SAME_STEP 미지원 / AsyncVectorEnv 시드 배분과 시
 체크포인트 타임라인(300s 간격)으로 사후 복원 가능 — 벽시계 실험엔 주기 체크포인트가
 프로토콜 보험이다.
 
-## 부록 B. 참고문헌 (URL 은 2026-08-21 실존 검증)
+## 참고문헌 (구 부록 B — 형식: 독립 요소로 승격, 2026-08-27 구조 진단 반영. URL 은 arXiv 실존 검증)
+
+**착취·진단·보고 표준 (§2.4-2.5 신설분, 2026-08-26~27 검증 추가)**
+- Lehman et al., *The Surprising Creativity of Digital Evolution*, 2018. arXiv:1803.03453
+- Muratore et al., *Assessing Transferability… (SPOTA/SOB)*, TPAMI 2021. arXiv:1907.04685
+- Kadian et al., *Sim2Real Predictivity*, RA-L 2020. arXiv:1912.06321
+- Truong et al., *Rethinking Sim2Real*, CoRL 2022. arXiv:2207.10821
+- Gao et al., *Scaling Laws for Reward Model Overoptimization*, ICML 2023. arXiv:2210.10760
+- Pan, Bhatia, Steinhardt, *The Effects of Reward Misspecification*, ICLR 2022. arXiv:2201.03544
+- Li et al., *SIMPLER (MMRV)*, CoRL 2024. arXiv:2405.05941
+- *Policy-Aware Simulator Learning*, 2026. arXiv:2605.29032
+- Zhang et al., *A Study on Overfitting in Deep RL*, 2018. arXiv:1804.06893
+- Lambert et al., *Objective Mismatch in MBRL*, L4DC 2020. arXiv:2002.04523
+- Henderson et al., *Deep RL that Matters*, AAAI 2018. arXiv:1709.06560
+- Colas et al., *How Many Random Seeds?*, 2018. arXiv:1806.08295
+- Agarwal et al., *Statistical Precipice (rliable)*, NeurIPS 2021. arXiv:2108.13264
+- *AdaStop*, TMLR 2024. arXiv:2306.10882
+- Rudin et al., *Learning to Walk in Minutes*, CoRL 2021. arXiv:2109.11978
+- Kazemkhani et al., *GPUDrive*, ICLR 2025. arXiv:2408.01584
+
+**처리량·벽시계 (§2.1)**
 
 **처리량·벽시계 (§2.1)**
 - Petrenko et al., *Sample Factory*, ICML 2020. arXiv:2006.11751
