@@ -55,12 +55,23 @@ def build_seg(dev="cuda"):
 
 @torch.no_grad()
 def seg_map(proc, seg, img):
+    """SAM 스타일: 클래스 단색이 아니라 연결요소(인스턴스 근사)별 랜덤 고채소색 —
+    union 의 학습 분포(MobileSAM 마스크)에 정합 (1차 A/B 기각 원인 교정, 2026-08-27)."""
+    from scipy import ndimage
+    import colorsys
     inp = proc(images=img, return_tensors="pt").to("cuda")
     lab = torch.nn.functional.interpolate(
         seg(**inp).logits, size=img.size[::-1], mode="bilinear").argmax(1)[0].cpu().numpy()
     out = np.zeros((*lab.shape, 3), dtype=np.uint8)
-    for cid, col in PALETTE.items():
-        out[lab == cid] = col
+    rng = np.random.default_rng(11)
+    for cid in np.unique(lab):
+        comp, n = ndimage.label(lab == cid)
+        for k in range(1, n + 1):
+            m = comp == k
+            if m.sum() < 400:
+                continue
+            col = tuple(int(c * 255) for c in colorsys.hsv_to_rgb(rng.uniform(), 0.9, 0.95))
+            out[m] = col
     return Image.fromarray(out)
 
 
