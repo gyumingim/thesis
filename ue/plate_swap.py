@@ -10,8 +10,8 @@ import sys
 
 import unreal
 
-BASE_TEX = "/Game/Vehicle/_Shared/Textures/T_LicensePlate_C"
-PARENT_MI = "/Game/Vehicle/_Shared/Materials/MI_Veh_LicensePlate"
+BASE_TEX = "/Game/Vehicle/Texture/LicensePlate/T_LicensePlate_C"
+PARENT_MI = "/Game/Vehicle/Material/MI/MI_Veh_LicensePlate"  # probe 실측 공용 부모
 OUT_DIR = "C:/ue/plate"
 N_TEX = 24
 
@@ -31,7 +31,10 @@ def probe():
         log(klass.__name__, found)
     mesh = unreal.load_asset("/Game/Vehicle/vehCar_vehicle02/Mesh/SM_vehCar_vehicle02")
     if mesh:
-        log("슬롯:", [str(n) for n in mesh.get_material_slot_names()])
+        log("슬롯:", [str(m.material_slot_name) for m in mesh.static_materials])
+    mi = unreal.load_asset("/Game/Vehicle/vehCar_vehicle02/Material/M_veh_licensePlate")
+    if mi:
+        log("부모:", mi.get_editor_property("parent"))
 
 
 def make_pngs(base_png):
@@ -93,8 +96,10 @@ def import_and_mic():
 
 
 def apply(frm, to):
-    base = export_base()
-    make_pngs(base)
+    import os
+    if not os.path.exists(f"{OUT_DIR}/png/plate_00.png"):
+        # UE 파이썬엔 PIL 이 없다 — PNG 는 시스템 파이썬에서 미리 생성 (아래 실행 순서 참조)
+        log("PNG 미생성 — 시스템 파이썬으로 make_pngs 를 먼저 실행하라"); return
     mics = import_and_mic()
     import random
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
@@ -113,10 +118,11 @@ def apply(frm, to):
             mesh = comp.static_mesh
             if not mesh or "veh" not in str(mesh.get_name()).lower():
                 continue
-            slots = [str(x) for x in mesh.get_material_slot_names()]
-            if "veh_licensePlate" in slots:
-                comp.set_material(slots.index("veh_licensePlate"), rnd.choice(mics))
-                n += 1
+            slots = [str(m.material_slot_name) for m in mesh.static_materials]
+            for si, sn in enumerate(slots):
+                if "licenseplate" in sn.lower():
+                    comp.set_material(si, rnd.choice(mics))
+                    n += 1
         les.save_current_level()
         log(f"gen_{idx}: 차량 {n}대 번호판 적용")
     log("PLATE_APPLY_DONE")
@@ -126,5 +132,53 @@ if __name__ == "__main__":
     args = sys.argv[1:] if len(sys.argv) > 1 else ["probe"]
     if args[0] == "probe":
         probe()
+    elif args[0] == "magenta":     # 마스크 패스: 전 번호판을 마젠타 MIC 로 (원복은 apply 재실행)
+        import random
+        mic = unreal.load_asset("/Game/GenScenes/PlateTex/MIC_plate_magenta")
+        les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+        actors_ss = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+        for idx in range(int(args[1]), int(args[2]) + 1):
+            path = f"/Game/GenScenes/gen_{idx}"
+            if not unreal.EditorAssetLibrary.does_asset_exist(path):
+                continue
+            les.load_level(path)
+            n = 0
+            for a in actors_ss.get_all_level_actors():
+                if not isinstance(a, unreal.StaticMeshActor):
+                    continue
+                comp = a.static_mesh_component
+                mesh = comp.static_mesh
+                if not mesh:
+                    continue
+                for si, m in enumerate(mesh.static_materials):
+                    if "licenseplate" in str(m.material_slot_name).lower():
+                        comp.set_material(si, mic); n += 1
+            les.save_current_level()
+            log(f"gen_{idx}: 마젠타 {n}")
+        log("MAGENTA_DONE")
+    elif args[0] in ("white", "revert"):   # 마스크 패스용 일괄 교체/원복
+        wm = unreal.load_asset("/Game/GenScenes/MaskMat/M_mask_white")
+        les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+        actors_ss = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+        for idx in range(int(args[1]), int(args[2]) + 1):
+            path = f"/Game/GenScenes/gen_{idx}"
+            if not unreal.EditorAssetLibrary.does_asset_exist(path):
+                continue
+            les.load_level(path)
+            n = 0
+            for a in actors_ss.get_all_level_actors():
+                if not isinstance(a, unreal.StaticMeshActor):
+                    continue
+                comp = a.static_mesh_component
+                mesh = comp.static_mesh
+                if not mesh:
+                    continue
+                for si, m in enumerate(mesh.static_materials):
+                    if "licenseplate" in str(m.material_slot_name).lower():
+                        comp.set_material(si, wm if args[0] == "white" else m.material_interface)
+                        n += 1
+            les.save_current_level()
+            log(f"gen_{idx}: {args[0]} {n}")
+        log(f"{args[0].upper()}_DONE")
     else:
         apply(int(args[1]), int(args[2]))
