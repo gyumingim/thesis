@@ -10,13 +10,13 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-OUT = "C:/ue/out_prod/fin_refined_v2"
+OUT = "C:/ue/out_prod/fin_v3"
 os.makedirs(OUT, exist_ok=True)
 stats = []
 for f in sorted(glob.glob("C:/ue/out_cs2/scene_[2345][0-9][0-9].png")):
     i = os.path.basename(f)[6:-4]
     wp = f"C:/ue/out_wp/white_{i}.png"
-    fr = f"C:/ue/out_prod/fin_refined/scene_{i}.jpg"
+    fr = f"C:/ue/out_g6full/fin_ds/scene_{i}.jpg"
     fp = f"C:/ue/out_prod/fin_plain/scene_{i}.jpg"
     if not (os.path.exists(wp) and os.path.exists(fr) and os.path.exists(fp)):
         continue
