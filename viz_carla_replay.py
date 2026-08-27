@@ -43,6 +43,25 @@ def to_carla(x, y, yaw, center, theta_deg, sim_center):
                            carla.Rotation(yaw=cyaw))
 
 
+def make_gif(out_dir, prefix, width=720):
+    """PNG 시퀀스 → GIF (PIL 있을 때만)."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+    import glob as _g
+    files = sorted(_g.glob(os.path.join(out_dir, f"{prefix}_*.png")))
+    if len(files) < 2:
+        return
+    ims = []
+    for f in files:
+        im = Image.open(f).convert("RGB")
+        ims.append(im.resize((width, int(im.height * width / im.width))))
+    ims[0].save(os.path.join(out_dir, f"{prefix}.gif"), save_all=True,
+                append_images=ims[1:], duration=140, loop=0)
+    print("GIF:", os.path.join(out_dir, f"{prefix}.gif"), len(ims), "프레임")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rollout", default="C:/carla/rollout.json")
@@ -74,8 +93,16 @@ def main():
     print(f"교차로 id={jid} arms={arms} center=({center.x:.1f},{center.y:.1f}) yaw={theta:.1f}")
 
     bl = world.get_blueprint_library()
-    ego_bp = bl.filter("vehicle.*")[0]
-    npc_bps = [b for b in bl.filter("vehicle.*")][1:6]
+    def pick(*names):
+        for n in names:
+            got = bl.filter(n)
+            if got:
+                return got[0]
+        return bl.filter("vehicle.*")[0]
+    ego_bp = pick("vehicle.tesla.model3", "vehicle.lincoln.mkz*", "vehicle.audi.tt")
+    if ego_bp.has_attribute("color"):
+        ego_bp.set_attribute("color", "10,80,220")        # ego 는 파란 세단 (식별용)
+    npc_bps = [b for b in bl.filter("vehicle.*") if "bike" not in b.id and "motor" not in b.id][:8]
     max_npc = max(len(f["npc"]) for f in frames)
 
     actors = []
@@ -100,8 +127,12 @@ def main():
     cam_bp.set_attribute("fov", "90")
     chase = world.spawn_actor(cam_bp, carla.Transform(
         carla.Location(x=-7.0, z=3.6), carla.Rotation(pitch=-13)), attach_to=ego)
+    # 탑다운은 궤적 전체(진입로 60m 포함)를 담도록 높이를 자동 산정
+    span = max(max(abs(f["ego"][0] - sim_center[0]) for f in frames),
+               max(abs(f["ego"][1] - sim_center[1]) for f in frames)) + 20
+    top_z = max(60.0, span / math.tan(math.radians(45)))
     top = world.spawn_actor(cam_bp, carla.Transform(
-        carla.Location(x=center.x, y=center.y, z=center.z + 55),
+        carla.Location(x=center.x, y=center.y, z=center.z + top_z),
         carla.Rotation(pitch=-90, yaw=theta)))
     actors += [chase, top]
     qc, qt = queue.Queue(), queue.Queue()
@@ -122,6 +153,7 @@ def main():
                 ic.save_to_disk(f"{a.out}/chase_{i:04d}.png")
                 it.save_to_disk(f"{a.out}/top_{i:04d}.png")
         print("촬영 완료:", len(frames) // a.stride, "쌍 →", a.out)
+        make_gif(a.out, "chase"); make_gif(a.out, "top")
     finally:
         chase.stop(); top.stop()
         for x in actors:
