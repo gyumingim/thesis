@@ -63,6 +63,41 @@ def main():
         ("피크 체크포인트", "t000300.pt", peak_ck[1]),
         ("경합 조건 전이", "67.8", "%.1f" % np.mean(finals("bench_results/fixed/eval_md__fix_s*.json"))),
     ]
+
+    # 정숙 조건 in-domain (§4.7 통제 확인)
+    ind = []
+    for f in sorted(glob.glob("bench_results/clean/eval_cu__clean_s*.json")):
+        d = json.load(open(f))
+        d = d if isinstance(d, list) else [d]
+        ind += [100 * r["success_rate"] for r in d]
+    if ind:
+        checks.append(("정숙 in-domain", "82.8", "%.1f" % np.mean(ind)))
+
+    # 실패 모드 추세의 종점 (final.pt 제외 — tools/failure_mode_trend.py 와 동일 범위)
+    def mean_at(ck, field):
+        vals = []
+        for f in sorted(glob.glob("bench_results/clean/eval_md__clean_s*.json")):
+            hit = [r for r in json.load(open(f)) if r["ckpt"] == ck]
+            if hit:
+                vals.append(100 * hit[0][field])
+        return np.mean(vals) if vals else float("nan")
+    checks += [
+        ("이탈 시작(t300)", "8.9", "%.1f" % mean_at("t000300.pt", "out_of_road_rate")),
+        ("이탈 종점(t3300)", "27.8", "%.1f" % mean_at("t003300.pt", "out_of_road_rate")),
+        ("충돌 시작(t300)", "32.2", "%.1f" % mean_at("t000300.pt", "crash_rate")),
+        ("충돌 종점(t3300)", "25.6", "%.1f" % mean_at("t003300.pt", "crash_rate")),
+        ("이탈 final 포함시", "18.9", "%.1f" % mean_at("final.pt", "out_of_road_rate")),
+    ]
+
+    # 처리량 실현 배수 (데스크톱 정숙): 경량 136M vs 같은 장비 네이티브 2.17M
+    try:
+        cl = [r for r in json.load(open("bench_results/clean/eval_md__clean_s1.json"))
+              if r["ckpt"] == "final.pt"][0]["global_step"]
+        nd = [r for r in json.load(open("bench_results/desktop/eval_md__dt_md__1.json"))
+              if r["ckpt"] == "final.pt"][0]["global_step"]
+        checks.append(("데스크톱 실현 배수", "62.6", "%.1f" % (cl / nd)))
+    except Exception:
+        pass
     bad = 0
     for name, expected, actual in checks:
         ok = expected == actual
@@ -75,7 +110,13 @@ def main():
     for pat, why in ((r"통계적 동률", "정정 후 동률이 아니다"),
                      (r"statistically on par", "영문 초록의 동률 주장"),
                      (r"성능 손실 없이", "처리량이 성능으로 무손실 환산된다는 주장"),
-                     (r"15분 피크 60", "피크는 5분 58.9% 다")):
+                     (r"15분 피크 60", "피크는 5분 58.9% 다"),
+                     (r"4배 (이상|넘게) 과장", "격차 기준 과장 배수는 3.56 이다"),
+                     (r"28x as realized", "실현 배수는 62.6× (데스크톱 정숙)"),
+                     (r"statistically on par", "영문 초록의 동률 주장"),
+                     (r"동일 하드웨어·동일 시간 예산", "헤드라인 비교는 장비 교차다"),
+                     (r"carla_policy_ab\.sh", "스윕 스크립트 이름은 carla_seed_sweep.sh"),
+                     (r"rejection of three\s+remedies", "세 처방 중 둘만 기각됐다")):
         for m in re.finditer(pat, text):
             line = text[:m.start()].count(chr(10)) + 1
             print("  잔존 표현 %-18s (L%d) — %s" % (pat, line, why)); bad += 1
