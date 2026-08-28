@@ -427,11 +427,14 @@ CARLA 의 노변 주차 차량은 액터가 아니라 레벨 지오메트리(`ge
 | 경량(최종 R6) | 1,024env | ~959K–1.0M |
 | **격차 (공정)** | 1,002,242 / 6,965 | **144×** (완성 환경 기준; 최종 R6 환경 959K 기준 138×) |
 | 학습 포함 (노트북) | custom 72K vs MetaDrive 1.36K | 53× (동일 1시간 샘플) |
-| **학습 포함 (확정 본판 실측, 데스크톱 정숙)** | custom 37.8K(136M steps) vs 네이티브 604(2.17M steps) | **62.6×** |
+| 학습 포함 (데스크톱, ⚠ 분모 경합 의심) | custom 37.8K(136M steps) vs 네이티브 604(2.17M steps) | 62.6× — **잠정** |
 
 **층위와 장비를 구분한다.** 138~144배는 학습 루프 없는 순수 환경 스텝 비이고(138배가
-최종 R6 환경, 144배가 V=16 완성 환경), 53배(노트북)와 **62.6배(데스크톱 정숙)**는 학습을
-포함한 실현 비율로 **같은 층위의 서로 다른 장비 값**이다. 두 장비의 절대 SPS 가 크게 다른데
+최종 R6 환경, 144배가 V=16 완성 환경), 53배(노트북)와 62.6배(데스크톱)는 학습을
+포함한 실현 비율로 **같은 층위의 서로 다른 장비 값**이다. 다만 62.6배의 분모인 데스크톱
+네이티브(604 SPS)는 경합 구간에서 얻은 값으로 판단된다 — 같은 장비의 정숙 조건 재측정에서
+1,059 SPS(+76%)가 나오고 있다(§7). 정숙 분모로 다시 계산하면 이 배수는 **약 36배**로
+내려가므로, 62.6배는 잠정치로만 읽어야 한다(docs/HARDWARE_CONFOUND.md). 두 장비의 절대 SPS 가 크게 다른데
 (경량 72K vs 37.8K, MetaDrive 1,360 vs 604) — 데스크톱이 경량 시뮬에서도 MetaDrive 에서도
 느리다 — 그 원인(코어 수·메모리 대역·백그라운드 부하)은 본 연구가 통제하지 못한 요인이며
 §7 의 한계로 둔다. 어느 층위에서도 이 우위가 전이 성능으로 온전히 환산되지 않는다는 점이
@@ -864,6 +867,11 @@ MetaDrive 전이를 절반 가까이 떨어뜨렸다. 이유는 §4 의 정합 �
   30ep)로 격차가 4.4pp 까지 좁혀지며, 이는 시드 표준편차(20.4%p) 안에 완전히 들어간다.
   단, 데스크톱 네이티브는 같은 1시간에 2.17M steps(604 SPS)만 모아 노트북 네이티브
   (~4.9M steps, 1,360 SPS)의 절반에 못 미치므로, 53.3% 를 장비 효과만으로 읽을 수 없다.
+  실제로 같은 데스크톱에서 정숙 조건으로 재측정 중인 네이티브는 **1,059 SPS(+76%)**로
+  돌고 있어, 53.3% 는 경합으로 표본이 깎인 값일 가능성이 높다. 그렇다면 정숙 조건 동일 장비
+  네이티브는 53.3% 보다 높을 것이고 **격차 4.4pp 는 과소추정**이다 — 이 교락은 본 논문의
+  결론을 약화하는 방향이 아니라 강화하는 방향으로 작용할 수 있다
+  (근거·해소 계획: docs/HARDWARE_CONFOUND.md).
   또한 같은 장비의 경량 전이는 조건에 따라 48.9%(정숙)와 67.8%(경합) 사이에서 움직여
   **동일 장비 대조로도 우열이 조건에 종속된다**. 따라서 "경량이 네이티브에 미치지 못한다"는
   **점추정 방향의 잠정 판정**이며, 확정하려면 동일 장비 다시드 네이티브 기준선이 필요하다
@@ -1007,7 +1015,8 @@ wall-clock budget on the same hardware — a cross-simulator fixed-time protocol
 we find no direct precedent. After layer-by-layer calibration (observation, dynamics,
 termination semantics, geometry), the calibrated environment steps 138x faster than
 MetaDrive without a learning loop (144x for the fully featured V=16 build), and the
-headline run realized 62.6x end-to-end including training. Zero-shot transfer from the
+headline run realized roughly 36-63x end-to-end including training -- the range reflects an
+unresolved confound in the desktop native denominator (see 7). Zero-shot transfer from the
 lightweight simulator reaches 48.9%+/-20.4%
 success against 68%+/-9% for native training -- a point-estimate shortfall rather than the
 parity we first reported: the throughput advantage does not convert losslessly into
