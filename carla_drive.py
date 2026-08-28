@@ -175,9 +175,23 @@ def route_from(wp, n=60, step=4.0):
 
 
 class ObsBuilder:
-    def __init__(self, world, ego, route):
+    # CARLA 의 주차 차량은 액터가 아니라 레벨 지오메트리다(get_level_bbs). 액터만 보면
+    # 관측에서 통째로 빠져 정책이 존재를 모른 채 충돌한다(실측: static.car 충돌 다수).
+    LEVEL_BBS = None
+
+    def __init__(self, world, ego, route, max_slots=3):
+        self.max_slots = max_slots
         self.world, self.ego, self.route = world, ego, route
         self.map = world.get_map()
+        if ObsBuilder.LEVEL_BBS is None:
+            bbs = []
+            for lab in ("Car", "Truck", "Bus"):
+                try:
+                    bbs += list(world.get_level_bbs(getattr(carla.CityObjectLabel, lab)))
+                except Exception:
+                    pass
+            ObsBuilder.LEVEL_BBS = bbs
+            print(f"   레벨 정적 차량 BB {len(bbs)}개를 장애물 관측에 포함")
         self.prev_yaw = math.radians(ego.get_transform().rotation.yaw)
         self.last_act = np.zeros(2, np.float32)
         self.idx = 0
@@ -298,14 +312,19 @@ class ObsBuilder:
                 d = math.hypot(q.x - p.x, q.y - p.y)
                 if d <= DR:
                     cands.append((d, a, q))
+        for bb in (ObsBuilder.LEVEL_BBS or []):
+            q = bb.location
+            d = math.hypot(q.x - p.x, q.y - p.y)
+            if d <= DR:
+                cands.append((d, None, q))
         cands.sort(key=lambda t: t[0])
-        for k, (d, a, q) in enumerate(cands[:8]):
+        # 학습 밀도(V=3)에서 슬롯 4~8 은 항상 0 이었다(분산 0). CARLA 의 주차 차량으로
+        # 그 슬롯을 채우면 미학습 입력이 되어 정책이 붕괴한다(실측 95%->0%). §5 지지집합.
+        for k, (d, a, q) in enumerate(cands[:self.max_slots]):
+            _static = a is None
             b = 19 + 4 * k
             fwd, left = prj(q.x - p.x, q.y - p.y)
-            try:
-                av = a.get_velocity()
-            except Exception:
-                av = carla.Vector3D(0, 0, 0)
+            av = carla.Vector3D(0, 0, 0) if _static else a.get_velocity()
             dvx, dvy = (av.x - v.x) * 3.6, (av.y - v.y) * 3.6
             vf, vl = prj(dvx, dvy)
             obs[b] = clip01((fwd / DR + 1) / 2)
@@ -366,6 +385,36 @@ def run(a):
             prevs = win.previous(a.approach)
             if prevs:
                 anchors.append((prevs[0], kind, wout, win))
+    # 진입로가 정적 차량(주차)으로 막힌 앵커는 제외한다. 본 과제는 교차로 통과이며
+    # 주차차 회피는 학습 분포 밖 기동이다(실측: 거버너 ON 우회전 잔여 실패 5건 전부
+    # 진입로에서 static.car 와 40km/h 충돌).
+    blockers = []
+    for lab in ("Car", "Truck", "Bus"):
+        try:
+            blockers += [bb.location for bb in world.get_level_bbs(getattr(carla.CityObjectLabel, lab))]
+        except Exception:
+            pass
+    def _clear(w0):
+        cur = w0
+        for _ in range(22):                       # 45m 를 2m 간격으로
+            nxts = cur.next(2.0)
+            if not nxts:
+                break
+            cur = nxts[0]
+            c = cur.transform.location
+            r = cur.transform.get_right_vector()
+            for b in blockers:
+                dx, dy = b.x - c.x, b.y - c.y
+                if dx * dx + dy * dy > 100:
+                    continue
+                lat = abs(dx * r.x + dy * r.y)
+                if lat < 1.8:                     # 차로 폭 안에 정적 장애물
+                    return False
+        return True
+    before = len(anchors)
+    anchors = [x for x in anchors if _clear(x[0])] or anchors
+    print(f"진입로 클리어 필터: {before} -> {len(anchors)}")
+
     kinds = {}
     for _, k, _, _w in anchors:
         kinds[k] = kinds.get(k, 0) + 1
@@ -467,7 +516,7 @@ def run(a):
             if a.record:
                 try: q.get(timeout=5.0)
                 except Exception: pass
-        ob = ObsBuilder(world, ego, route)
+        ob = ObsBuilder(world, ego, route, max_slots=a.obs_slots)
         hist = []
         entry_spd, max_lat = None, 0.0
         j_entry = next((k for k, w in enumerate(route) if w.is_junction), len(route) - 1)
@@ -597,6 +646,8 @@ if __name__ == "__main__":
                     help="교차로 진입로 길이(m) — 학습 환경의 팔 길이 65m 와 맞춘다")
     ap.add_argument("--governor", type=float, default=0.8,
                     help="곡률 기반 속도 제한의 횡가속 한계(g). 0 이면 비활성")
+    ap.add_argument("--obs-slots", type=int, default=3,
+                    help="주변 장애물 관측 슬롯 수 — 학습 밀도(V=3)와 맞추는 것이 기본")
     ap.add_argument("--mask-degen", action="store_true",
                     help="학습 중 퇴화(분산 0) 차원을 학습값으로 고정 — §5 지지집합 처방")
     run(ap.parse_args())
