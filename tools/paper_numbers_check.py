@@ -112,7 +112,8 @@ def main():
               if r["ckpt"] == "final.pt"][0]["global_step"]
         nd = [r for r in json.load(open("bench_results/desktop/eval_md__dt_md__1.json"))
               if r["ckpt"] == "final.pt"][0]["global_step"]
-        checks.append(("데스크톱 실현 배수", "62.6", "%.1f" % (cl / nd)))
+        # 분모(데스크톱 네이티브)가 경합 구간 값이라 잠정치다 — 정숙 재측정 후 갱신할 것
+        checks.append(("데스크톱 실현 배수(잠정)", "62.6", "%.1f" % (cl / nd)))
     except Exception:
         pass
     bad = 0
