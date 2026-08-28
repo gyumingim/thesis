@@ -34,6 +34,67 @@ def junctions(world, k):
     return cand[:k]
 
 
+def cam_K(w, h, fov):
+    f = w / (2.0 * math.tan(math.radians(fov) / 2.0))
+    return [[f, 0, w / 2.0], [0, f, h / 2.0], [0, 0, 1.0]]
+
+
+def bbox_2d(actor, cam, K, w, h, max_m=70.0):
+    """액터의 3D 바운딩박스를 카메라 이미지 2D 박스로 투영 (없으면 None)."""
+    cam_tf = cam.get_transform()
+    inv = cam_tf.get_inverse_matrix()
+    verts = actor.bounding_box.get_world_vertices(actor.get_transform())
+    pts = []
+    for v in verts:
+        p = [v.x, v.y, v.z, 1.0]
+        c = [sum(inv[r][k] * p[k] for k in range(4)) for r in range(3)]   # UE: x전방 y우 z상
+        if c[0] <= 0.5 or c[0] > max_m:
+            continue
+        u = K[0][0] * (c[1] / c[0]) + K[0][2]
+        vv = K[1][1] * (-c[2] / c[0]) + K[1][2]
+        pts.append((u, vv))
+    if len(pts) < 4:
+        return None
+    xs, ys = [q[0] for q in pts], [q[1] for q in pts]
+    x1, y1, x2, y2 = max(min(xs), 0), max(min(ys), 0), min(max(xs), w), min(max(ys), h)
+    if x2 - x1 < 8 or y2 - y1 < 8:
+        return None
+    return [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)]
+
+
+def level_car_bbs(world):
+    """맵에 배치된 정적 차량(주차 차량 등)의 월드 바운딩박스 — GT 에 포함해야 공정하다."""
+    out = []
+    for lab in ("Car", "Truck", "Bus"):
+        try:
+            out += list(world.get_level_bbs(getattr(carla.CityObjectLabel, lab)))
+        except Exception:
+            pass
+    return out
+
+
+def bbox_2d_from_bb(bb, cam, K, w, h, max_m=70.0):
+    inv = cam.get_transform().get_inverse_matrix()
+    try:
+        verts = bb.get_world_vertices(carla.Transform())
+    except Exception:
+        return None
+    pts = []
+    for v in verts:
+        p = [v.x, v.y, v.z, 1.0]
+        c = [sum(inv[r][k] * p[k] for k in range(4)) for r in range(3)]
+        if c[0] <= 0.5 or c[0] > max_m:
+            continue
+        pts.append((K[0][0] * (c[1] / c[0]) + K[0][2], K[1][1] * (-c[2] / c[0]) + K[1][2]))
+    if len(pts) < 4:
+        return None
+    xs, ys = [q[0] for q in pts], [q[1] for q in pts]
+    x1, y1, x2, y2 = max(min(xs), 0), max(min(ys), 0), min(max(xs), w), min(max(ys), h)
+    if x2 - x1 < 8 or y2 - y1 < 8:
+        return None
+    return [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)]
+
+
 def to_carla(x, y, yaw, center, theta_deg, sim_center, dz=0.3):
     th = math.radians(theta_deg)
     dx, dy = x - sim_center[0], -(y - sim_center[1])
@@ -79,6 +140,10 @@ def main():
         ego_bp.set_attribute("color", "20,90,230")
     npc_pool = [b for b in bl.filter("vehicle.*")
                 if not any(x in b.id for x in ("bike", "motor", "firetruck", "carlacola", "ambulance", "dodge.charger"))]
+    VEH_TAGS = (14, 15, 16)      # CARLA 0.10 시맨틱 태그: 차/트럭/버스 (실측 확인)
+    seg_bp = bl.find("sensor.camera.semantic_segmentation")
+    for at, vv in (("image_size_x", a.width), ("image_size_y", a.height), ("fov", 95)):
+        seg_bp.set_attribute(at, str(vv))
     cam_bp = bl.find("sensor.camera.rgb")
     cam_bp.set_attribute("image_size_x", str(a.width))
     cam_bp.set_attribute("image_size_y", str(a.height))
@@ -109,10 +174,16 @@ def main():
                 v.set_simulate_physics(False); npcs.append(v)
         cam = world.spawn_actor(cam_bp, carla.Transform(
             carla.Location(x=-6.5, z=3.2), carla.Rotation(pitch=-12)), attach_to=ego)
-        q = queue.Queue(); cam.listen(q.put)
-        lanes.append(dict(k=k, ep=ep, center=center, theta=theta, ego=ego, npcs=npcs, cam=cam, q=q))
-        actors += [ego, cam] + npcs
+        seg = world.spawn_actor(seg_bp, carla.Transform(
+            carla.Location(x=-6.5, z=3.2), carla.Rotation(pitch=-12)), attach_to=ego)
+        q, qs = queue.Queue(), queue.Queue()
+        cam.listen(q.put); seg.listen(qs.put)
+        lanes.append(dict(k=k, ep=ep, center=center, theta=theta, ego=ego, npcs=npcs,
+                          cam=cam, q=q, seg=seg, qs=qs))
+        actors += [ego, cam, seg] + npcs
 
+    LEVEL_BBS = level_car_bbs(world)
+    print("레벨 정적 차량 박스:", len(LEVEL_BBS))
     n_frames = max(len(l["ep"]["frames"]) for l in lanes)
     logs = {f"ep{l['k']}": [] for l in lanes}
     try:
@@ -130,11 +201,36 @@ def main():
             world.tick()
             for l in lanes:
                 img = l["q"].get(timeout=20.0)
+                simg = l["qs"].get(timeout=20.0)
                 frs = l["ep"]["frames"]
                 fr = frs[min(i, len(frs) - 1)]
                 if i % a.stride == 0:
                     img.save_to_disk(f"{a.out}/ep{l['k']}_{i:04d}.png")
-                    logs[f"ep{l['k']}"].append(dict(
+                    K = cam_K(a.width, a.height, 95.0)
+                    gt = [b for b in (bbox_2d(v, l["cam"], K, a.width, a.height)
+                                      for v in l["npcs"]) if b]
+                    import numpy as _np
+                    tags = _np.frombuffer(simg.raw_data, dtype=_np.uint8).reshape(
+                        simg.height, simg.width, 4)[:, :, 2]
+                    cam_loc = l["cam"].get_transform().location
+                    for bb in LEVEL_BBS:
+                        if bb.location.distance(cam_loc) > 70:
+                            continue
+                        qb = bbox_2d_from_bb(bb, l["cam"], K, a.width, a.height)
+                        if qb:
+                            gt.append(qb)
+                    # 가시성 필터: 박스 안에 실제 차량 픽셀이 있어야 GT 로 인정 (가림 제거)
+                    vis = []
+                    for b in gt:
+                        x1, y1, x2, y2 = (int(b[0]), int(b[1]), int(b[2]), int(b[3]))
+                        sub = tags[max(y1, 0):max(y2, 1), max(x1, 0):max(x2, 1)]
+                        if sub.size < 200:
+                            continue
+                        frac = float(_np.isin(sub, VEH_TAGS).mean())
+                        if frac >= 0.18:
+                            vis.append(b)
+                    gt = vis
+                    logs[f"ep{l['k']}"].append(dict(gt=gt,
                         i=i, speed=fr["ego"][3], act=fr.get("act", [0, 0]),
                         rew=fr.get("rew", 0.0), n_npc=fr.get("n_npc", len(fr["npc"])),
                         outcome=l["ep"]["outcome"],
@@ -143,8 +239,9 @@ def main():
         print("촬영 완료:", n_frames, "프레임 ×", len(lanes), "레인 →", a.out)
     finally:
         for l in lanes:
-            try: l["cam"].stop()
-            except Exception: pass
+            for key in ("cam", "seg"):
+                try: l[key].stop()
+                except Exception: pass
         for x in actors:
             try: x.destroy()
             except Exception: pass

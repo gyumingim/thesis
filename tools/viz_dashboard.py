@@ -25,15 +25,45 @@ def font(sz):
         return ImageFont.load_default()
 
 
-def draw_panel(img, dets, log, k, fs):
-    """한 레인 패널: bbox + 로그 오버레이."""
+def iou(a, b):
+    ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
+    ix2, iy2 = min(a[2], b[2]), min(a[3], b[3])
+    iw, ih = max(ix2 - ix1, 0), max(iy2 - iy1, 0)
+    inter = iw * ih
+    ua = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / ua if ua > 0 else 0.0
+
+
+def match(dets, gts, thr=0.5):
+    """탐지-정답 그리디 매칭 → (TP 인덱스집합, FP, FN)."""
+    used, tp = set(), []
+    for i, dd in enumerate(sorted(range(len(dets)), key=lambda j: -dets[j][4])):
+        best, bj = 0.0, -1
+        for j, g in enumerate(gts):
+            if j in used:
+                continue
+            v = iou(dets[dd][:4], g)
+            if v > best:
+                best, bj = v, j
+        if best >= thr:
+            used.add(bj); tp.append(dd)
+    return set(tp), len(dets) - len(tp), len(gts) - len(used)
+
+
+def draw_panel(img, dets, log, k, fs, gts=None):
+    """한 레인 패널: GT(노랑) + 검출(초록/빨강) + 로그 오버레이."""
     d = ImageDraw.Draw(img, "RGBA")
-    for (x1, y1, x2, y2, conf) in dets:
-        d.rectangle([x1, y1, x2, y2], outline=(0, 220, 120), width=2)
-        lab = f"vehicle {conf:.2f}"
+    gts = gts or []
+    tp_idx, n_fp, n_fn = match(dets, gts)
+    for g in gts:                                   # 정답 박스 (노랑 점선 느낌)
+        d.rectangle(g, outline=(255, 205, 40), width=2)
+    for di, (x1, y1, x2, y2, conf) in enumerate(dets):
+        col = (0, 225, 120) if di in tp_idx else (255, 90, 90)
+        d.rectangle([x1, y1, x2, y2], outline=col, width=2)
+        lab = f"{conf:.2f}"
         w = d.textlength(lab, font=fs["s"])
-        d.rectangle([x1, max(y1 - 15, 0), x1 + w + 6, max(y1 - 15, 0) + 15], fill=(0, 220, 120, 220))
-        d.text((x1 + 3, max(y1 - 15, 0) + 1), lab, fill=(0, 40, 20), font=fs["s"])
+        d.rectangle([x1, max(y1 - 14, 0), x1 + w + 6, max(y1 - 14, 0) + 14], fill=col + (225,))
+        d.text((x1 + 3, max(y1 - 14, 0)), lab, fill=(10, 30, 15), font=fs["s"])
     # 로그 패널 (좌하단)
     H = img.height
     d.rectangle([0, H - 84, 250, H], fill=(12, 14, 18, 210))
@@ -42,7 +72,7 @@ def draw_panel(img, dets, log, k, fs):
         f"레인 {k+1} · t={log['i']:03d} · {log['outcome']}",
         f"조향 {st:+.2f}   가감속 {th:+.2f}",
         f"속도 {log['speed']*3.6:5.1f} km/h   보상 {log['rew']:+.2f}",
-        f"인식 차량 {len(dets)}대 (시뮬 NPC {log['n_npc']})",
+        f"인식 {len(dets)} / 정답 {len(gts)}  ·  적중 {len(tp_idx)} 오검 {n_fp} 미검 {n_fn}",
     ]
     for j, t in enumerate(lines):
         d.text((7, H - 80 + j * 18), t, fill=(235, 238, 245), font=fs["m"])
@@ -71,6 +101,7 @@ def main():
     model = YOLO(DET_W)
 
     frames_out = []
+    stat = {"tp": 0, "fp": 0, "fn": 0}
     idxs = sorted({l["i"] for l in logs[lanes[0]]})[::a.stride]
     for i in idxs:
         panels = []
@@ -89,7 +120,10 @@ def main():
                     continue
                 dets.append((x1, y1, x2, y2, float(b.conf[0])))
             lg = next((x for x in logs[lane] if x["i"] == i), logs[lane][-1])
-            panels.append(draw_panel(im, dets, lg, k, fs))
+            gts = lg.get("gt", [])
+            panels.append(draw_panel(im, dets, lg, k, fs, gts))
+            tps, fps, fns = match(dets, gts)
+            stat["tp"] += len(tps); stat["fp"] += fps; stat["fn"] += fns
         if len(panels) < 2:
             continue
         w, h = panels[0].size
@@ -97,7 +131,7 @@ def main():
         for j, p in enumerate(panels[:4]):
             sheet.paste(p, ((j % 2) * (w + 6), 34 + (j // 2) * (h + 6)))
         d = ImageDraw.Draw(sheet)
-        d.text((8, 6), "경량 시뮬 학습 정책 · CARLA 4개 교차로 동시 재현 · 합성데이터 학습 검출기 실시간 인식",
+        d.text((8, 6), "경량 시뮬 학습 정책 · CARLA 4개 교차로 동시 재현 · 합성 학습 검출기(초록=적중, 빨강=오검) vs 정답(노랑)",
                fill=(20, 22, 28), font=fs["t"])
         frames_out.append(sheet)
         print("프레임", i, "패널", len(panels), flush=True)
@@ -108,6 +142,10 @@ def main():
     frames_out[len(frames_out) // 2].save(a.out + ".png")
     small = [f.resize((f.width // 2, f.height // 2)) for f in frames_out]
     small[0].save(a.out + ".gif", save_all=True, append_images=small[1:], duration=130, loop=0)
+    tp, fp, fn = stat["tp"], stat["fp"], stat["fn"]
+    prec = tp / max(tp + fp, 1); rec = tp / max(tp + fn, 1)
+    print(f"검출 성능(IoU 0.5, 전 프레임 누적): 적중 {tp} 오검 {fp} 미검 {fn} | "
+          f"정밀도 {prec:.1%} 재현율 {rec:.1%}")
     print("저장:", a.out + ".png,", a.out + f".gif ({len(small)}프레임)")
 
 
