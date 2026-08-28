@@ -40,9 +40,27 @@ def load_agent(ckpt_path, device):
 
 
 MASK_DEGENERATE = False   # 학습 중 σ=0 이던 차원을 0으로 마스킹 (미학습 차원 폭주 방지)
+MIRROR_LATERAL = False    # 2026-08-28 실측: MetaDrive 횡방향은 좌(+), 경량 시뮬은 우(+) —
+                          # 전이 평가에서 이 거울상을 보정하면 붕괴가 부호 불일치 때문인지 판별된다.
+LAT_IDX = [10, 15] + [20 + 4 * k for k in range(8)] + [22 + 4 * k for k in range(8)]
+
+
+def _mirror(obs):
+    """정규화 관측의 횡방향 필드를 v -> 1-v 로 거울 반전. 빈 슬롯(4필드 전부 0)은 제외."""
+    o = obs.copy()
+    o[..., 10] = 1.0 - o[..., 10]
+    o[..., 15] = 1.0 - o[..., 15]
+    for k in range(8):
+        b = 19 + 4 * k
+        occupied = np.abs(o[..., b:b + 4]).sum(-1) > 1e-6
+        for j in (1, 3):
+            o[..., b + j] = np.where(occupied, 1.0 - o[..., b + j], o[..., b + j])
+    return o
 
 
 def _act(agent, obs, mean, std, device):
+    if MIRROR_LATERAL:
+        obs = _mirror(obs)
     x = np.clip((obs - mean) / std, -10, 10).astype(np.float32)
     if MASK_DEGENERATE:
         x[..., std < 1e-3] = 0.0
@@ -112,6 +130,8 @@ def main():
     ap.add_argument("--target", choices=["custom", "metadrive"], required=True)
     ap.add_argument("--episodes", type=int, default=30)
     ap.add_argument("--seed", type=int, default=1000)   # 학습 시드와 분리
+    ap.add_argument("--mirror-lateral", action="store_true",
+                    help="MetaDrive 좌(+) ↔ 경량 우(+) 횡방향 부호 보정 (전이 평가 진단용)")
     ap.add_argument("--mask-degenerate", action="store_true",
                     help="학습 σ=0 차원을 0으로 (V부족 학습런의 전이 구제 실험)")
     ap.add_argument("--n-vehicles", type=int, default=3,
@@ -119,8 +139,9 @@ def main():
     ap.add_argument("--out")
     a = ap.parse_args()
 
-    global MASK_DEGENERATE
+    global MASK_DEGENERATE, MIRROR_LATERAL
     MASK_DEGENERATE = a.mask_degenerate
+    MIRROR_LATERAL = a.mirror_lateral
     # batch<=64 의 초소형 MLP 는 CPU 가 빠르다 (이 장비 실측: cuda 0.812ms vs cpu 0.0711ms
     # / 스텝 — 윈도우 WDDM 동기화가 지배). MetaDrive 평가는 정책 호출과 직렬이라 그대로 병목이 된다.
     device = torch.device("cpu")

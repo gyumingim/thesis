@@ -280,8 +280,11 @@ def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO, RECTS, BOX, CELL, DG
                 sec = j + 1
         fx = np.cos(eh)
         fy = np.sin(eh)
-        rx = fy
-        ry = -fx                                     # 우측 벡터
+        # 2026-08-28 부호 정정: MetaDrive 의 convert_to_local_coordinates 는 (전방, **좌**)를
+        # 돌려준다(실측 확인: navi·others 횡 필드 모두 좌+). 기존 코드는 우측 벡터를 써서
+        # 횡방향이 거울상이었고, 그 결과 전이 평가에서 이탈 95%·성공 0% 의 붕괴가 발생했다.
+        rx = -fy
+        ry = fx                                      # 좌측 벡터 (MetaDrive 규약)
         for c in range(2):
             sc = sec if c == 0 else (sec + 1 if sec < 3 else 3)
             dxc = SXY[rid, sc, 0] - ex
