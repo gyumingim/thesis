@@ -38,6 +38,11 @@ class Policy:
         self.b = [z[f"b{i}"] for i in range(3)]
         self.mean, self.std = z["obs_mean"], z["obs_std"]
 
+    def zscore(self, obs):
+        """정책이 실제로 보는 정규화 좌표. 학습 분포(obs_mean/std) 기준이므로
+        |z| 가 크다는 것은 그 차원이 학습에서 관측되지 않은 값이라는 뜻이다."""
+        return (obs - self.mean) / self.std
+
     def act(self, obs):
         x = np.clip((obs - self.mean) / self.std, -10, 10).astype(np.float32)
         for i in range(2):
@@ -518,6 +523,7 @@ def run(a):
                 except Exception: pass
         ob = ObsBuilder(world, ego, route, max_slots=a.obs_slots)
         hist = []
+        ood_max, ood_cnt = [], []
         entry_spd, max_lat = None, 0.0
         j_entry = next((k for k, w in enumerate(route) if w.is_junction), len(route) - 1)
         min_R = 1e9
@@ -544,6 +550,9 @@ def run(a):
                 obs[11] = 0.0; obs[16] = 0.0
                 obs[12] = 0.5; obs[17] = 0.5
                 obs[13] = 0.5; obs[18] = 0.5
+            _z = pol.zscore(obs)
+            ood_max.append(float(np.max(np.abs(_z))))
+            ood_cnt.append(int((np.abs(_z) > 3.0).sum()))
             act = pol.act(obs)
             ob.last_act = act
             steer = float(np.clip(-40.0 * act[0] / max_sw, -1, 1))     # 좌(+) → CARLA 우(+) 반전
@@ -614,7 +623,7 @@ def run(a):
             kind = "유턴"
         elif _td < 30 and kind != "직진":
             kind = "직진"
-        results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps, entry_kmh=round(entry_spd or 0, 1), min_R=round(min(min_R, 999), 1), max_lat=round(max_lat, 2), turn_deg=round(_turn_deg(route), 1), n_junc=sum(1 for w in route if w.is_junction)))
+        results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps, entry_kmh=round(entry_spd or 0, 1), min_R=round(min(min_R, 999), 1), max_lat=round(max_lat, 2), turn_deg=round(_turn_deg(route), 1), n_junc=sum(1 for w in route if w.is_junction), ood_max=round(float(np.mean(ood_max)) if ood_max else 0, 2), ood_peak=round(float(np.max(ood_max)) if ood_max else 0, 2), ood_dims=round(float(np.mean(ood_cnt)) if ood_cnt else 0, 2)))
         print(f"ep{ep}: {outcome} ({steps}스텝)", flush=True)
     for x in ([cam, cs] if cam else [cs]) + ([ego] if ego else []) + (npcs or []):
         try:
