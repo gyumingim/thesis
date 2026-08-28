@@ -86,6 +86,9 @@ def main():
     st.fixed_delta_seconds = data["meta"].get("dt", 0.1)
     world.apply_settings(st)
 
+    for a_ in world.get_actors().filter("vehicle.*"):
+        try: a_.destroy()
+        except Exception: pass
     jn = pick_junction(world)
     if jn is None:
         print("교차로 탐색 실패"); return
@@ -106,17 +109,29 @@ def main():
     max_npc = max(len(f["npc"]) for f in frames)
 
     actors = []
+    # 스폰 충돌 회피: 첫 프레임 위치가 막혀 있으면 상공에 띄워 스폰 후 텔레포트
     ego_tf = to_carla(*frames[0]["ego"][:3], center, theta, sim_center)
-    ego = world.try_spawn_actor(ego_bp, ego_tf)
+    ego = None
+    for dz in (0.3, 2.0, 6.0, 15.0, 40.0):
+        t = carla.Transform(carla.Location(ego_tf.location.x, ego_tf.location.y,
+                                           ego_tf.location.z + dz), ego_tf.rotation)
+        ego = world.try_spawn_actor(ego_bp, t)
+        if ego is not None:
+            break
     if ego is None:
-        ego_tf.location.z += 1.0
-        ego = world.spawn_actor(ego_bp, ego_tf)
+        print("ego 스폰 실패"); return
     ego.set_simulate_physics(False)
     actors.append(ego)
     npcs = []
     for k in range(max_npc):
         tf = carla.Transform(carla.Location(x=center.x + 200 + k * 5, y=center.y, z=center.z + 0.3))
-        v = world.try_spawn_actor(npc_bps[k % len(npc_bps)], tf)
+        v = None
+        for dz in (0.3, 3.0, 12.0):
+            v = world.try_spawn_actor(npc_bps[k % len(npc_bps)],
+                                      carla.Transform(carla.Location(tf.location.x, tf.location.y,
+                                                                     tf.location.z + dz)))
+            if v:
+                break
         if v:
             v.set_simulate_physics(False)
             npcs.append(v); actors.append(v)
@@ -127,13 +142,9 @@ def main():
     cam_bp.set_attribute("fov", "90")
     chase = world.spawn_actor(cam_bp, carla.Transform(
         carla.Location(x=-7.0, z=3.6), carla.Rotation(pitch=-13)), attach_to=ego)
-    # 탑다운은 궤적 전체(진입로 60m 포함)를 담도록 높이를 자동 산정
-    span = max(max(abs(f["ego"][0] - sim_center[0]) for f in frames),
-               max(abs(f["ego"][1] - sim_center[1]) for f in frames)) + 20
-    top_z = max(60.0, span / math.tan(math.radians(45)))
+    # 탑다운: ego 추종 조감 (고정 카메라는 차가 점으로 보여 판독 불가)
     top = world.spawn_actor(cam_bp, carla.Transform(
-        carla.Location(x=center.x, y=center.y, z=center.z + top_z),
-        carla.Rotation(pitch=-90, yaw=theta)))
+        carla.Location(x=0.0, z=32.0), carla.Rotation(pitch=-90)), attach_to=ego)
     actors += [chase, top]
     qc, qt = queue.Queue(), queue.Queue()
     chase.listen(qc.put); top.listen(qt.put)
