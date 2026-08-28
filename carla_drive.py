@@ -307,7 +307,7 @@ def run(a):
             used_lane.add(key)
             dpsi = (wout.transform.rotation.yaw - win.transform.rotation.yaw + 180) % 360 - 180
             kind = "직진" if abs(dpsi) < 30 else ("우회전" if dpsi > 0 else "좌회전")
-            prevs = win.previous(45.0)
+            prevs = win.previous(a.approach)
             if prevs:
                 anchors.append((prevs[0], kind, wout))
     kinds = {}
@@ -396,6 +396,17 @@ def run(a):
                 except Exception: pass
         ob = ObsBuilder(world, ego, route)
         hist = []
+        entry_spd, max_lat = None, 0.0
+        j_entry = next((k for k, w in enumerate(route) if w.is_junction), len(route) - 1)
+        min_R = 1e9
+        for kk in range(max(j_entry - 2, 0), min(j_entry + 14, len(route) - 1)):
+            y1 = route[kk].transform.rotation.yaw
+            y2 = route[kk + 1].transform.rotation.yaw
+            dp = abs((y2 - y1 + 180) % 360 - 180)
+            l1, l2 = route[kk].transform.location, route[kk + 1].transform.location
+            ds = math.hypot(l2.x - l1.x, l2.y - l1.y)
+            if dp > 0.5 and ds > 0.1:
+                min_R = min(min_R, ds / math.radians(dp))
         _p = ego.get_transform().location
         _r0 = route[0].transform.location
         if a.verbose:
@@ -407,6 +418,23 @@ def run(a):
             act = pol.act(obs)
             ob.last_act = act
             steer = float(np.clip(-40.0 * act[0] / max_sw, -1, 1))     # 좌(+) → CARLA 우(+) 반전
+            # 속도 거버너: 전방 25m 이내 최소 곡률반경에서 물리적으로 가능한 최대 속도로 제한.
+            # 학습 시뮬(MetaDrive X맵)엔 반경 25~60m 회전만 있어 정책이 CARLA 의 10~15m
+            # 회전에서 감속을 배우지 못했다(실측: 실패군 진입 52~55km/h, 반경 10~15m = 1.9g 요구).
+            if a.governor > 0:
+                R_ahead = 1e9
+                for kk in range(ob.idx, min(ob.idx + 13, len(route) - 1)):
+                    y1 = route[kk].transform.rotation.yaw
+                    y2 = route[kk + 1].transform.rotation.yaw
+                    dp = abs((y2 - y1 + 180) % 360 - 180)
+                    l1, l2 = route[kk].transform.location, route[kk + 1].transform.location
+                    ds = math.hypot(l2.x - l1.x, l2.y - l1.y)
+                    if dp > 0.5 and ds > 0.1:
+                        R_ahead = min(R_ahead, ds / math.radians(dp))
+                if R_ahead < 400:
+                    v_max = math.sqrt(a.governor * 9.81 * R_ahead)
+                    if spd > v_max:
+                        act = np.array([act[0], -min(1.0, (spd - v_max) / 3.0)], np.float32)
             ctrl = carla.VehicleControl(steer=steer)
             if act[1] >= 0:
                 ctrl.throttle = 0.0 if spd * 3.6 > MAXS_KMH else float(act[1]) * K_THR
@@ -427,6 +455,9 @@ def run(a):
             if col["hit"]:
                 outcome = "충돌"
                 print(f"   충돌 상대: {col.get('with_', '?')}", flush=True); break
+            max_lat = max(max_lat, abs(lat_r))
+            if entry_spd is None and ob.idx >= j_entry:
+                entry_spd = spd * 3.6
             hist.append((t, lat_r, spd * 3.6, float(act[0]), float(act[1]), steer,
                          float(obs[9]), float(obs[10]), float(obs[13]), ob.idx))
             if len(hist) > 6:
@@ -446,7 +477,7 @@ def run(a):
             for h in hist:
                 print(f"     {h[0]:3d} {h[1]:+5.2f} {h[2]:5.1f} {h[3]:+5.2f} {h[4]:+5.2f} {h[5]:+5.2f} "
                       f"{h[6]:.2f} {h[7]:.2f} {h[8]:.2f} idx={h[9]}", flush=True)
-        results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps))
+        results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps, entry_kmh=round(entry_spd or 0, 1), min_R=round(min(min_R, 999), 1), max_lat=round(max_lat, 2)))
         print(f"ep{ep}: {outcome} ({steps}스텝)", flush=True)
     for x in ([cam, cs] if cam else [cs]) + ([ego] if ego else []) + (npcs or []):
         try:
@@ -481,4 +512,8 @@ if __name__ == "__main__":
     ap.add_argument("--turn-kind", default="전체", choices=["전체", "직진", "좌회전", "우회전"])
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--out", default="")
+    ap.add_argument("--approach", type=float, default=65.0,
+                    help="교차로 진입로 길이(m) — 학습 환경의 팔 길이 65m 와 맞춘다")
+    ap.add_argument("--governor", type=float, default=0.8,
+                    help="곡률 기반 속도 제한의 횡가속 한계(g). 0 이면 비활성")
     run(ap.parse_args())
