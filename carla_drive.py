@@ -340,7 +340,9 @@ def run(a):
 
         npcs = []
         for m in range(a.npc):                   # 기본 3 = 학습 밀도
-            src = anchors[(ep + m + 1) % len(anchors)]
+            far = [w for w, _k, _e in anchors
+                   if w.transform.location.distance(wp0.transform.location) > 30.0]
+            src = (far or [x[0] for x in anchors])[(ep * 3 + m) % max(len(far or anchors), 1)]
             for dz in (0.3, 2.0):
                 v = world.try_spawn_actor(npc_pool[m % len(npc_pool)], carla.Transform(
                     carla.Location(src.transform.location.x, src.transform.location.y,
@@ -427,7 +429,17 @@ def run(a):
 
     st.synchronous_mode = False; world.apply_settings(st)
     ok = sum(1 for r in results if r["outcome"] == "성공")
-    print(f"\n성공 {ok}/{len(results)} = {ok/max(len(results),1):.0%}")
+    nl = chr(10)
+    print(nl + f"=== 전체 성공 {ok}/{len(results)} = {ok/max(len(results),1):.0%} ===")
+    by = {}
+    for r in results:
+        d = by.setdefault(r.get("kind", "?"), {"n": 0, "ok": 0})
+        d["n"] += 1
+        d["ok"] += r["outcome"] == "성공"
+        d[r["outcome"]] = d.get(r["outcome"], 0) + 1
+    for k, d in sorted(by.items()):
+        print(f"  {k}: {d[chr(39)+chr(111)+chr(107)+chr(39)] if False else d['ok']}/{d['n']} = {d['ok']/d['n']:.0%} "
+              f"(충돌 {d.get('충돌',0)} 이탈 {d.get('이탈',0)} 시간초과 {d.get('timeout',0)})")
     json.dump(results, open(os.path.join(a.record or ".", "drive_results.json"), "w"))
 
 
