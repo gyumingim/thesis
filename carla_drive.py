@@ -524,6 +524,8 @@ def run(a):
         ob = ObsBuilder(world, ego, route, max_slots=a.obs_slots)
         hist = []
         ood_max, ood_cnt = [], []
+        ood_dimsum = np.zeros(51, np.float64)
+        ood_top = np.zeros(51, np.int32)
         entry_spd, max_lat = None, 0.0
         j_entry = next((k for k, w in enumerate(route) if w.is_junction), len(route) - 1)
         min_R = 1e9
@@ -553,6 +555,9 @@ def run(a):
             _z = pol.zscore(obs)
             ood_max.append(float(np.max(np.abs(_z))))
             ood_cnt.append(int((np.abs(_z) > 3.0).sum()))
+            _az = np.abs(_z)
+            ood_dimsum += _az
+            ood_top[int(np.argmax(_az))] += 1
             act = pol.act(obs)
             ob.last_act = act
             steer = float(np.clip(-40.0 * act[0] / max_sw, -1, 1))     # 좌(+) → CARLA 우(+) 반전
@@ -623,7 +628,7 @@ def run(a):
             kind = "유턴"
         elif _td < 30 and kind != "직진":
             kind = "직진"
-        results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps, entry_kmh=round(entry_spd or 0, 1), min_R=round(min(min_R, 999), 1), max_lat=round(max_lat, 2), turn_deg=round(_turn_deg(route), 1), n_junc=sum(1 for w in route if w.is_junction), ood_max=round(float(np.mean(ood_max)) if ood_max else 0, 2), ood_peak=round(float(np.max(ood_max)) if ood_max else 0, 2), ood_dims=round(float(np.mean(ood_cnt)) if ood_cnt else 0, 2)))
+        results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps, entry_kmh=round(entry_spd or 0, 1), min_R=round(min(min_R, 999), 1), max_lat=round(max_lat, 2), turn_deg=round(_turn_deg(route), 1), n_junc=sum(1 for w in route if w.is_junction), ood_max=round(float(np.mean(ood_max)) if ood_max else 0, 2), ood_peak=round(float(np.max(ood_max)) if ood_max else 0, 2), ood_dims=round(float(np.mean(ood_cnt)) if ood_cnt else 0, 2), ood_top_dim=int(np.argmax(ood_top)) if ood_top.sum() else -1, ood_dim_mean=[round(float(x), 2) for x in (ood_dimsum / max(len(ood_max), 1))]))
         print(f"ep{ep}: {outcome} ({steps}스텝)", flush=True)
     for x in ([cam, cs] if cam else [cs]) + ([ego] if ego else []) + (npcs or []):
         try:
