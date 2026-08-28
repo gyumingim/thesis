@@ -47,13 +47,16 @@ def main():
     live = [[] for _ in range(a.envs)]     # 진행 중 프레임 버퍼
     done_eps = []
     for t in range(a.steps):
-        obs, *_ = env.step(policy(obs))
+        act = policy(obs)
+        obs, rew, *_ = env.step(act)
         for e in range(a.envs):
             npc = env.npc[e]
             keep = np.abs(npc[:, 0]) + np.abs(npc[:, 1]) > 1e-3
             live[e].append(dict(
                 ego=[float(env.ego[e, 0]), float(env.ego[e, 1]), float(env.ego[e, 2]), float(env.ego[e, 3])],
-                npc=[[float(v[0]), float(v[1]), float(v[2]), float(v[3])] for v in npc[keep]]))
+                npc=[[float(v[0]), float(v[1]), float(v[2]), float(v[3])] for v in npc[keep]],
+                act=[float(act[e, 0]), float(act[e, 1])],      # [조향, 가감속] ∈ [-1,1]
+                rew=float(rew[e]), t=int(env.t[e]), n_npc=int(keep.sum())))
             f = int(env.flags[e])
             if f != 0:
                 if len(live[e]) > 20 and (not a.want_success or f == 3):
