@@ -9,6 +9,8 @@ v1(회색 평면 + 흰 차) 대비 변경 — 전부 2026-08-24 실측으로 확
 - 지면: BasicShapes 평면 → CitySample 도로 키트 타일(SM_ROAD_19_20, 20x21m) + 인도 + 가로등
 - 배경: 히어로 빌딩 LevelInstance 풀. vista 메시(SM_bgcity*)는 -game 에서 렌더되지 않아 폐기.
   스폰 후 실측 바운드로 접지 + 도로 회랑(|y|<13m) 침범 시 밀어냄, y-폭 45m 초과는 퇴출.
+  건물은 요각까지 반영한 점유 반폭으로 회랑 밖에 배치한다(2026-08-29 수정:
+  요각 미반영이던 이전 판은 측면 건물의 52.7% 가 회랑을 최대 6.8 m 침범했다).
 - 도색: MassTraffic 순정 방식 — RandomFraction 을 float16 비트패킹해
   CustomPrimitiveData[1] 에 주입 (MassTrafficVehicleVisualizationProcessor.cpp 방식.
   머티리얼/에셋 생성 불필요, 레벨에 저장됨).
@@ -59,6 +61,18 @@ BLDG_POOL = {
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 23.0,
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
 }
+# x-반장 (도로 진행 방향). 회랑 침범 계산에만 쓴다 — 요각이 0 이 아니면 건물의 y-방향
+# 점유폭이 half_w 가 아니라 half_w*|cos| + half_l*|sin| 이 되기 때문이다. 커맨드릿에서는
+# LevelInstance 바운드가 미형성이라 실측이 불가하므로 에디터 세션 값의 상한을 쓴다.
+# 과대추정은 건물을 도로에서 더 멀리 밀 뿐이라 침범 방향으로는 안전하다.
+BLDG_HALF_L = {
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 34.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 42.0,
+}
+FLANK_YAW_JITTER = 5.0            # 측면 건물 요각 지터(도). ±10 에서 축소.
+# 요각 보정만으로도 침범은 0 이 되지만, 지터가 클수록 건물이 회랑 밖으로 더 밀려나
+# 가로 협곡이 벌어진다(±10° 는 B동 기준 6.9 m 추가). 실제 가로의 전면이 거의 평행한
+# 점을 감안해 5° 로 둔다.
 # Low_CHG_Modern_A01 은 3심 판정에서 "검은 유리 큐브 = 미완성 맵" 지적으로 퇴출 (08-25)
 # 건물 풀 확장 실패 기록 (2026-08-24 밤): SFE_A01/B01·NYG_Triangle_B01 을 넣은 장면은
 # -game 로드~첫 프레임에서 D3D12 페이탈이 재현된다 (기지 장면은 같은 시각 정상 렌더 —
@@ -142,16 +156,35 @@ def top0(a):
     return a
 
 
-def spawn_bldg(path, half_w_m, x, side, yaw):
+def spawn_bldg(path, x, y_cm, yaw):
+    """저수준 배치 — y 를 그대로 쓴다. 회랑 계산은 호출자 몫."""
     w = unreal.load_asset(path)
     if w is None:
         log("BLDG 로드 실패 " + path)
         return None
-    y = side * (CORRIDOR_CM + half_w_m * 100 + random.uniform(0, 600))
-    bl = act.spawn_actor_from_class(unreal.LevelInstance, unreal.Vector(x, y, 0),
+    bl = act.spawn_actor_from_class(unreal.LevelInstance, unreal.Vector(x, y_cm, 0),
                                     unreal.Rotator(0, 0, yaw))
     bl.set_editor_property("world_asset", w)
     return bl
+
+
+def occupancy_half_w_cm(path, yaw):
+    """요각 yaw 로 놓인 건물이 y 축 방향으로 점유하는 반폭(cm).
+
+    직사각 평면의 축정렬 바운드: half_w*|cos| + half_l*|sin|. 기존 코드는 |cos|=1,
+    |sin|=0 을 가정해 half_w 만 썼고, 그래서 요각 지터가 있는 측면 건물이 도로 회랑을
+    파고들었다(인도 위로 벽면이 내려앉는 장면의 원인).
+    """
+    t = math.radians(yaw)
+    hw = BLDG_POOL[path]
+    hl = BLDG_HALF_L.get(path, hw * 1.6)
+    return (hw * abs(math.cos(t)) + hl * abs(math.sin(t))) * 100
+
+
+def place_flank(path, x, side, yaw):
+    """도로 양옆 배치 — 회랑(|y| < CORRIDOR_CM) 밖을 요각까지 반영해 보장한다."""
+    y = side * (CORRIDOR_CM + occupancy_half_w_cm(path, yaw) + random.uniform(0, 600))
+    return spawn_bldg(path, x, y, yaw)
 
 
 def bbox2d(lb):
@@ -229,22 +262,23 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
 
     # 소실점 폐쇄: 도로 끝 너머(x=140~220m)에 타워 행렬 — "백색 공허" 제거 (3심 1순위)
     endx = ROAD_TILES * 2000
+    # 이 두 행은 도로가 끝난 뒤(x > 120m)라 회랑 규칙이 적용되지 않는다 — 오히려 도로
+    # 축 근처에 놓아야 소실점이 막힌다. 따라서 y 를 직접 준다.
     for k in range(3):
-        spawn_bldg(random.choice(list(BLDG_POOL)), BLDG_POOL[list(BLDG_POOL)[0]],
-                   endx + 2000 + k * 3500, random.choice((-1, 1)) * random.uniform(0, 0.25),
-                   random.uniform(0, 360))
+        spawn_bldg(random.choice(list(BLDG_POOL)), endx + 2000 + k * 3500,
+                   random.choice((-1, 1)) * random.uniform(0, 900), random.uniform(0, 360))
     for k in range(3):                        # 2열 — 측면 틈으로 새는 수평선 봉쇄
-        spawn_bldg(random.choice(list(BLDG_POOL)), 30.0,
-                   endx + 9000 + k * 4000, random.choice((-1, 1)) * random.uniform(0.3, 0.8),
-                   random.uniform(0, 360))
+        spawn_bldg(random.choice(list(BLDG_POOL)), endx + 9000 + k * 4000,
+                   random.choice((-1, 1)) * random.uniform(1200, 3400), random.uniform(0, 360))
     x = 2000.0
     n_bldg = 0
     while x < ROAD_TILES * 2000 + 4000:
         for side in (-1, 1):
             if random.random() < 0.8:
                 path = random.choice(list(BLDG_POOL))
-                if spawn_bldg(path, BLDG_POOL[path], x + random.uniform(-500, 500), side,
-                              random.uniform(-10, 10) + (0 if side < 0 else 180)):
+                jit = random.uniform(-FLANK_YAW_JITTER, FLANK_YAW_JITTER)
+                if place_flank(path, x + random.uniform(-500, 500), side,
+                               jit + (0 if side < 0 else 180)):
                     n_bldg += 1
         x += random.uniform(3500, 5500)
 
