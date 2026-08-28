@@ -193,8 +193,11 @@ Pearson 상관)로 측정했다 — "낮은 상관의 시뮬레이터로는 의�
 제기하고 Colas et al.(1806.08295, 검정력 분석)·Agarwal et al.(2108.13264, IQM·층화
 부트스트랩)·AdaStop(2306.10882, 순차 검정)으로 정련된 계보를 따른다: 시드를 분석
 단위로, 점추정 대신 IQM 과 95% 구간을, 기각된 개입은 "유의하지 않음"이 아니라 효과크기
-구간의 상한으로 서술한다(§6.2, §7). 전이 붕괴처럼 효과가 큰 결과는 n=5로도 검정력이
-충분하다는 근거는 Colas 의 프로토콜에 따른다.
+구간의 상한으로 서술한다(§6.2, §7). 효과가 큰 결과(부호 오류판의 68% vs 0%)는 n=5 로도
+검정력이 충분했으나, **정정 후 확정 격차(48.9%±20.4, n=3 vs 68%±9, n=5)는 시드 분산에
+비해 작아 n=3 으로는 유의성을 주장할 수 없다**(Welch t=−1.53, df≈2.5, p≈0.24). 따라서
+§6.2 의 "미치지 못한다"는 점추정 방향의 서술이며 유의 판정이 아님을 §7·§8 에 명시한다.
+검정력 프로토콜의 근거는 Colas 를 따른다.
 
 ## 3. 방법
 
@@ -355,7 +358,14 @@ NPC 수를 노출 평균(1.3대) 정합 목적으로 4→2로 줄이자 **3번�
 
 ### 5.4 제3 시뮬레이터 교차 검증: CARLA 폐루프에서의 지지집합 경계 (2026-08-28)
 
-원리의 예측력을 독립된 시뮬레이터에서 시험했다. 경량 시뮬(V=3)에서 학습한 정책을 CARLA
+원리의 예측력을 독립된 시뮬레이터에서 시험했다.
+
+**정책 출처.** 본 절의 CARLA 수치는 §6.6 과 동일하게 **부호 정정판 시드 1 의 20M-step
+체크포인트**(GPU 경합 조건, §6.2 둘째 행)로 얻었다. 확정 헤드라인(정숙 조건 136M)과는 다른
+체크포인트이므로 절대 성공률을 §6.2 와 직접 비교해서는 안 되며, 본 절의 논지는 **동일
+체크포인트 안에서 슬롯 수만 바꾼 대조**에 있다.
+
+경량 시뮬(V=3)에서 학습한 정책을 CARLA
 Town10HD 에서 폐루프로 주행시키며(관측 어댑터·GT 인지·NPC 3대·§4.7 정정 적용),
 **주변 장애물 관측 슬롯을 몇 개까지 채울지만 바꾸었다.**
 
@@ -753,6 +763,12 @@ MetaDrive 전이를 절반 가까이 떨어뜨렸다. 이유는 §4 의 정합 �
   GPU 경합 조건에서 67.8%, 정숙 조건(7배 샘플)에서 48.9%였다. 즉 **샘플을 더 모을수록
   전이가 낮아지는 하강이 정정 후에도 남아 있으며**, 장비·조건에 따라 절대 수치가 크게
   이동하므로 단일 장비 비교만으로 우열을 단정할 수 없다.
+  **여기서 본 논문 주 판정의 최대 한계를 명시한다**: 확정 전이 48.9% 는 데스크톱(RTX 5080)
+  정숙 조건에서, 비교 기준선 68%±9% 는 노트북(RTX 4060) 5시드에서 얻었다. 즉 헤드라인
+  비교는 **장비 교차 비교**다. 동일 장비 대조에서는 데스크톱 네이티브가 53.3%(단일 시드,
+  30ep)로 격차가 4.4pp 까지 좁혀지며, 이는 시드 표준편차(20.4%p) 안에 완전히 들어간다.
+  따라서 "경량이 네이티브에 미치지 못한다"는 **점추정 방향의 잠정 판정**이며, 확정하려면
+  동일 장비 다시드 네이티브 기준선이 필요하다(bench/run_native_desktop.sh 로 진행 중).
 - 한계: 단일 장비·단일 과제(교차로), MetaDrive 자체도 "경량" 계열(고충실도 표현은
   상대적), NPC 행동 모델 단순화, 인지 트랙 평가 도메인 갭(도심 구성 vs 간선도로 —
   상대 비교로 통제), DPC 의 포화 전 위상 미관측(경량이 5분 내 포화).
@@ -884,9 +900,15 @@ We compare massive sampling in a purpose-built lightweight driving simulator aga
 small-sample training in a high-fidelity simulator (MetaDrive) under an identical
 wall-clock budget on the same hardware — a cross-simulator fixed-time protocol for which
 we find no direct precedent. After layer-by-layer calibration (observation, dynamics,
-termination semantics, geometry; 138x throughput), zero-shot transfer from the lightweight
-simulator reaches 67.8%+/-19.0% success, statistically on par with native training
-(68%+/-9%), showing that the cost of abstraction is variance rather than mean performance.
+termination semantics, geometry; 144x raw environment throughput, 28x as realized by the
+headline run), zero-shot transfer from the lightweight simulator reaches 48.9%+/-20.4%
+success against 68%+/-9% for native training -- a shortfall, not a tie: the throughput
+advantage does not convert losslessly into transfer performance. The transfer curve peaks
+at the first checkpoint (5 min, 58.9%), bottoms out at 40 min (40.0%), and partially
+recovers to 48.9%. Two caveats are stated up front: with n=3 seeds and sigma=20.4 the gap
+is not statistically significant (Welch t=-1.5, p=0.24), and the two figures come from
+different machines -- the 48.9% from a desktop RTX 5080, the 68% baseline from a laptop
+RTX 4060, on which a single matched-hardware native run scored 53.3%.
 
 The path to that result is the paper's substantive contribution. Calibration required
 seven rounds of failure-diagnosis-repair, and the final round uncovered a single
@@ -896,7 +918,12 @@ Beneath that disguise we had built a mutually consistent account -- collapse cur
 behavioral fingerprints, a time-resolved diagnostic metric, and the rejection of three
 remedies -- all of which dissolved once the sign was corrected. Because the mirror
 transform preserves per-dimension means, variances and support sets, and reduces to the
-identity on straight segments, standard distributional checks cannot detect it.
+identity on straight segments, standard distributional checks cannot detect it. Correcting
+the sign did not restore parity; it re-scaled the failure. The original conclusion's
+direction was right, but its magnitude was overstated more than fourfold -- a gentle
+shortfall had been rendered as total collapse. We ship the field-level geometric
+round-trip audit as a script (tools/align_audit.py); on the corrected kernel it matches
+MetaDrive's convention to a mean absolute residual of 0.00000.
 
 We therefore contribute (1) the fixed-time cross-simulator protocol and a 1.0M steps/s
 calibrated environment, (2) a taxonomy of calibration failure fingerprints, (3) the
