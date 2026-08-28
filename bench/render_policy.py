@@ -52,21 +52,31 @@ def run(ckpt, out, episodes, seed, every, tag):
 
 
 def save(strips, out, tag):
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFont
+    try:
+        font = ImageFont.truetype("C:/Windows/Fonts/malgun.ttf", 17)
+    except OSError:
+        font = ImageFont.load_default()
     picks = 6
     rows = []
     for outcome, frames in strips:
         if not frames:
             continue
         idx = np.linspace(0, len(frames) - 1, picks).astype(int)
-        row = [Image.fromarray(frames[i]).convert("RGB").resize((240, 240)) for i in idx]
+        row = []
+        for i in idx:
+            im = Image.fromarray(frames[i]).convert("RGB")
+            side = min(im.size)                      # 중앙 정사각 크롭 (가로 왜곡 방지)
+            l, t = (im.width - side) // 2, (im.height - side) // 2
+            row.append(im.crop((l, t, l + side, t + side)).resize((240, 240)))
         canvas = Image.new("RGB", (240 * picks + 5 * (picks - 1), 240), (255, 255, 255))
         for j, im in enumerate(row):
             canvas.paste(im, (j * 245, 0))
         d = ImageDraw.Draw(canvas)
         d.rectangle([0, 0, canvas.width - 1, canvas.height - 1],
                     outline=(30, 140, 60) if outcome == "성공" else (200, 40, 40), width=4)
-        d.text((8, 8), f"{tag} — {outcome}", fill=(20, 20, 20))
+        d.rectangle([4, 4, 250, 26], fill=(255, 255, 255))
+        d.text((8, 6), f"{tag} — {outcome}", fill=(20, 20, 20), font=font)
         rows.append(canvas)
     if not rows:
         print("저장할 프레임 없음"); return
