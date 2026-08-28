@@ -5,26 +5,30 @@
 > 학위논문 초고 v2 (2026-08-21 전면 개편). 실측 완료 수치는 확정 표기, 진행 중은 [TBD].
 > 실험 이력 원본: docs/PAPER_worklog_v1.md (라운드별 상세), STATUS.md (진행 관리)
 
-## 초록 (초안)
+## 초록
 
 자율주행 강화학습의 실질적 제약은 샘플 수가 아니라 연구자가 쓸 수 있는 **벽시계 시간**이다.
 본 연구는 고충실도 시뮬레이터(MetaDrive)의 과제를 정밀 복제한 경량 시뮬레이터를 구축하고,
 동일 하드웨어·동일 시간 예산에서 "경량 시뮬의 대량 샘플"과 "고충실도 시뮬의 소량 샘플"을
-정면 비교한다. **핵심 실증 결과**: 정밀 정합(처리량 138배)에도 불구하고 경량 대량 샘플은
-고충실도 소량 샘플을 이기지 못했다. 경량 학습의 제로샷 전이는 10~30분 구간에서 피크
-(시드별 13~33%, 평균 23%)를 찍은 뒤 1시간 시점 IQM 0%로 붕괴하는(5시드 중 4개 0%,
-1개 27% 부분 생존) 반면, MetaDrive 네이티브는 5분 만에 47~60%에 도달한다(최종 68%±9%).
-붕괴 원인을 행동 지문으로 규명했다: 과제가 5분 만에 포화(in-domain 85%)된 뒤 계속되는
-보상 최적화가 시뮬레이터 간 **잔여 격차를 착취**한다 — 소스에선 합법(이탈 0%)인 경계
-밀착 주행선이 타깃에선 전원 이탈(100%)이 되며, 경계 보수화(δ=0.5m)로도 차단되지 않아
-착취 대상이 공간 경계가 아닌 물리 근사임을 국소화했다. 기여는 다섯이다.
-(1) 동일 벽시계 교차-시뮬레이터 비교 프로토콜과 실측 정합된 1.0M steps/s 환경(138배).
-(2) 여섯 라운드의 실패-진단-수정에서 도출한 **시뮬 간 정합의 실패 지문 분류**.
-(3) **관측 지지집합 원리**(통제 실험·마스킹 구제·동일시뮬 소거의 3중 실증).
-(4) 착취의 시간 구조와 그 진단 지표 **DPC** — 경량 신호의 전이 예측력이 전반 τ=+0.57
-(p<0.001)에서 후반 τ≈0 으로 붕괴하며, 처방 3종 중 조기정지만 생존함을 실측 판정.
-(5) 원리의 인지 도메인 **교차 검증** — 절차 생성 장면의 디퓨전 정제가 실사 차량 검출을
-+7.2pp 개선(4-arm). 결론: 경량 시뮬의 가치는 대체·가속이 아니라 **진단**이다.
+정면 비교한다 — 처리량이 다른 두 시뮬레이터를 같은 시간 예산에 놓고 교차 평가하는 프로토콜은
+선행 문헌에서 확인되지 않았다.
+
+**핵심 실증 결과**: 관측·동역학·종료규칙·기하를 계층별로 정합하면 경량 시뮬에서 학습한 정책은
+제로샷으로 고충실도 시뮬에 전이되며, 1시간 예산에서 **67.8%±19.0%** 로 네이티브
+**68%±9%** 와 통계적으로 동률이다(처리량 138배). 즉 경량화의 대가는 성능이 아니라 분산이다.
+
+**그러나 이 결과에 도달하기까지가 본 논문의 실질적 기여다.** 정합은 일곱 라운드의 실패-진단-
+수정을 요구했고, 마지막 라운드에서 발견된 **단일 좌표 부호 규약 오류**는 전이 성공률을 0%로
+떨어뜨리면서 "과최적화에 의한 시뮬레이터 착취"라는 전혀 다른 병리로 완벽하게 위장했다(§4.7).
+그 위장 아래에서 붕괴 곡선·행동 지문·진단 지표·세 처방의 기각까지 서로를 지지하는 일관된
+서사가 만들어졌으나, 부호를 바로잡자 모두 사라졌다.
+
+기여는 다섯이다. (1) 동일 벽시계 교차-시뮬레이터 비교 프로토콜과 1.0M steps/s 정합 환경.
+(2) 일곱 라운드 실패 지문 분류 — 각 계층의 불일치는 특유의 지문을 남긴다. (3) 관측 지지집합
+원리(통제 실험·마스킹 구제·동일시뮬 소거의 3중 실증). (4) **정합 오류가 알고리즘적 병리로
+위장하는 기제와 그 판별 프로토콜**. (5) 원리의 인지 도메인 교차 검증 — 절차 생성 장면의
+디퓨전 정제가 실사 차량 검출을 +7.2pp, 실사 25장 파인튜닝이 +47.7pp 개선했고, 학습된 정책은
+제3의 시뮬레이터(CARLA)에서 폐루프 주행에 성공했다.
 
 ## 1. 서론
 
@@ -165,7 +169,7 @@ NumPy/Numba(prange, 8스레드) 배치 환경. 차량 = 자전거 모델 + 실�
   저장) → 전이 시험장 = MetaDrive, 30 에피소드 결정론 평가 → 벽시계-성능 곡선.
 - **지표**: 성공률(주), 충돌률/이탈률(실패 모드), 원시 보상(보조), SPS.
 
-## 4. 정합 과정: 여섯 라운드의 실패 지문 (핵심 기여 1)
+## 4. 정합 과정: 일곱 라운드의 실패 지문 (핵심 기여 1)
 
 이 장은 절차이자 발견이다: 사전에 설계한 방법의 서술이 아니라, 여섯 번의 실패-진단-개입
 반복이 남긴 경험적 지문의 기록이며, 각 라운드는 가설→개입→관측의 구조를 따른다. 5장의
@@ -608,18 +612,28 @@ gymnasium 벡터래퍼 SAME_STEP 미지원 / AsyncVectorEnv 시드 배분과 시
 
 We compare massive sampling in a purpose-built lightweight driving simulator against
 small-sample training in a high-fidelity simulator (MetaDrive) under an identical
-wall-clock budget on the same hardware — a cross-simulator fixed-time protocol for
-which we find no direct precedent. Despite layer-by-layer calibration (observation,
-dynamics, termination semantics, geometry; 138x throughput), zero-shot transfer
-collapses: native training reaches 68%±9% success (5 seeds, IQM with stratified
-bootstrap) while transferred policies reach IQM 0% [0,18]. We trace the collapse to
-post-saturation exploitation of residual physics approximations — boundary
-conservatism (δ=0.5) and cascade fine-tuning both fail to rescue it — and formalize
-the phenomenon as a Diagnostic Predictivity Curve: the rank correlation between
-lightweight and transfer performance decays from τ=+0.57 (p<0.001) early to τ≈0
-late in training, explaining both why early stopping works (0%→18%) and why full
-training fails. A companion perception track cross-validates the underlying
-support-set principle: diffusion-based appearance refinement of procedurally
-generated Unreal Engine scenes improves real-image vehicle detection by +7.2pp mAP50.
-We conclude that the value of lightweight simulation is diagnostic rather than
-substitutive, and release the full calibrated pipeline.
+wall-clock budget on the same hardware — a cross-simulator fixed-time protocol for which
+we find no direct precedent. After layer-by-layer calibration (observation, dynamics,
+termination semantics, geometry; 138x throughput), zero-shot transfer from the lightweight
+simulator reaches 67.8%+/-19.0% success, statistically on par with native training
+(68%+/-9%), showing that the cost of abstraction is variance rather than mean performance.
+
+The path to that result is the paper's substantive contribution. Calibration required
+seven rounds of failure-diagnosis-repair, and the final round uncovered a single
+coordinate sign-convention error that drove transfer success to 0% while perfectly
+masquerading as a different pathology: over-optimization exploiting the source simulator.
+Beneath that disguise we had built a mutually consistent account -- collapse curves,
+behavioral fingerprints, a time-resolved diagnostic metric, and the rejection of three
+remedies -- all of which dissolved once the sign was corrected. Because the mirror
+transform preserves per-dimension means, variances and support sets, and reduces to the
+identity on straight segments, standard distributional checks cannot detect it.
+
+We therefore contribute (1) the fixed-time cross-simulator protocol and a 1.0M steps/s
+calibrated environment, (2) a taxonomy of calibration failure fingerprints, (3) the
+observation support-set principle with controlled evidence, (4) the mechanism by which
+interface errors impersonate algorithmic pathologies, together with a discriminating
+protocol (a reverse-direction control experiment must degrade), and (5) cross-domain
+validation in perception: diffusion-based refinement of procedurally generated Unreal
+Engine scenes improves real-image vehicle detection by +7.2pp mAP50 and 25 real images
+of fine-tuning by +47.7pp, while the trained policy drives closed-loop in a third
+simulator (CARLA).
