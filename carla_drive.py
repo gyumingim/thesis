@@ -415,6 +415,12 @@ def run(a):
         outcome, steps = "timeout", 0
         for t in range(a.max_steps):
             obs, lat_r, spd = ob.build()
+            if a.mask_degen:
+                # §5 지지집합 처방: 학습 중 분산 0 이던 내비 곡률 차원(11,12,13,16,17,18)을
+                # 학습 시 상수로 고정한다. CARLA 는 이 차원에 학습분포 밖 값(0.145~0.621)을 넣는다.
+                obs[11] = 0.0; obs[16] = 0.0
+                obs[12] = 0.5; obs[17] = 0.5
+                obs[13] = 0.5; obs[18] = 0.5
             act = pol.act(obs)
             ob.last_act = act
             steer = float(np.clip(-40.0 * act[0] / max_sw, -1, 1))     # 좌(+) → CARLA 우(+) 반전
@@ -516,4 +522,6 @@ if __name__ == "__main__":
                     help="교차로 진입로 길이(m) — 학습 환경의 팔 길이 65m 와 맞춘다")
     ap.add_argument("--governor", type=float, default=0.8,
                     help="곡률 기반 속도 제한의 횡가속 한계(g). 0 이면 비활성")
+    ap.add_argument("--mask-degen", action="store_true",
+                    help="학습 중 퇴화(분산 0) 차원을 학습값으로 고정 — §5 지지집합 처방")
     run(ap.parse_args())
