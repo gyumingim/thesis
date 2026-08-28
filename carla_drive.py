@@ -315,52 +315,72 @@ def run(a):
     if a.record:
         os.makedirs(a.record, exist_ok=True)
     results = []
+    # 액터 재사용: CARLA 0.10 은 스폰/파괴 반복에서 자주 죽는다(실측: 2에피소드마다 크래시).
+    # ego·NPC·센서를 한 번만 만들고 에피소드마다 텔레포트한다.
+    ego = npcs = None
+    col = {'hit': False, 'with_': ''}
+    cs = cam = q = None
+
     for ep in range(a.episodes):
         wp0, kind, wexit = anchors[(ep * 7 + 3) % len(anchors)]   # 앵커를 흩어 선택
         try:
             route = route_grp(cmap, wp0, dest_wp=wexit)
         except Exception as ex:
             print("   GRP 실패, 폴백:", ex); route = route_from(wp0)
-        ego = None
-        for dz in (0.3, 1.5, 6.0):
-            tf0 = carla.Transform(carla.Location(wp0.transform.location.x, wp0.transform.location.y,
-                                                 wp0.transform.location.z + dz), wp0.transform.rotation)
-            ego = world.try_spawn_actor(ego_bp, tf0)
-            if ego:
-                break
+        tf0 = carla.Transform(carla.Location(wp0.transform.location.x, wp0.transform.location.y,
+                                             wp0.transform.location.z + 0.3), wp0.transform.rotation)
         if ego is None:
-            print(f"ep{ep} 스폰 실패"); continue
-        pc = ego.get_physics_control()
-        try:
-            pc.steering_curve = [carla.Vector2D(0.0, 1.0), carla.Vector2D(200.0, 1.0)]
-            ego.apply_physics_control(pc)
-        except Exception:
-            pass
-        max_sw = pc.wheels[0].max_steer_angle or 70.0
+            for dz in (0.3, 1.5, 6.0):
+                ego = world.try_spawn_actor(ego_bp, carla.Transform(
+                    carla.Location(tf0.location.x, tf0.location.y, tf0.location.z + dz), tf0.rotation))
+                if ego:
+                    break
+            if ego is None:
+                print(f"ep{ep} 스폰 실패"); continue
+            pc = ego.get_physics_control()
+            try:
+                pc.steering_curve = [carla.Vector2D(0.0, 1.0), carla.Vector2D(200.0, 1.0)]
+                ego.apply_physics_control(pc)
+            except Exception:
+                pass
+        else:
+            ego.set_target_velocity(carla.Vector3D(0, 0, 0))
+            ego.set_transform(tf0)
+        max_sw = ego.get_physics_control().wheels[0].max_steer_angle or 70.0
 
-        npcs = []
-        for m in range(a.npc):                   # 기본 3 = 학습 밀도
-            far = [w for w, _k, _e in anchors
-                   if w.transform.location.distance(wp0.transform.location) > 30.0]
-            src = (far or [x[0] for x in anchors])[(ep * 3 + m) % max(len(far or anchors), 1)]
-            for dz in (0.3, 2.0):
-                v = world.try_spawn_actor(npc_pool[m % len(npc_pool)], carla.Transform(
-                    carla.Location(src.transform.location.x, src.transform.location.y,
-                                   src.transform.location.z + dz), src.transform.rotation))
-                if v:
-                    v.set_autopilot(True); npcs.append(v); break
+        if npcs is None:
+            npcs = []
+            for m in range(a.npc):
+                for dz in (0.3, 2.0):
+                    v = world.try_spawn_actor(npc_pool[m % len(npc_pool)], carla.Transform(
+                        carla.Location(tf0.location.x + 120 + m * 8, tf0.location.y, tf0.location.z + dz),
+                        tf0.rotation))
+                    if v:
+                        npcs.append(v); break
+        far = [w for w, _k, _e in anchors
+               if w.transform.location.distance(wp0.transform.location) > 30.0] or [x[0] for x in anchors]
+        for m, v in enumerate(npcs):
+            srcw = far[(ep * 3 + m) % len(far)]
+            v.set_target_velocity(carla.Vector3D(0, 0, 0))
+            v.set_transform(carla.Transform(
+                carla.Location(srcw.transform.location.x, srcw.transform.location.y,
+                               srcw.transform.location.z + 0.3), srcw.transform.rotation))
+            try:
+                v.set_autopilot(True)
+            except Exception:
+                pass
 
-        col = {"hit": False, "with": ""}
-        cbp = bl.find("sensor.other.collision")
-        cs = world.spawn_actor(cbp, carla.Transform(), attach_to=ego)
-        cs.listen(lambda e: col.update(hit=True, with_=getattr(e.other_actor, "type_id", "?")) or None)
-        cam = None; q = None
-        if a.record:
-            cbp2 = bl.find("sensor.camera.rgb")
-            cbp2.set_attribute("image_size_x", "960"); cbp2.set_attribute("image_size_y", "540")
-            cam = world.spawn_actor(cbp2, carla.Transform(carla.Location(x=-7.0, z=3.6),
-                                                          carla.Rotation(pitch=-13)), attach_to=ego)
-            q = queue.Queue(); cam.listen(q.put)
+        col["hit"] = False
+        if cs is None:
+            cbp = bl.find("sensor.other.collision")
+            cs = world.spawn_actor(cbp, carla.Transform(), attach_to=ego)
+            cs.listen(lambda e: col.update(hit=True, with_=getattr(e.other_actor, "type_id", "?")))
+            if a.record:
+                cbp2 = bl.find("sensor.camera.rgb")
+                cbp2.set_attribute("image_size_x", "960"); cbp2.set_attribute("image_size_y", "540")
+                cam = world.spawn_actor(cbp2, carla.Transform(carla.Location(x=-7.0, z=3.6),
+                                                              carla.Rotation(pitch=-13)), attach_to=ego)
+                q = queue.Queue(); cam.listen(q.put)
 
         for _ in range(3):      # 동기 모드: 스폰 직후 tick 해야 트랜스폼이 유효해진다
             world.tick()
@@ -421,12 +441,13 @@ def run(a):
                       f"{h[6]:.2f} {h[7]:.2f} {h[8]:.2f} idx={h[9]}", flush=True)
         results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps))
         print(f"ep{ep}: {outcome} ({steps}스텝)", flush=True)
-        for x in ([cam, cs] if cam else [cs]) + [ego] + npcs:
-            try:
-                if hasattr(x, "stop"): x.stop()
-                x.destroy()
-            except Exception: pass
-
+    for x in ([cam, cs] if cam else [cs]) + ([ego] if ego else []) + (npcs or []):
+        try:
+            if hasattr(x, 'stop'):
+                x.stop()
+            x.destroy()
+        except Exception:
+            pass
     st.synchronous_mode = False; world.apply_settings(st)
     ok = sum(1 for r in results if r["outcome"] == "성공")
     nl = chr(10)
@@ -440,7 +461,7 @@ def run(a):
     for k, d in sorted(by.items()):
         print(f"  {k}: {d[chr(39)+chr(111)+chr(107)+chr(39)] if False else d['ok']}/{d['n']} = {d['ok']/d['n']:.0%} "
               f"(충돌 {d.get('충돌',0)} 이탈 {d.get('이탈',0)} 시간초과 {d.get('timeout',0)})")
-    json.dump(results, open(os.path.join(a.record or ".", "drive_results.json"), "w"))
+    json.dump(results, open(a.out or os.path.join(a.record or ".", "drive_results.json"), "w"), ensure_ascii=False)
 
 
 if __name__ == "__main__":
@@ -452,4 +473,5 @@ if __name__ == "__main__":
     ap.add_argument("--npc", type=int, default=3)
     ap.add_argument("--turn-kind", default="전체", choices=["전체", "직진", "좌회전", "우회전"])
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--out", default="")
     run(ap.parse_args())
