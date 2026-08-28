@@ -219,7 +219,14 @@ class ObsBuilder:
             if abs(dpsi) < 5:
                 obs[b + 2], obs[b + 3], obs[b + 4] = 0.0, 0.5, 0.5
             else:
-                arc = 12 * 4.0
+                # 호 길이를 경로 실측으로 (상수 48m 를 쓰면 CARLA 의 좁은 회전이 완만하게
+                # 보여 정책이 감속·조향을 덜 한다 — 우회전 실패의 주원인)
+                arc = 0.0
+                for kk in range(max(segs[0] - 1, 0), min(segs[1], len(self.route) - 1)):
+                    l1 = self.route[kk].transform.location
+                    l2 = self.route[kk + 1].transform.location
+                    arc += math.hypot(l2.x - l1.x, l2.y - l1.y)
+                arc = max(arc, 2.0)
                 R = arc / abs(math.radians(dpsi))
                 obs[b + 2] = clip01(R / 70.5)
                 obs[b + 3] = 1.0 if dpsi > 0 else 0.0
