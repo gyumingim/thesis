@@ -82,19 +82,28 @@ def calibrate(world, bl, wp):
     return k_thr, k_brk
 
 
-def route_grp(cmap, wp, ahead_m=120.0, res=2.0):
+def route_grp(cmap, wp, ahead_m=120.0, res=2.0, dest_wp=None):
     """CARLA 공식 GlobalRoutePlanner 로 차로 수준 경로 생성 (교차로 분기 정확)."""
     import sys
     sys.path.append(r"C:/carla/Carla-0.10.0-Win64-Shipping/PythonAPI/carla")
     from agents.navigation.global_route_planner import GlobalRoutePlanner
     grp = GlobalRoutePlanner(cmap, res)
-    end = wp
-    walked = 0.0
-    while walked < ahead_m:
-        nxt = end.next(res)
-        if not nxt:
-            break
-        end = nxt[0]; walked += res
+    if dest_wp is not None:                 # 교차로 이탈점에서 60m 더 진행한 지점을 목적지로
+        end = dest_wp
+        walked = 0.0
+        while walked < 60.0:
+            nxt = end.next(res)
+            if not nxt:
+                break
+            end = nxt[0]; walked += res
+    else:
+        end = wp
+        walked = 0.0
+        while walked < ahead_m:
+            nxt = end.next(res)
+            if not nxt:
+                break
+            end = nxt[0]; walked += res
     trace = grp.trace_route(wp.transform.location, end.transform.location)
     return [w for w, _ in trace] or route_from(wp)
 
@@ -272,8 +281,9 @@ def run(a):
     npc_pool = [b for b in bl.filter("vehicle.*") if "firetruck" not in b.id and "carlacola" not in b.id]
 
     # 교차로 진입 차선 후보
-    anchors = []
-    seen = set()
+    # 앵커 = (진입 차선 45m 전, 교차로 통과 방향 분류). 회전 난이도 조건을 만들기 위해
+    # 진입/이탈 방위차로 좌회전·직진·우회전을 분류해 둔다.
+    anchors, seen = [], set()
     for wp in cmap.generate_waypoints(6.0):
         j = wp.get_junction()
         if j is None or j.id in seen:
@@ -282,20 +292,33 @@ def run(a):
         pairs = j.get_waypoints(carla.LaneType.Driving)
         if len(pairs) < 8:
             continue
-        for win, wout in pairs[:4]:
+        used_lane = set()
+        for win, wout in pairs:
+            key = (win.road_id, win.lane_id)
+            if key in used_lane:
+                continue
+            used_lane.add(key)
+            dpsi = (wout.transform.rotation.yaw - win.transform.rotation.yaw + 180) % 360 - 180
+            kind = "직진" if abs(dpsi) < 30 else ("우회전" if dpsi > 0 else "좌회전")
             prevs = win.previous(45.0)
             if prevs:
-                anchors.append(prevs[0]); break
-    print("진입 차선 후보", len(anchors))
-    K_THR, K_BRK = calibrate(world, bl, anchors[0]) if anchors else (1.0, 1.0)
+                anchors.append((prevs[0], kind, wout))
+    kinds = {}
+    for _, k, _ in anchors:
+        kinds[k] = kinds.get(k, 0) + 1
+    print("진입 차선 후보", len(anchors), kinds)
+    if a.turn_kind != "전체":
+        anchors = [x for x in anchors if x[1] == a.turn_kind] or anchors
+        print("필터 후", len(anchors), a.turn_kind)
+    K_THR, K_BRK = calibrate(world, bl, anchors[0][0]) if anchors else (1.0, 1.0)
 
     if a.record:
         os.makedirs(a.record, exist_ok=True)
     results = []
     for ep in range(a.episodes):
-        wp0 = anchors[ep % len(anchors)]
+        wp0, kind, wexit = anchors[(ep * 7 + 3) % len(anchors)]   # 앵커를 흩어 선택
         try:
-            route = route_grp(cmap, wp0)
+            route = route_grp(cmap, wp0, dest_wp=wexit)
         except Exception as ex:
             print("   GRP 실패, 폴백:", ex); route = route_from(wp0)
         ego = None
@@ -316,7 +339,7 @@ def run(a):
         max_sw = pc.wheels[0].max_steer_angle or 70.0
 
         npcs = []
-        for m in range(3):                       # 학습과 동일 밀도 V=3
+        for m in range(a.npc):                   # 기본 3 = 학습 밀도
             src = anchors[(ep + m + 1) % len(anchors)]
             for dz in (0.3, 2.0):
                 v = world.try_spawn_actor(npc_pool[m % len(npc_pool)], carla.Transform(
@@ -346,7 +369,8 @@ def run(a):
         hist = []
         _p = ego.get_transform().location
         _r0 = route[0].transform.location
-        print(f"   [진단] ego=({_p.x:.1f},{_p.y:.1f}) route0=({_r0.x:.1f},{_r0.y:.1f}) "
+        if a.verbose:
+            print(f"   [진단] ego=({_p.x:.1f},{_p.y:.1f}) route0=({_r0.x:.1f},{_r0.y:.1f}) "
               f"거리={math.hypot(_p.x-_r0.x,_p.y-_r0.y):.1f}m 경로길이={len(route)}", flush=True)
         outcome, steps = "timeout", 0
         for t in range(a.max_steps):
@@ -378,7 +402,7 @@ def run(a):
                          float(obs[9]), float(obs[10]), float(obs[13]), ob.idx))
             if len(hist) > 6:
                 hist.pop(0)
-            if t < 3 or t % 50 == 0:
+            if a.verbose and (t < 3 or t % 50 == 0):
                 print(f"   t={t} lat={lat_r:+.2f} spd={spd*3.6:.0f}km/h act=[{act[0]:+.2f},{act[1]:+.2f}] "
                       f"steer={steer:+.2f} idx={ob.idx}/{len(route)}", flush=True)
             loc = ego.get_transform().location
@@ -388,12 +412,12 @@ def run(a):
                 outcome = "이탈"; break
             if ob.idx >= len(route) - 3:
                 outcome = "성공"; break
-        if outcome != "성공":
+        if outcome != "성공" and a.verbose:
             print("   [실패 직전 5스텝] t/lat/속도/조향act/가감속/steer/navi_fwd/navi_lat/각도")
             for h in hist:
                 print(f"     {h[0]:3d} {h[1]:+5.2f} {h[2]:5.1f} {h[3]:+5.2f} {h[4]:+5.2f} {h[5]:+5.2f} "
                       f"{h[6]:.2f} {h[7]:.2f} {h[8]:.2f} idx={h[9]}", flush=True)
-        results.append(dict(ep=ep, outcome=outcome, steps=steps))
+        results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps))
         print(f"ep{ep}: {outcome} ({steps}스텝)", flush=True)
         for x in ([cam, cs] if cam else [cs]) + [ego] + npcs:
             try:
@@ -413,4 +437,7 @@ if __name__ == "__main__":
     ap.add_argument("--episodes", type=int, default=5)
     ap.add_argument("--max-steps", type=int, default=400)
     ap.add_argument("--record", default="")
+    ap.add_argument("--npc", type=int, default=3)
+    ap.add_argument("--turn-kind", default="전체", choices=["전체", "직진", "좌회전", "우회전"])
+    ap.add_argument("--verbose", action="store_true")
     run(ap.parse_args())
