@@ -45,6 +45,60 @@ class Policy:
         return np.clip(x @ self.W[2] + self.b[2], -1, 1)
 
 
+def calibrate(world, bl, wp):
+    """CARLA 차량의 풀스로틀 가속도·풀브레이크 감속도를 실측해 학습 환경(2.93 / 14.1 m/s^2)에
+    맞추는 이득을 구한다. 이걸 빼면 CARLA 가 훨씬 빨리 가속해 정책의 학습 속도영역을 벗어난다
+    (실측: 학습 25km/h vs CARLA 50km/h → 곡선 이탈)."""
+    bp = (bl.filter("vehicle.dodge.charger") or bl.filter("vehicle.*"))[0]
+    v = None
+    for dz in (0.3, 2.0, 8.0):
+        v = world.try_spawn_actor(bp, carla.Transform(
+            carla.Location(wp.transform.location.x, wp.transform.location.y,
+                           wp.transform.location.z + dz), wp.transform.rotation))
+        if v:
+            break
+    if v is None:
+        return 1.0, 1.0
+    v.set_simulate_physics(True)
+    for _ in range(5):
+        world.tick()
+    import time as _t
+    v.apply_control(carla.VehicleControl(throttle=1.0))
+    for _ in range(75):                     # 1.5 s
+        world.tick()
+    vel = v.get_velocity()
+    a_c = math.hypot(vel.x, vel.y) / 1.5
+    v.apply_control(carla.VehicleControl(throttle=0.0, brake=1.0))
+    v0 = math.hypot(vel.x, vel.y)
+    for _ in range(50):
+        world.tick()
+    vel2 = v.get_velocity()
+    d_c = max((v0 - math.hypot(vel2.x, vel2.y)) / 1.0, 0.1)
+    v.destroy()
+    k_thr = min(1.0, 2.93 / max(a_c, 0.1))
+    k_brk = min(1.0, 14.1 / max(d_c, 0.1))
+    print(f"캘리브레이션: CARLA 가속 {a_c:.2f} m/s^2 (목표 2.93) → K_THR={k_thr:.2f} | "
+          f"감속 {d_c:.2f} (목표 14.1) → K_BRK={k_brk:.2f}")
+    return k_thr, k_brk
+
+
+def route_grp(cmap, wp, ahead_m=120.0, res=2.0):
+    """CARLA 공식 GlobalRoutePlanner 로 차로 수준 경로 생성 (교차로 분기 정확)."""
+    import sys
+    sys.path.append(r"C:/carla/Carla-0.10.0-Win64-Shipping/PythonAPI/carla")
+    from agents.navigation.global_route_planner import GlobalRoutePlanner
+    grp = GlobalRoutePlanner(cmap, res)
+    end = wp
+    walked = 0.0
+    while walked < ahead_m:
+        nxt = end.next(res)
+        if not nxt:
+            break
+        end = nxt[0]; walked += res
+    trace = grp.trace_route(wp.transform.location, end.transform.location)
+    return [w for w, _ in trace] or route_from(wp)
+
+
 def route_from(wp, n=60, step=4.0):
     """진입 차선에서 시작해 교차로를 통과하는 경로(직진 우선)."""
     route = [wp]
@@ -166,7 +220,7 @@ class ObsBuilder:
         # 주변 장애물: 이동 차량 + 노변 정적 차량(주차) — 학습 환경엔 없지만 CARLA 에는 있다.
         # 관측에서 빠지면 정책이 존재 자체를 모르므로 충돌한다(실측: static.car 충돌).
         cands = []
-        for pat in ("vehicle.*", "static.car*"):
+        for pat in ("vehicle.*", "static.car*", "static.prop.*"):
             for a in self.world.get_actors().filter(pat):
                 if a.id == e.id:
                     continue
@@ -233,13 +287,17 @@ def run(a):
             if prevs:
                 anchors.append(prevs[0]); break
     print("진입 차선 후보", len(anchors))
+    K_THR, K_BRK = calibrate(world, bl, anchors[0]) if anchors else (1.0, 1.0)
 
     if a.record:
         os.makedirs(a.record, exist_ok=True)
     results = []
     for ep in range(a.episodes):
         wp0 = anchors[ep % len(anchors)]
-        route = route_from(wp0)
+        try:
+            route = route_grp(cmap, wp0)
+        except Exception as ex:
+            print("   GRP 실패, 폴백:", ex); route = route_from(wp0)
         ego = None
         for dz in (0.3, 1.5, 6.0):
             tf0 = carla.Transform(carla.Location(wp0.transform.location.x, wp0.transform.location.y,
@@ -285,6 +343,7 @@ def run(a):
                 try: q.get(timeout=5.0)
                 except Exception: pass
         ob = ObsBuilder(world, ego, route)
+        hist = []
         _p = ego.get_transform().location
         _r0 = route[0].transform.location
         print(f"   [진단] ego=({_p.x:.1f},{_p.y:.1f}) route0=({_r0.x:.1f},{_r0.y:.1f}) "
@@ -297,9 +356,9 @@ def run(a):
             steer = float(np.clip(-40.0 * act[0] / max_sw, -1, 1))     # 좌(+) → CARLA 우(+) 반전
             ctrl = carla.VehicleControl(steer=steer)
             if act[1] >= 0:
-                ctrl.throttle = 0.0 if spd * 3.6 > MAXS_KMH else float(act[1])
+                ctrl.throttle = 0.0 if spd * 3.6 > MAXS_KMH else float(act[1]) * K_THR
             else:
-                ctrl.brake = float(min(abs(act[1]), 1.0))
+                ctrl.brake = float(min(abs(act[1]) * K_BRK, 1.0))
             for k5 in range(5):
                 ego.apply_control(ctrl); world.tick()
                 if a.record:
@@ -315,13 +374,25 @@ def run(a):
             if col["hit"]:
                 outcome = "충돌"
                 print(f"   충돌 상대: {col.get('with_', '?')}", flush=True); break
+            hist.append((t, lat_r, spd * 3.6, float(act[0]), float(act[1]), steer,
+                         float(obs[9]), float(obs[10]), float(obs[13]), ob.idx))
+            if len(hist) > 6:
+                hist.pop(0)
             if t < 3 or t % 50 == 0:
                 print(f"   t={t} lat={lat_r:+.2f} spd={spd*3.6:.0f}km/h act=[{act[0]:+.2f},{act[1]:+.2f}] "
                       f"steer={steer:+.2f} idx={ob.idx}/{len(route)}", flush=True)
-            if abs(lat_r) > 5.5:
+            loc = ego.get_transform().location
+            nw = cmap.get_waypoint(loc, True, carla.LaneType.Driving)
+            off = math.hypot(loc.x - nw.transform.location.x, loc.y - nw.transform.location.y) if nw else 99
+            if off > max(nw.lane_width, 3.0) * 0.9 if nw else True:
                 outcome = "이탈"; break
             if ob.idx >= len(route) - 3:
                 outcome = "성공"; break
+        if outcome != "성공":
+            print("   [실패 직전 5스텝] t/lat/속도/조향act/가감속/steer/navi_fwd/navi_lat/각도")
+            for h in hist:
+                print(f"     {h[0]:3d} {h[1]:+5.2f} {h[2]:5.1f} {h[3]:+5.2f} {h[4]:+5.2f} {h[5]:+5.2f} "
+                      f"{h[6]:.2f} {h[7]:.2f} {h[8]:.2f} idx={h[9]}", flush=True)
         results.append(dict(ep=ep, outcome=outcome, steps=steps))
         print(f"ep{ep}: {outcome} ({steps}스텝)", flush=True)
         for x in ([cam, cs] if cam else [cs]) + [ego] + npcs:
