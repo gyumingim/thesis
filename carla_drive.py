@@ -606,6 +606,14 @@ def run(a):
             for h in hist:
                 print(f"     {h[0]:3d} {h[1]:+5.2f} {h[2]:5.1f} {h[3]:+5.2f} {h[4]:+5.2f} {h[5]:+5.2f} "
                       f"{h[6]:.2f} {h[7]:.2f} {h[8]:.2f} idx={h[9]}", flush=True)
+        # 라벨 정정: 앵커의 진입/이탈 방위차가 아니라 '실제 실행된 경로'의 총 회전각으로
+        # 분류한다. 경로계획기가 유턴 경로를 내놓는 경우가 있고(실측 170도), 유턴은
+        # 학습 환경에 없는 기동이라 좌회전 통계를 오염시킨다.
+        _td = _turn_deg(route)
+        if _td >= 150:
+            kind = "유턴"
+        elif _td < 30 and kind != "직진":
+            kind = "직진"
         results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps, entry_kmh=round(entry_spd or 0, 1), min_R=round(min(min_R, 999), 1), max_lat=round(max_lat, 2), turn_deg=round(_turn_deg(route), 1), n_junc=sum(1 for w in route if w.is_junction)))
         print(f"ep{ep}: {outcome} ({steps}스텝)", flush=True)
     for x in ([cam, cs] if cam else [cs]) + ([ego] if ego else []) + (npcs or []):
