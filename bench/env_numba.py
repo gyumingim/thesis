@@ -29,6 +29,11 @@ MA = np.float32(spec.ACCEL_MAX)          # 가속 2.93 (실측)
 MB = np.float32(spec.BRAKE_MAX)          # 제동 14.1 (실측, 비대칭)
 SV0 = np.float32(spec.STEER_SAT_V0)      # 조향 포화 모델
 SSP = np.float32(spec.STEER_SAT_P)
+import os as _os
+# 타이어 마찰 한계(횡가속 상한, g). 0 이면 비활성 = 기존 동작 그대로.
+# CARLA 폐루프 실측: 반경 10~15m 회전에 52km/h 로 진입해 1.9g 를 요구하다 실패했다.
+# 학습 시뮬은 슬립이 없어 그런 기동이 합법이었으므로 감속을 배울 유인이 없었다.
+MU_LAT = np.float32(float(_os.environ.get('MU_LAT', '0')))
 VMAX = np.float32(spec.MAX_SPEED)
 VMAX_KMH = np.float32(spec.MAX_SPEED_KMH)
 CR = np.float32(spec.COLLISION_RADIUS)
@@ -215,7 +220,16 @@ def _step(WPS, NWP, CUM, TANG, RLEN, LOFF, SES, SXY, SINFO, RECTS, BOX, CELL, DG
             v = 0.0 if v < 0.0 else (VMAX if v > VMAX else v)
             # 조향 포화(타이어 슬립 근사): δ_eff = δ / (1 + (|s|·v/V0)^P) — MD 4점 실측 피팅
             sat = np.float32(1.0) + ((a0 if a0 > 0 else -a0) * v / SV0) ** SSP
-            hh = ego[e, 2] + v / WB * np.tan(a0 * MS / sat) * DT_P
+            delta = a0 * MS / sat
+            if MU_LAT > 0.0 and v > 0.5:
+                # |a_lat| = v^2/R = v^2 * tan(delta)/WB <= MU_LAT*g
+                tmax = MU_LAT * np.float32(9.81) * WB / (v * v)
+                td = np.tan(delta)
+                if td > tmax:
+                    delta = np.arctan(tmax)
+                elif td < -tmax:
+                    delta = -np.arctan(tmax)
+            hh = ego[e, 2] + v / WB * np.tan(delta) * DT_P
             ego[e, 0] += v * np.cos(hh) * DT_P
             ego[e, 1] += v * np.sin(hh) * DT_P
             ego[e, 2] = hh
