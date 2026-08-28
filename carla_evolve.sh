@@ -25,14 +25,16 @@ round=0
 while [ $round -lt 40 ]; do
   round=$((round+1))
   # 조건: (회전종류, NPC수, 거버너) — 거버너 0 조건을 섞어 절제 데이터도 함께 쌓는다
-  for cond in "전체 3 0.8" "우회전 3 0.8" "좌회전 3 0.8" "전체 8 0.8" "전체 3 0"; do
+  # 조건: 회전종류 NPC 거버너 마스킹 — 2x2 절제로 처방 기여도를 분리한다
+  for cond in "전체 3 0.8 mask" "전체 3 0.8 nomask" "전체 3 0 mask" "전체 3 0 nomask" "우회전 3 0.8 mask" "좌회전 3 0.8 mask" "전체 8 0.8 mask" "우회전 3 0 nomask"; do
     set -- $cond
-    kind=$1; npc=$2; gov=$3
+    kind=$1; npc=$2; gov=$3; msk=$4
+    MFLAG=""; [ "$msk" = "mask" ] && MFLAG="--mask-degen"
     ensure || { echo "[$(date +%H:%M)] 서버 복구 실패" >> $LOG; sleep 60; continue; }
-    tag="v3_r${round}_${kind}_npc${npc}_g${gov}"
+    tag="v4_r${round}_${kind}_npc${npc}_g${gov}_${msk}"
     echo "[$(date +%H:%M)] R$round $kind NPC$npc gov$gov" >> $LOG
     PYTHONUTF8=1 $PY /c/Users/a3162/thesis/carla_drive.py --policy C:/ue/policy.npz \
-      --episodes 20 --max-steps 500 --turn-kind "$kind" --npc "$npc" --governor "$gov" \
+      --episodes 20 --max-steps 500 --turn-kind "$kind" --npc "$npc" --governor "$gov" $MFLAG \
       --out "$RES/$tag.json" > $RES/$tag.log 2>&1
     grep -E "=== 전체" $RES/$tag.log | sed "s/^/  [$tag] /" >> $LOG 2>/dev/null
   done
