@@ -90,6 +90,35 @@ PROP_POOL = [   # (경로, 인도 배치 확률) — v5: 생활감 증량 (판�
     ("/Game/Prop/Kit_NewsDispenser_A/Mesh/SM_NewsDispenser_A_01", 0.5),
     ("/Game/Prop/Kit_BusStopSign_A/Mesh/SM_BusStopSign_A", 0.3),
 ]
+# 기상·시간 프리셋 (2026-08-29). 각 항목은 (가중치, 태양 세기, 안개 밀도, 태양 pitch,
+# 색온도, 가로등 점등확률) 를 서로 정합하게 묶는다. 개별 파라미터를 따로 굴리면
+# "안개는 짙은데 그림자는 쨍한" 물리적으로 불가능한 조합이 나온다(구판의 실제 결함).
+WEATHER = [
+    dict(w=0.34, name="흐림",       overcast=True,  sun_int=(1.5, 3.2),  fog=(0.0030, 0.0055),
+         pitch=(-62, -28), temp=(5400, 6600), lamps=True),
+    dict(w=0.22, name="짙은 흐림",  overcast=True,  sun_int=(0.9, 1.8),  fog=(0.0055, 0.0090),
+         pitch=(-70, -40), temp=(6000, 7200), lamps=True),
+    dict(w=0.18, name="비 온 뒤",   overcast=True,  sun_int=(2.4, 4.4),  fog=(0.0020, 0.0040),
+         pitch=(-55, -22), temp=(5000, 6200), lamps=0.5),
+    dict(w=0.14, name="옅은 해",    overcast=False, sun_int=(5.0, 8.0),  fog=(0.0015, 0.0030),
+         pitch=(-50, -20), temp=(4800, 5800), lamps=0.2),
+    dict(w=0.08, name="맑음",       overcast=False, sun_int=(8.0, 12.0), fog=(0.0008, 0.0018),
+         pitch=(-52, -18), temp=(4400, 5400), lamps=0.05),
+    dict(w=0.04, name="이른 아침",  overcast=False, sun_int=(3.0, 5.5),  fog=(0.0045, 0.0080),
+         pitch=(-22, -8),  temp=(4200, 5000), lamps=0.6),
+]
+
+
+def _weighted_choice(table):
+    r = random.random() * sum(t["w"] for t in table)
+    acc = 0.0
+    for t in table:
+        acc += t["w"]
+        if r <= acc:
+            return t
+    return table[-1]
+
+
 VEH_EXCLUDE = ("vehCar_vehicle02",  # 후면 저폴리 붕괴 (3심 v3 판정 실측)
                "trailer", "Trailer", "Wheel", "Brake", "Door", "MotionBlur", "Trans", "No_Wheel", "Steering",
                "Caliper", "Rotor", "Glass", "Mirror", "Bumper", "Hood", "Trunk", "seat", "Seat")
@@ -239,10 +268,16 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                               side * (ROAD_HALF_W_CM + 150) - sb.origin.y))
             a.add_actor_world_offset(unreal.Vector(0, 0, 15), False, False)
 
-    overcast = random.random() < 0.7          # 젖은 노면(재질 고정)과 정합하는 흐림 우세
-    sun_int = random.uniform(1.5, 4.0) if overcast else random.uniform(7.0, 12.0)
-    fog_d = random.uniform(0.003, 0.006) if overcast else random.uniform(0.0008, 0.002)
-    lamps_on = overcast or random.random() < 0.3   # 쨍한 날 점등 가로등 = 렌더 티 (3심 지적)
+    # 기상·시간 프리셋. 판정 기준은 "예쁜 사진"이 아니라 "평범한 실사"이므로 표본을
+    # 일상적 조건에 몰아준다 — 황혼·역광 같은 극적 조건은 사진으로는 좋아 보여도
+    # 렌더 티가 드러나고, 무엇보다 실제 주행 데이터의 다수가 아니다.
+    # 가중치 합 1.0. 노면 재질이 젖은 상태로 고정돼 있어(위 주석) 마른 노면을 전제하는
+    # 쨍한 정오는 비중을 낮게 둔다 — 마른 노면 변형을 만들면 그때 재조정할 것.
+    preset = _weighted_choice(WEATHER)
+    overcast = preset["overcast"]
+    sun_int = random.uniform(*preset["sun_int"])
+    fog_d = random.uniform(*preset["fog"])
+    lamps_on = preset["lamps"] if isinstance(preset["lamps"], bool) else random.random() < preset["lamps"]
     if lamps_on:
         for k in range(1, ROAD_TILES):
             for side, yaw in ((-1, 0), (1, 180)):
@@ -302,7 +337,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     ov("auto_exposure_bias", random.uniform(-1.1, -0.5))     # 하이라이트 보존 (백화 억제)
     ppv.set_editor_property("settings", st)
 
-    sun_pitch = random.uniform(-55, -12) if not overcast else random.uniform(-65, -20)
+    sun_pitch = random.uniform(*preset["pitch"])
     sun_yaw = random.uniform(0, 360)
     sun = act.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 1000),
                                      unreal.Rotator(0, sun_pitch, sun_yaw))
@@ -312,8 +347,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     sun.light_component.set_editor_property("contact_shadow_length_in_ws", False)
     # 시안 단색조 타파 — 물리 색온도 사용 (3심: 청백 일변도 재지적)
     sun.light_component.set_editor_property("use_temperature", True)
-    sun.light_component.set_editor_property("temperature",
-        random.uniform(4200.0, 5600.0) if not overcast else random.uniform(5200.0, 6800.0))
+    sun.light_component.set_editor_property("temperature", random.uniform(*preset["temp"]))
     act.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 1000), unreal.Rotator(0, 0, 0))
     act.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
 
@@ -399,6 +433,8 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         json.dump(dict(scene=i, level=path,
                        camera=dict(fov_deg=FOV, z_m=round(cam_z / 100, 3), yaw_deg=round(cam_yaw, 2), width=W, height=H),
                        sun=dict(pitch=round(sun_pitch, 1), yaw=round(sun_yaw, 1)),
+                       weather=dict(preset=preset["name"], sun_intensity=round(sun_int, 2),
+                                    fog_density=round(fog_d, 5), lamps=bool(lamps_on)),
                        vehicles=labels), f, indent=2)
     log("scene_%d OK (차량 %d, 건물 %d)" % (i, len(labels), n_bldg))
 
