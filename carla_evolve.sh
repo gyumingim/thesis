@@ -1,6 +1,7 @@
 #!/bin/bash
-# CARLA 폐루프 자율 진화 루프 v2 (2026-08-28 야간).
-# 액터 재사용으로 크래시 감소, 그래도 죽으면 서버 자동 재기동. 조건별 20에피소드씩 순회.
+# CARLA 폐루프 자율 진화 루프 v3 (2026-08-28 야간).
+# 조건별 배치를 순회하며 결과를 누적한다. 액터 재사용 + 서버 자동 재기동.
+# ★ 배치는 순차 실행 — 동시 실행 시 두 클라이언트가 같은 서버를 tick 해 결과가 오염된다(실측).
 set -u
 LOG=/c/carla/evolve.log
 RES=/c/carla/evolve
@@ -21,18 +22,19 @@ ensure() {
   return 1
 }
 round=0
-while [ $round -lt 60 ]; do
+while [ $round -lt 40 ]; do
   round=$((round+1))
-  for cond in "전체 3" "우회전 3" "좌회전 3" "전체 8"; do
+  # 조건: (회전종류, NPC수, 거버너) — 거버너 0 조건을 섞어 절제 데이터도 함께 쌓는다
+  for cond in "전체 3 0.8" "우회전 3 0.8" "좌회전 3 0.8" "전체 8 0.8" "전체 3 0"; do
     set -- $cond
-    kind=$1; npc=$2
+    kind=$1; npc=$2; gov=$3
     ensure || { echo "[$(date +%H:%M)] 서버 복구 실패" >> $LOG; sleep 60; continue; }
-    tag="r${round}_${kind}_npc${npc}"
-    echo "[$(date +%H:%M)] R$round $kind NPC$npc 시작" >> $LOG
+    tag="v3_r${round}_${kind}_npc${npc}_g${gov}"
+    echo "[$(date +%H:%M)] R$round $kind NPC$npc gov$gov" >> $LOG
     PYTHONUTF8=1 $PY /c/Users/a3162/thesis/carla_drive.py --policy C:/ue/policy.npz \
-      --episodes 20 --max-steps 400 --turn-kind "$kind" --npc "$npc" \
+      --episodes 20 --max-steps 500 --turn-kind "$kind" --npc "$npc" --governor "$gov" \
       --out "$RES/$tag.json" > $RES/$tag.log 2>&1
-    grep -E "=== 전체|^  [가-힣]+:" $RES/$tag.log >> $LOG 2>/dev/null
+    grep -E "=== 전체" $RES/$tag.log | sed "s/^/  [$tag] /" >> $LOG 2>/dev/null
   done
   echo "EVOLVE_ROUND_DONE $round $(date +%H:%M)" >> $LOG
 done
