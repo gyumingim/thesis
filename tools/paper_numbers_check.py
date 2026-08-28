@@ -87,7 +87,24 @@ def main():
         ("충돌 시작(t300)", "32.2", "%.1f" % mean_at("t000300.pt", "crash_rate")),
         ("충돌 종점(t3300)", "25.6", "%.1f" % mean_at("t003300.pt", "crash_rate")),
         ("이탈 final 포함시", "18.9", "%.1f" % mean_at("final.pt", "out_of_road_rate")),
+        ("40분 최저", "40.0", "%.1f" % mean_at("t002400.pt", "success_rate")),
     ]
+
+    # 5분 대 40분 낙폭의 대응 t-검정 (§6.2 "하강은 노이즈가 아니다")
+    try:
+        from scipy import stats as _st
+        a, b = [], []
+        for f in sorted(glob.glob("bench_results/clean/eval_md__clean_s*.json")):
+            rows = json.load(open(f))
+            a.append(100 * [r for r in rows if r["ckpt"] == "t000300.pt"][0]["success_rate"])
+            b.append(100 * [r for r in rows if r["ckpt"] == "t002400.pt"][0]["success_rate"])
+        t, pv = _st.ttest_rel(a, b)
+        checks += [("5분-40분 낙폭", "20.0 / 20.0 / 16.7",
+                    " / ".join("%.1f" % (x - y) for x, y in zip(a, b))),
+                   ("대응 t", "17.0", "%.1f" % t),
+                   ("대응 p", "0.0034", "%.4f" % pv)]
+    except Exception:
+        pass
 
     # 처리량 실현 배수 (데스크톱 정숙): 경량 136M vs 같은 장비 네이티브 2.17M
     try:
