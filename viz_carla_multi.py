@@ -15,6 +15,30 @@ import queue
 import carla
 
 
+def approach_anchor(world, j, back_m=65.0):
+    """교차로 진입 차선에서 back_m 앞선 지점의 차선 중심 자세 — 정렬 앵커.
+    시뮬 ego 의 첫 프레임 자세를 이 자세에 맞추면 차선 위를 달린다."""
+    pairs = j.get_waypoints(carla.LaneType.Driving)
+    best = None
+    for win, wout in pairs:
+        dy = abs((win.transform.rotation.yaw - wout.transform.rotation.yaw + 180) % 360 - 180)
+        if dy > 20:                      # 직진 통과 차선만 (곡선 램프 제외)
+            continue
+        prevs = win.previous(back_m)
+        if not prevs:
+            continue
+        cand = prevs[0]
+        if best is None or dy < best[0]:
+            best = (dy, cand)
+    if best is None:                     # 폴백: 아무 진입 차선이나
+        for win, _ in pairs:
+            prevs = win.previous(back_m * 0.6)
+            if prevs:
+                return prevs[0].transform
+        return None
+    return best[1].transform
+
+
 def junctions(world, k):
     """4거리 후보를 크기순으로 k 개 (교차로 id 중복 제거)."""
     cmap = world.get_map()
@@ -29,7 +53,7 @@ def junctions(world, k):
             continue
         bb = j.bounding_box
         cand.append((bb.extent.x * bb.extent.y, bb.location,
-                     wps[0][0].transform.rotation.yaw, j.id))
+                     wps[0][0].transform.rotation.yaw, j.id, j))
     cand.sort(key=lambda c: -c[0])
     return cand[:k]
 
@@ -129,7 +153,11 @@ def main():
         try: v.destroy()
         except Exception: pass
 
-    js = junctions(world, len(eps))
+    js = junctions(world, len(eps) * 3)
+    # 진입 차선 앵커를 구할 수 있는 교차로만 채택
+    js = [(area, loc, yaw, jid, approach_anchor(world, jobj))
+          for (area, loc, yaw, jid, jobj) in js]
+    js = [x for x in js if x[4] is not None][:len(eps)]
     if len(js) < len(eps):
         print(f"교차로 부족: {len(js)} < {len(eps)} — 있는 만큼만"); eps = eps[:len(js)]
     print("교차로:", [(j[3], round(j[2], 1)) for j in js])
@@ -151,11 +179,14 @@ def main():
 
     actors, lanes = [], []
     for k, (ep, jn) in enumerate(zip(eps, js)):
-        _, center, theta, jid = jn
+        _, _, _, jid, anchor = jn
         f0 = ep["frames"][0]
+        # 앵커 = CARLA 차선 중심 자세, 시뮬 기준점 = ego 첫 프레임 (차선 위 정렬 보장)
+        center, theta = anchor.location, anchor.rotation.yaw
+        sim_ref_k = [f0["ego"][0], f0["ego"][1]]
         ego = None
         for dz in (0.3, 2.0, 8.0, 25.0):
-            ego = world.try_spawn_actor(ego_bp, to_carla(*f0["ego"][:3], center, theta, sim_center, dz))
+            ego = world.try_spawn_actor(ego_bp, to_carla(*f0["ego"][:3], center, theta, sim_ref_k, dz))
             if ego:
                 break
         if ego is None:
@@ -178,8 +209,8 @@ def main():
             carla.Location(x=-6.5, z=3.2), carla.Rotation(pitch=-12)), attach_to=ego)
         q, qs = queue.Queue(), queue.Queue()
         cam.listen(q.put); seg.listen(qs.put)
-        lanes.append(dict(k=k, ep=ep, center=center, theta=theta, ego=ego, npcs=npcs,
-                          cam=cam, q=q, seg=seg, qs=qs))
+        lanes.append(dict(k=k, ep=ep, center=center, theta=theta, sim_ref=sim_ref_k,
+                          ego=ego, npcs=npcs, cam=cam, q=q, seg=seg, qs=qs))
         actors += [ego, cam, seg] + npcs
 
     LEVEL_BBS = level_car_bbs(world)
@@ -191,10 +222,10 @@ def main():
             for l in lanes:
                 frs = l["ep"]["frames"]
                 fr = frs[min(i, len(frs) - 1)]
-                l["ego"].set_transform(to_carla(*fr["ego"][:3], l["center"], l["theta"], sim_center))
+                l["ego"].set_transform(to_carla(*fr["ego"][:3], l["center"], l["theta"], l["sim_ref"]))
                 for m, v in enumerate(l["npcs"]):
                     if m < len(fr["npc"]):
-                        v.set_transform(to_carla(*fr["npc"][m][:3], l["center"], l["theta"], sim_center))
+                        v.set_transform(to_carla(*fr["npc"][m][:3], l["center"], l["theta"], l["sim_ref"]))
                     else:
                         v.set_transform(carla.Transform(carla.Location(
                             l["center"].x + 300 + m * 6, l["center"].y, l["center"].z)))
