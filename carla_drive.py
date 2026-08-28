@@ -82,6 +82,57 @@ def calibrate(world, bl, wp):
     return k_thr, k_brk
 
 
+def route_via_junction(wp0, wenter, wexit, step=2.0, tail=30):
+    """진입로 → 교차로 차선(next_until_lane_end) → 이탈로. 분기 선택을 탐욕법에 맡기지 않고
+    의도한 교차로 차선을 직접 따라간다(실측: 탐욕 선택은 좌회전 앵커에서도 직진을 골랐다)."""
+    route = [wp0]
+    cur = wp0
+    for _ in range(80):
+        if cur.transform.location.distance(wenter.transform.location) < step * 1.5:
+            break
+        nxts = cur.next(step)
+        if not nxts:
+            break
+        cur = min(nxts, key=lambda w: w.transform.location.distance(wenter.transform.location))
+        route.append(cur)
+    try:
+        jr = wenter.next_until_lane_end(step)
+    except Exception:
+        jr = []
+    route += list(jr)
+    cur = (jr[-1] if jr else wexit)
+    for _ in range(tail):
+        nxts = cur.next(step)
+        if not nxts:
+            break
+        cur = nxts[0]
+        route.append(cur)
+    return route
+
+
+def route_to_exit(wp0, wexit, step=2.0, max_n=260, tail=30):
+    """교차로 이탈 waypoint 를 목표로 분기를 선택해 경로를 만든다.
+    GRP 는 좌회전 목적지에서 교차로를 우회하는 경로를 내놓는 경우가 있어(실측: 좌회전
+    실패 에피소드의 경로에 교차로 waypoint 자체가 없었다) 의도한 기동을 보장하지 못한다."""
+    route, cur = [wp0], wp0
+    target = wexit.transform.location
+    for _ in range(max_n):
+        nxts = cur.next(step)
+        if not nxts:
+            break
+        cur = min(nxts, key=lambda w: w.transform.location.distance(target))
+        route.append(cur)
+        if cur.transform.location.distance(target) < 2.5:
+            break
+    for _ in range(tail):
+        nxts = cur.next(step)
+        if not nxts:
+            break
+        cur = nxts[0]
+        route.append(cur)
+    return route
+
+
 def route_grp(cmap, wp, ahead_m=120.0, res=2.0, dest_wp=None):
     """CARLA 공식 GlobalRoutePlanner 로 차로 수준 경로 생성 (교차로 분기 정확)."""
     import sys
@@ -306,12 +357,17 @@ def run(a):
                 continue
             used_lane.add(key)
             dpsi = (wout.transform.rotation.yaw - win.transform.rotation.yaw + 180) % 360 - 180
-            kind = "직진" if abs(dpsi) < 30 else ("우회전" if dpsi > 0 else "좌회전")
+            if abs(dpsi) >= 150:
+                kind = "유턴"          # 정책이 학습한 적 없는 기동 — 별도 조건으로 분리
+            elif abs(dpsi) < 30:
+                kind = "직진"
+            else:
+                kind = "우회전" if dpsi > 0 else "좌회전"
             prevs = win.previous(a.approach)
             if prevs:
-                anchors.append((prevs[0], kind, wout))
+                anchors.append((prevs[0], kind, wout, win))
     kinds = {}
-    for _, k, _ in anchors:
+    for _, k, _, _w in anchors:
         kinds[k] = kinds.get(k, 0) + 1
     print("진입 차선 후보", len(anchors), kinds)
     if a.turn_kind != "전체":
@@ -329,11 +385,28 @@ def run(a):
     cs = cam = q = None
 
     for ep in range(a.episodes):
-        wp0, kind, wexit = anchors[(ep * 7 + 3) % len(anchors)]   # 앵커를 흩어 선택
+        wp0, kind, wexit, wenter = anchors[(ep * 7 + 3) % len(anchors)]   # 앵커를 흩어 선택
         try:
             route = route_grp(cmap, wp0, dest_wp=wexit)
         except Exception as ex:
             print("   GRP 실패, 폴백:", ex); route = route_from(wp0)
+        # 의도한 기동 보장: (i) 교차로 구간이 없거나 (ii) 회전 앵커인데 경로가 직진이면
+        # 이탈점을 목표로 분기를 선택하는 경로로 대체한다(실측: GRP 가 좌회전 앵커에서도
+        # 직진 경로를 내놓아 '좌회전 조건'이 실제로는 직진이었다).
+        def _turn_deg(rt):
+            js = [k for k, w in enumerate(rt) if w.is_junction]
+            if not js:
+                return 0.0
+            a = rt[max(js[0] - 1, 0)].transform.rotation.yaw
+            b = rt[min(js[-1] + 1, len(rt) - 1)].transform.rotation.yaw
+            return abs((b - a + 180) % 360 - 180)
+
+        if (not any(w.is_junction for w in route)) or (kind != "직진" and _turn_deg(route) < 30):
+            alt = route_via_junction(wp0, wenter, wexit)
+            if not any(w.is_junction for w in alt):
+                alt = route_to_exit(wp0, wexit)
+            if any(w.is_junction for w in alt) and (kind == "직진" or _turn_deg(alt) >= 30):
+                route = alt
         tf0 = carla.Transform(carla.Location(wp0.transform.location.x, wp0.transform.location.y,
                                              wp0.transform.location.z + 0.3), wp0.transform.rotation)
         if ego is None:
@@ -364,7 +437,7 @@ def run(a):
                         tf0.rotation))
                     if v:
                         npcs.append(v); break
-        far = [w for w, _k, _e in anchors
+        far = [w for w, _k, _e, _i in anchors
                if w.transform.location.distance(wp0.transform.location) > 30.0] or [x[0] for x in anchors]
         for m, v in enumerate(npcs):
             srcw = far[(ep * 3 + m) % len(far)]
@@ -399,7 +472,8 @@ def run(a):
         entry_spd, max_lat = None, 0.0
         j_entry = next((k for k, w in enumerate(route) if w.is_junction), len(route) - 1)
         min_R = 1e9
-        for kk in range(max(j_entry - 2, 0), min(j_entry + 14, len(route) - 1)):
+        j_last = max((k for k, w in enumerate(route) if w.is_junction), default=j_entry)
+        for kk in range(max(j_entry - 2, 0), min(j_last + 2, len(route) - 1)):
             y1 = route[kk].transform.rotation.yaw
             y2 = route[kk + 1].transform.rotation.yaw
             dp = abs((y2 - y1 + 180) % 360 - 180)
@@ -462,7 +536,7 @@ def run(a):
                 outcome = "충돌"
                 print(f"   충돌 상대: {col.get('with_', '?')}", flush=True); break
             max_lat = max(max_lat, abs(lat_r))
-            if entry_spd is None and ob.idx >= j_entry:
+            if entry_spd is None and j_entry > 3 and ob.idx >= j_entry:
                 entry_spd = spd * 3.6
             hist.append((t, lat_r, spd * 3.6, float(act[0]), float(act[1]), steer,
                          float(obs[9]), float(obs[10]), float(obs[13]), ob.idx))
@@ -483,7 +557,7 @@ def run(a):
             for h in hist:
                 print(f"     {h[0]:3d} {h[1]:+5.2f} {h[2]:5.1f} {h[3]:+5.2f} {h[4]:+5.2f} {h[5]:+5.2f} "
                       f"{h[6]:.2f} {h[7]:.2f} {h[8]:.2f} idx={h[9]}", flush=True)
-        results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps, entry_kmh=round(entry_spd or 0, 1), min_R=round(min(min_R, 999), 1), max_lat=round(max_lat, 2)))
+        results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps, entry_kmh=round(entry_spd or 0, 1), min_R=round(min(min_R, 999), 1), max_lat=round(max_lat, 2), turn_deg=round(_turn_deg(route), 1), n_junc=sum(1 for w in route if w.is_junction)))
         print(f"ep{ep}: {outcome} ({steps}스텝)", flush=True)
     for x in ([cam, cs] if cam else [cs]) + ([ego] if ego else []) + (npcs or []):
         try:
@@ -515,7 +589,8 @@ if __name__ == "__main__":
     ap.add_argument("--max-steps", type=int, default=400)
     ap.add_argument("--record", default="")
     ap.add_argument("--npc", type=int, default=3)
-    ap.add_argument("--turn-kind", default="전체", choices=["전체", "직진", "좌회전", "우회전"])
+    ap.add_argument("--turn-kind", default="전체",
+                    choices=["전체", "직진", "좌회전", "우회전", "유턴"])
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--out", default="")
     ap.add_argument("--approach", type=float, default=65.0,
