@@ -20,7 +20,20 @@ MSYS_NO_PATHCONV=1 CS_OUT="C:/ue/verify10" timeout -k 60 1800 "$UE" "$PROJ" \
   -run=pythonscript -script="C:/Users/a3162/thesis/ue/scene_build_cs.py $N seed=90000" \
   -unattended -nosplash -abslog="C:/ue/verify10/build.log" > /dev/null 2>&1
 echo "build rc=$? $(date +%H:%M)" >> $OUT/log
+# ★ 2026-08-29 실측: 커맨드릿이 "done 10/10" 을 찍고도 특정 umap 저장에 실패할 수 있다
+#   (파일 잠금 → LogSavePackage Error). 그래도 JSON 은 써지므로 **라벨과 레벨이 조용히
+#   어긋난다**. 레벨이 JSON 보다 오래된 장면을 찾아 기록하고 렌더에서 제외한다.
+GEN="/c/Users/a3162/Documents/Unreal Projects/CitySample/Content/GenScenes"
+STALE=""
 for i in $(seq 0 $((N-1))); do
+  u=$(stat -c %Y "$GEN/gen_$i.umap" 2>/dev/null || echo 0)
+  j=$(stat -c %Y "$OUT/scene_$i.json" 2>/dev/null || echo 0)
+  if [ "$u" = 0 ] || [ $((j-u)) -gt 60 ]; then
+    STALE="$STALE $i"; echo "STALE gen_$i (레벨이 JSON 보다 오래됨 — 렌더 제외)" >> $OUT/log
+  fi
+done
+for i in $(seq 0 $((N-1))); do
+  case " $STALE " in *" $i "*) continue;; esac
   [ -f "$OUT/scene_$i.png" ] && continue
   SHOT_LEVEL="/Game/GenScenes/gen_$i" SHOT_OUT="C:/ue/verify10/scene_$i" \
   MSYS_NO_PATHCONV=1 timeout -k 30 300 "$UE" "$PROJ" "/Game/GenScenes/gen_$i" \
