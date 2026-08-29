@@ -45,7 +45,7 @@ W, H, FOV = 1280, 720, 90.0
 FX = FY = (W / 2) / math.tan(math.radians(FOV / 2))   # 640.0
 CX, CY = W / 2, H / 2
 CAM_Z_CM = 150.0
-N_VEH_RANGE = (6, 14)
+N_VEH_RANGE = (14, 26)   # x 범위를 6~48 m 에서 6~114 m 로 넓혔으므로 밀도 유지에 필요
 ROAD_TILES = 6                    # 20m x 6 = 120m
 ROAD_SEG_CM = 2000.0
 ROAD_LEN_CM = ROAD_TILES * ROAD_SEG_CM        # 12000 = 120 m
@@ -442,12 +442,18 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     # 건물 하부 채움: 지면이 인도까지만 있으면 건물이 허공 위에 떠 보인다(scene_75 공극 실측).
     # 도로 타일을 측면 스트립으로 깔아 블록 전체를 아스팔트로 채운다 (도심 주차장/뒷길 외관).
     for k in range(ROAD_TILES):
-        # 화면 가장자리(u=0) 광선은 y/x = -1 이라 |y|=52.5 m 에서 지면이 끝나 하늘 띠가
-        # 보였다(실측 약 22 px). 커버리지를 |y| ≤ 178.5 m 로 넓혀 지평선까지 지면이 간다.
-        for yc in (-16800, -14700, -12600, -10500, -8400, -6300, -4200, -2100,
-                   2100, 4200, 6300, 8400, 10500, 12600, 14700, 16800):
+        for yc in (-8400, -6300, -4200, -2100, 2100, 4200, 6300, 8400):
             a = top0(spawn_sm(road, k * seg + seg / 2 - rb.origin.x, yc - rb.origin.y))
             a.add_actor_world_offset(unreal.Vector(0, 0, -3), False, False)  # 본도로보다 3cm 아래
+    # 원경 지면 — 스케일 타일로 도로 끝 너머(소실점 타워 아래)까지 덮는다.
+    # ★ 2026-08-29 검증 렌더에서 확인: 지면이 x=120 m 에서 끝나는데 타워는 186 m 부터라
+    #   **건물이 허공에 뜬 채 렌더**됐다(verify10/scene_0). 화면 가장자리 하늘 띠도 같은 원인.
+    #   등배 타일로 덮으면 액터가 수백 개가 되므로 10배 스케일 타일 몇 장으로 대신한다.
+    for fx in (1, 2, 3):                       # x 100~700 m 구간
+        for fy in (-2, -1, 0, 1, 2):           # |y| ≤ 300 m
+            a = top0(spawn_sm(road, fx * 20000.0 - rb.origin.x, fy * 20000.0 - rb.origin.y))
+            a.set_actor_scale3d(unreal.Vector(10.0, 10.0, 1.0))
+            a.add_actor_world_offset(unreal.Vector(0, 0, -6), False, False)  # 근경보다 6cm 아래
     if crosswalk and random.random() < 0.6:       # 횡단보도를 도로 위에 겹쳐 깔기 (데칼처럼 2cm 위)
         cw_x = random.uniform(8, ROAD_LEN_CM / 100.0 - 15) * 100
         cb = crosswalk.get_bounds()
