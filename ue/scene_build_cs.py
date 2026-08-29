@@ -725,8 +725,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                         - random.uniform(0.20, 0.45))
             yaw = (180.0 if side < 0 else 0.0) + random.uniform(-4, 4)
         else:
-            # x 를 도로 전 구간에 퍼뜨리되 근경을 살짝 더 뽑는다(원경만 차면 공허해 보인다).
-            x = 6.0 + (ROAD_X_END_CM / 100.0 - 12.0) * (random.random() ** 0.55)
+            # x 를 도로 전 구간에 퍼뜨리되 **근경을 더 뽑는다** — 원경만 차면 화면이
+            # 비어 보인다. 지수 0.55 는 반대로 원경 편향이었다(검증 세트에서 중앙값
+            # 75.4 m, 25 m 이내 12%). 1.4 로 바꿔 중앙값 47 m, 25 m 이내 27% 로 맞춘다.
+            x = 6.0 + (ROAD_X_END_CM / 100.0 - 12.0) * (random.random() ** 1.4)
             if mode < 0.88:
                 # 우측통행 차선 의미론: **y>0 이 우측 차선**(순방향), y<0 이 마주 옴.
                 # ★ 2026-08-29 정정: UE 좌수계에서 +y 는 카메라 오른쪽이다(이 파일의
