@@ -4,6 +4,11 @@
 # 자유도 등)이 실제 렌더에서 회귀 없이 반영됐는지 육안 확인용. 출하 세트(out_cs2)와
 # 섞이지 않도록 CS_OUT 으로 분리한다.
 set -u
+# 단일 인스턴스 잠금 — 2026-08-29 실측: 앞선 렌더가 도는 중에 재실행해 UE 두 개가 동시에
+# 같은 레벨을 쓰면서 산출물이 섞였다(mass_gen.sh 가 같은 이유로 이미 잠금을 쓴다).
+LOCK=/c/ue/verify10.lockdir
+if ! mkdir "$LOCK" 2>/dev/null; then echo "already running, abort"; exit 1; fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 UE="/c/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe"
 PROJ="C:/Users/a3162/Documents/Unreal Projects/CitySample/CitySample.uproject"
 OUT=/c/ue/verify10
