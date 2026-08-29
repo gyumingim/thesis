@@ -163,7 +163,11 @@
 동일 GPU·시간 예산 비교를 제1지표로 삼았고, Rethinking Suitability(2026)는 PPO/SAC/
 TD-MPC2를 샘플 축과 벽시계 축에서 각각 평가해 **두 축의 순위가 갈린다**는 것을 직접
 보였다. Hilton et al.(2023)은 동일 compute 예산 하의 최적 배분을 거듭제곱 법칙으로
-정식화했다(RL판 compute-optimal scaling). 그러나 이들은 모두 **단일 시뮬레이터 안**의
+정식화했고(RL판 compute-optimal scaling), *Time is Not Compute*(2026, 2603.28823)는
+**compute 가 아니라 벽시계로 제약된** 스케일링 법칙을 소비자 GPU 환경에서 따로 세워
+두 축이 같지 않음을 보였다 — 본 연구가 벽시계 축을 고른 이유와 같은 문제의식이다.
+전이 예산의 *배분* 문제는 sim-to-real 쪽에서 다뤄졌다(*How Should a Simulation-to-Reality
+Transfer Budget Be Spent?*, 2026, 2606.22062). 그러나 이들은 모두 **단일 시뮬레이터 안**의
 비교다 — "처리량이 다른 두 시뮬레이터를 같은 시간 예산에 놓고, 낮은 충실도의 대량
 샘플 대 높은 충실도의 소량 샘플"을 정면 비교한 사례는 확인되지 않았다. 본 연구가
 채우는 첫 번째 공백이다.
@@ -1140,6 +1144,12 @@ docs/CARLA_CLOSED_LOOP.md — 확정 정숙 조건 136M 정책의 재현은 향�
 ## 참고문헌
 
 (전 항목의 arXiv 원문 페이지 실존·제목을 2026-08-21 및 2026-08-27 에 확인했다.)
+
+**벽시계·예산 배분 (§2.1, §3.3; 2026-08-29 보충 조사)**
+- *Time is Not Compute: Scaling Laws for Wall-Clock Constrained Training on Consumer GPUs*,
+  2026. arXiv:2603.28823
+- Rizvi et al., *How Should a Simulation-to-Reality Transfer Budget Be Spent?*,
+  IROS 2026 Workshop. arXiv:2606.22062
 
 **착취·진단·보고 표준 (§2.4, §2.5)**
 - Lehman et al., *The Surprising Creativity of Digital Evolution*, 2018. arXiv:1803.03453
