@@ -623,7 +623,12 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     # ★ 2026-08-29: 이전 판은 pitch=roll=0, x=y=0 고정이라 (a) 자차가 21 m 도로의 정중앙
     #   (중앙선 위)에 걸쳐 있었고 (b) **지평선이 v=360.0 px 에 프레임 간 표준편차 0.0** 으로
     #   못박혀 있었다. 단일 스칼라의 분산이 0 이면 데이터셋 수준에서 즉시 합성 판별이 된다.
-    cam_y = random.choice((-5.25, -1.75, 1.75, 5.25)) + random.gauss(0.0, 0.15)
+    # 자차는 **순방향 차로**에만 둔다. 우측통행이므로 y>0 이다 — 음수 차로를 섞으면
+    # 대시캠이 역주행 차로에 서서 마주오는 차를 자기 차선에서 보는 장면이 된다
+    # (검증 세트 10장에서 절반이 그랬다).
+    # 최외곽 차로(8.75)는 연석 주차열(y≈9.0~9.4)과 맞닿아 실제로는 주차 차로다.
+    # 주행 중인 대시캠은 안쪽 두 차로에 둔다.
+    cam_y = random.choice((1.75, 5.25)) + random.gauss(0.0, 0.15)
     cam_pitch = random.gauss(-1.0, 1.2)
     cam_roll = random.gauss(0.0, 0.4)
     cam_rot = (cam_roll, cam_pitch, cam_yaw)
