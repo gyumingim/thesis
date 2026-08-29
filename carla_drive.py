@@ -448,18 +448,25 @@ def run(a):
         # 이탈점을 목표로 분기를 선택하는 경로로 대체한다(실측: GRP 가 좌회전 앵커에서도
         # 직진 경로를 내놓아 '좌회전 조건'이 실제로는 직진이었다).
         def _turn_deg(rt):
+            """실행 경로의 총 회전각. **부호를 보존한다** — CARLA 는 좌수 좌표계라
+            양수 = 우회전이다(스폰 라벨 규약과 동일: `kind = 우회전 if dpsi > 0`).
+
+            2026-08-29 정정: 이전 판은 abs() 를 씌워 방향 정보를 버렸고, 그 결과 기동별
+            집계에서 좌·우를 실행 경로로 가를 수 없었다(앵커 라벨로 되돌아갈 수밖에 없는데
+            그 라벨이 오염돼 있다는 것이 애초에 재라벨의 이유였다). 임계 판정은 호출부에서
+            abs() 를 취한다."""
             js = [k for k, w in enumerate(rt) if w.is_junction]
             if not js:
                 return 0.0
             a = rt[max(js[0] - 1, 0)].transform.rotation.yaw
             b = rt[min(js[-1] + 1, len(rt) - 1)].transform.rotation.yaw
-            return abs((b - a + 180) % 360 - 180)
+            return (b - a + 180) % 360 - 180
 
-        if (not any(w.is_junction for w in route)) or (kind != "직진" and _turn_deg(route) < 30):
+        if (not any(w.is_junction for w in route)) or (kind != "직진" and abs(_turn_deg(route)) < 30):
             alt = route_via_junction(wp0, wenter, wexit)
             if not any(w.is_junction for w in alt):
                 alt = route_to_exit(wp0, wexit)
-            if any(w.is_junction for w in alt) and (kind == "직진" or _turn_deg(alt) >= 30):
+            if any(w.is_junction for w in alt) and (kind == "직진" or abs(_turn_deg(alt)) >= 30):
                 route = alt
         tf0 = carla.Transform(carla.Location(wp0.transform.location.x, wp0.transform.location.y,
                                              wp0.transform.location.z + 0.3), wp0.transform.rotation)
@@ -624,9 +631,9 @@ def run(a):
         # 분류한다. 경로계획기가 유턴 경로를 내놓는 경우가 있고(실측 170도), 유턴은
         # 학습 환경에 없는 기동이라 좌회전 통계를 오염시킨다.
         _td = _turn_deg(route)
-        if _td >= 150:
+        if abs(_td) >= 150:
             kind = "유턴"
-        elif _td < 30 and kind != "직진":
+        elif abs(_td) < 30 and kind != "직진":
             kind = "직진"
         results.append(dict(ep=ep, kind=kind, outcome=outcome, steps=steps, entry_kmh=round(entry_spd or 0, 1), min_R=round(min(min_R, 999), 1), max_lat=round(max_lat, 2), turn_deg=round(_turn_deg(route), 1), n_junc=sum(1 for w in route if w.is_junction), ood_max=round(float(np.mean(ood_max)) if ood_max else 0, 2), ood_peak=round(float(np.max(ood_max)) if ood_max else 0, 2), ood_dims=round(float(np.mean(ood_cnt)) if ood_cnt else 0, 2), ood_top_dim=int(np.argmax(ood_top)) if ood_top.sum() else -1, ood_dim_mean=[round(float(x), 2) for x in (ood_dimsum / max(len(ood_max), 1))]))
         print(f"ep{ep}: {outcome} ({steps}스텝)", flush=True)
