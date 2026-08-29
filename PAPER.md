@@ -449,15 +449,15 @@ CARLA 의 노변 주차 차량은 액터가 아니라 레벨 지오메트리(`ge
 | 경량(최종 R6) | 1,024env | ~959K–1.0M |
 | **격차 (공정)** | 1,002,242 / 6,965 | **144×** (완성 환경 기준; 최종 R6 환경 959K 기준 138×) |
 | 학습 포함 (노트북) | custom 72K vs MetaDrive 1.36K | 53× (동일 1시간 샘플) |
-| **학습 포함 (데스크톱 정숙, 확정)** | custom 37.8K(136M steps) vs 네이티브 1,096(3.95M steps, 3시드) | **34.5×** |
+| **학습 포함 (데스크톱 정숙, 확정)** | custom 37.8K(136M steps) vs 네이티브 1,096(3.95M steps, 3시드) | **34.7×** |
 | (참고) 같은 장비·GPU 경합 조건 | custom 37.8K vs 네이티브 602(2.17M steps) | 62.6× — 분모가 경합 값이라 과대 |
 
 **층위와 장비를 구분한다.** 138~144배는 학습 루프 없는 순수 환경 스텝 비이고(138배가
-최종 R6 환경, 144배가 V=16 완성 환경), 53배(노트북)와 **34.5배(데스크톱 정숙, 확정)**는 학습을
+최종 R6 환경, 144배가 V=16 완성 환경), 53배(노트북)와 **34.7배(데스크톱 정숙, 확정)**는 학습을
 포함한 실현 비율로 **같은 층위의 서로 다른 장비 값**이다. 데스크톱 값이 한때 62.6배로
 보고됐던 것은 분모인 네이티브가 경합 구간에서 2.17M steps(602 SPS)밖에 모으지 못했기
 때문이다 — 같은 장비·같은 프로토콜의 정숙 조건 3시드 재측정에서 **3.95M steps(1,096 SPS,
-표본 +81%)**가 나왔고, 이 분모로 계산한 34.5배가 확정치다(docs/HARDWARE_CONFOUND.md).
+표본 +81%)**가 나왔고, 이 분모로 계산한 34.7배가 확정치다(docs/HARDWARE_CONFOUND.md).
 정숙 조건에서도 두 장비의 절대 SPS 는 다르다(경량 72K vs 37.8K, MetaDrive 1,360 vs 1,096) —
 데스크톱이 양쪽 모두에서 느리며, 그 원인(코어 수·메모리 대역)은 본 연구가 통제하지 못한
 요인이며 §7 의 한계로 둔다. 어느 층위에서도 이 우위가 전이 성능으로 온전히 환산되지 않는다는 점이
@@ -515,6 +515,25 @@ MetaDrive 네이티브 3시드를 학습해 같은 결정론 평가를 돌렸다
 steps(+81%)로 늘었고 성능도 53.3% → 63.4% 로 회복했다. 즉 **경합은 네이티브 쪽을 더 크게
 깎고 있었고, 그 상태의 대조(격차 4.4%p)는 경량에 유리한 과소추정이었다**
 (docs/HARDWARE_CONFOUND.md).
+
+**처리량 우위는 어디로 가는가 — 초반 예산의 3배 단축**. 동일 장비 대조는 최종 성능만
+비교하면 보이지 않는 것을 보여준다. 두 시드평균 곡선을 같은 시간축에 놓으면:
+
+| 벽시계 | 5분 | 10분 | 15분 | 25분 | 40분 | 최종(60분) |
+|---|---|---|---|---|---|---|
+| 경량 전이 | **58.9%** (피크) | 56.7% | 45.6% | 46.7% | 40.0% | 48.9% |
+| 네이티브(동일 장비) | 41.1% | 45.6% | **60.0%** | 71.1% | 64.4% | 63.3% |
+
+**5분 시점에서 경량이 17.8%p 앞선다**(58.9% 대 41.1%; 시드별 차이 +16.7/+20.0/+16.6 으로
+방향이 3/3 일치, 9개 시드쌍 중 8쌍에서 경량 우세, Welch p=0.138 — n=3 에서 유의를 주장할
+수는 없다). 네이티브가 그 수준에 도달하는 것은 **15분**이므로, 처리량 34.7배는 초반 예산에서
+**약 3배의 벽시계 단축**으로 환산된다.
+
+그러나 그 우위는 지속되지 않는다. 15분에 두 곡선이 교차하고, 이후 네이티브는 계속 오르는
+반면(25분 71.1%) 경량은 하강한다(40분 40.0%). 즉 **경량화의 대가는 초기 학습 속도가 아니라
+최종 성능의 천장**이다. 이것이 본 논문이 "동일 벽시계 예산"이라는 단일 지점 비교에서
+놓치고 있던 구조이며, 예산을 명시하지 않은 채 "경량 시뮬이 이긴다/진다"를 말할 수 없는
+이유다 — **예산이 5분이면 경량이 이기고, 15분을 넘으면 네이티브가 이긴다**.
 
 **시간축 상세 (확정 정정판·정숙 조건, 3시드 평균, →MetaDrive)**: 5분 **58.9%**(피크) →
 10분 56.7% → 15분 45.6% → 20분 46.7% → 25분 46.7% → 30분 48.9% → 35분 44.4% →
@@ -1154,7 +1173,7 @@ we find no direct precedent. After layer-by-layer calibration (observation, dyna
 termination semantics, geometry), and measured on the environment alone (no learning loop)
 the calibrated environment steps 138x faster than MetaDrive -- 144x for the full build with
 16 surrounding-vehicle observation slots -- while the
-headline run realized 34.5x end-to-end including training, measured against a quiet-condition
+headline run realized 34.7x end-to-end including training, measured against a quiet-condition
 native baseline on the same desktop (3 seeds, 3.95M steps). Zero-shot transfer from the
 lightweight simulator reaches 48.9%+/-20.4%
 success against 68%+/-9% for native training -- a point-estimate shortfall, not a tie, and
