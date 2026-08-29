@@ -72,9 +72,9 @@ BLDG_POOL = {
 # 점유폭이 half_w 가 아니라 half_w*|cos| + half_l*|sin| 이 되기 때문이다. 커맨드릿에서는
 # LevelInstance 바운드가 미형성이라 실측이 불가하므로 에디터 세션 값의 상한을 쓴다.
 # 과대추정은 건물을 도로에서 더 멀리 밀 뿐이라 침범 방향으로는 안전하다.
-BLDG_HALF_L = {
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 34.0,
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 42.0,
+BLDG_HALF_L = {   # 에디터 세션 실측 (v7 로그: A01 e(29,23), B01 e(30,30))
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 29.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
 }
 FLANK_YAW_JITTER = 5.0            # 측면 건물 요각 지터(도). ±10 에서 축소.
 # 요각 보정만으로도 침범은 0 이 되지만, 지터가 클수록 건물이 회랑 밖으로 더 밀려나
@@ -228,6 +228,14 @@ def occupancy_half_w_cm(path, yaw):
     hw = BLDG_POOL[path]
     hl = BLDG_HALF_L.get(path, hw * 1.6)
     return (hw * abs(math.cos(t)) + hl * abs(math.sin(t))) * 100
+
+
+def occupancy_half_l_cm(path, yaw):
+    """요각 yaw 로 놓인 건물이 x 축(도로 진행) 방향으로 점유하는 반장(cm)."""
+    t = math.radians(yaw)
+    hw = BLDG_POOL[path]
+    hl = BLDG_HALF_L.get(path, hw * 1.6)
+    return (hl * abs(math.cos(t)) + hw * abs(math.sin(t))) * 100
 
 
 def place_flank(path, x, side, yaw):
@@ -414,15 +422,44 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                                    random.uniform(0, 360)), SIDEWALK_Z_CM)
 
     # 소실점 폐쇄: 도로 끝 너머(x=140~220m)에 타워 행렬 — "백색 공허" 제거 (3심 1순위)
-    endx = ROAD_X_END_CM
-    # 이 두 행은 도로가 끝난 뒤(x > 120m)라 회랑 규칙이 적용되지 않는다 — 오히려 도로
-    # 축 근처에 놓아야 소실점이 막힌다. 따라서 y 를 직접 준다.
-    for k in range(3):
-        spawn_bldg(random.choice(list(BLDG_POOL)), endx + 2000 + k * 3500,
-                   random.choice((-1, 1)) * random.uniform(0, 900), random.uniform(0, 360))
-    for k in range(3):                        # 2열 — 측면 틈으로 새는 수평선 봉쇄
-        spawn_bldg(random.choice(list(BLDG_POOL)), endx + 9000 + k * 4000,
-                   random.choice((-1, 1)) * random.uniform(1200, 3400), random.uniform(0, 360))
+    # ★ 2026-08-29: 건물-건물 분리 검사가 아예 없었다. 2만 장면 모사에서 같은 쪽 인접 쌍의
+    #   87.7% 가 서로 관통했고(깊이 중앙 16.9 m, 장면당 3.4쌍) 소실점 타워는 100% 장면에서
+    #   겹쳤다. 원인은 구조적이다 — x 중심간격 평균 45 m 인데 반장 합이 평균 59 m 다.
+    #   구간 예약(측면)과 AABB 예약(타워)으로 막고, x 스텝을 반장 합 이상으로 넓힌다.
+    occ_side = {-1: [], 1: []}
+
+    def reserve_side(side, cx, hl):
+        lo, hi = cx - hl, cx + hl
+        if any(lo < a1 and a0 < hi for a0, a1 in occ_side[side]):
+            return False
+        occ_side[side].append((lo, hi))
+        return True
+
+    occ_tower = []
+
+    def reserve_tower(cx, cy, hl, hw):
+        b = (cx - hl, cx + hl, cy - hw, cy + hw)
+        if any(b[0] < o[1] and o[0] < b[1] and b[2] < o[3] and o[2] < b[3] for o in occ_tower):
+            return False
+        occ_tower.append(b)
+        return True
+
+    # 소실점 폐쇄 타워: 도로가 끝난 뒤라 회랑 규칙이 아니라 y 를 직접 준다. 다만 회전
+    # 후 x-반extent 상한(=hypot(30,30)≈42.4 m)만큼 뒤로 물려야 본도로를 침범하지 않는다.
+    maxhl_cm = max(math.hypot(BLDG_POOL[q], BLDG_HALF_L[q]) for q in BLDG_POOL) * 100
+    tx = ROAD_X_END_CM + maxhl_cm + 1500
+    for n_row, yspan in ((3, 900.0), (3, 3400.0)):
+        for k in range(n_row):
+            for _try in range(8):
+                q = random.choice(list(BLDG_POOL))
+                yw = random.uniform(0, 360)
+                bx = tx + k * (2 * maxhl_cm + 1000) + random.uniform(-1000, 1000)
+                by = random.choice((-1, 1)) * random.uniform(0, yspan)
+                if reserve_tower(bx, by, occupancy_half_l_cm(q, yw), occupancy_half_w_cm(q, yw)):
+                    spawn_bldg(q, bx, by, yw)
+                    break
+        tx += 2 * maxhl_cm + 6000
+
     x = 2000.0
     n_bldg = 0
     while x < ROAD_X_END_CM + 4000:
@@ -430,10 +467,15 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
             if random.random() < 0.8:
                 path = random.choice(list(BLDG_POOL))
                 jit = random.uniform(-FLANK_YAW_JITTER, FLANK_YAW_JITTER)
-                if place_flank(path, x + random.uniform(-500, 500), side,
-                               jit + (0 if side < 0 else 180)):
+                byaw = jit + (0 if side < 0 else 180)
+                bx = x + random.uniform(-500, 500)
+                if not reserve_side(side, bx, occupancy_half_l_cm(path, byaw)):
+                    continue
+                if place_flank(path, bx, side, byaw):
                     n_bldg += 1
-        x += random.uniform(3500, 5500)
+        # 스텝은 밀도용, 예약은 관통 방지용 — 역할을 나눈다. 6200~7000 은 장면당 약
+        # 4.5동으로 "공허함" 감점을 피하면서 예약 실패율을 낮게 유지하는 값이다.
+        x += random.uniform(6200, 7000)
 
     fog = act.spawn_actor_from_class(unreal.ExponentialHeightFog,
                                      unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
