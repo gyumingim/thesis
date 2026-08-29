@@ -135,6 +135,27 @@ def main():
                  if [r for r in json.load(open(f)) if r["ckpt"] == "final.pt"]]
             return np.mean(v)
         checks.append(("실현 배수(동일 장비 정숙)", "34.7", "%.1f" % (steps(LT) / steps(ND))))
+    # DPC 재산출 (§6.3) — tools/dpc_recompute.py 와 같은 정의로 다시 계산
+    try:
+        sys.path.insert(0, "tools")
+        from dpc_recompute import pair_seed, stratified_tau
+        import re as _re
+        pr = []
+        for ev in sorted(glob.glob("bench_results/clean/eval_md__clean_s*.json")):
+            sd = _re.search(r"_s(\d+)\.json$", ev).group(1)
+            rd = glob.glob("runs/Intersection__clean_custom__%s__*" % sd)
+            if rd:
+                got = pair_seed(rd[0], ev)
+                if got:
+                    pr.append(got)
+        if len(pr) >= 3:
+            e = [(L[T <= 1800], M[T <= 1800]) for L, M, T in pr]
+            l = [(L[T > 1800], M[T > 1800]) for L, M, T in pr]
+            checks += [("DPC 전반 τ", "0.457", "%.3f" % stratified_tau(e)),
+                       ("DPC 후반 τ", "0.053", "%.3f" % stratified_tau(l))]
+    except Exception:
+        pass
+
     bad = 0
     for name, expected, actual in checks:
         ok = expected == actual
