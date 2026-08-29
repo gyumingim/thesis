@@ -53,10 +53,16 @@ def report(name, pattern):
                 continue
             chi, pf = fisher([p for _, p in ts])
             same = len({np.sign(t) for t, _ in ts}) == 1
-            print("   %-4s final %s τ=%s | 부호 일치 %s | Fisher p=%.4f"
+            # ★ Fisher 결합은 **부호를 보지 않는다** — 시드마다 방향이 반대여도 각각의
+            #   양측 p 가 작으면 결합 p 가 작아진다. 부호가 갈리면 "추세가 있다"가 아니라
+            #   "시드마다 다른 방향의 추세가 있다"는 뜻이므로 결합 p 를 인용하면 안 된다.
+            #   (실제로 n=3 에서 부호가 일치하던 이탈 추세가 n=5 에서 갈렸는데 결합 p 는
+            #   여전히 0.0027 이었다.)
+            print("   %-4s final %s τ=%s | 부호 일치 %s | Fisher p=%.4f%s"
                   % (label, "포함" if inc else "제외",
                      ", ".join("%+.2f" % t for t, _ in ts),
-                     "예" if same else "아니오", pf))
+                     "예" if same else "아니오", pf,
+                     "" if same else "  ← 부호 불일치, 결합 p 인용 금지"))
 
 
 def main():
