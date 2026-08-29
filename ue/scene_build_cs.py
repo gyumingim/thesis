@@ -76,6 +76,13 @@ BLDG_HALF_L = {   # 에디터 세션 실측 (v7 로그: A01 e(29,23), B01 e(30,3
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 29.0,
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
 }
+LANE_W_M = 3.5                    # 실제 도시부 차로 폭
+LANE_CTRS = (-8.75, -5.25, -1.75, 1.75, 5.25, 8.75)      # 편도 3차로 × 2
+LANE_LINES_CM = (-875.0, -525.0, -175.0, -20.0, 20.0, 175.0, 525.0, 875.0)
+# ★ 2026-08-29: 도로 폭 21 m 에 선이 y=±3.5 m 두 줄뿐이라 **7 m 밴드 3개**로 보였다
+#   (실제의 2배). 차량 y 도 U(-7.5, 7.5) 연속이라 차로 개념이 없었고, 주행차의 24.1%
+#   가 도색선을 밟고 있었다. 중앙 이중선(±20 cm)이 없으면 가운데 두 차로가 한 덩어리로
+#   읽혀 6차로로 보이지 않는다.
 FLANK_YAW_JITTER = 5.0            # 측면 건물 요각 지터(도). ±10 에서 축소.
 # 요각 보정만으로도 침범은 0 이 되지만, 지터가 클수록 건물이 회랑 밖으로 더 밀려나
 # 가로 협곡이 벌어진다(±10° 는 B동 기준 6.9 m 추가). 실제 가로의 전면이 거의 평행한
@@ -228,6 +235,31 @@ def occupancy_half_w_cm(path, yaw):
     hw = BLDG_POOL[path]
     hl = BLDG_HALF_L.get(path, hw * 1.6)
     return (hw * abs(math.cos(t)) + hl * abs(math.sin(t))) * 100
+
+
+def _halfproj(ux, uy, c, s, ex, ey):
+    return ex * abs(ux * c + uy * s) + ey * abs(-ux * s + uy * c)
+
+
+def obb_hit(a, b, pad=0.2):
+    """a, b = (cx, cy, yaw_deg, ex, ey) [m]. 회전 사각형 4축 SAT 겹침 판정.
+
+    이전 판은 외접원(반지름 hypot(ex, ey))으로 걸렀다. 횡방향에도 종방향 여유를 강제해
+    배제원/실제 바닥면적이 승용 2.1~2.3배·버스 3.1배였고, 최소 중심간 거리가 차로 폭의
+    147~347% 라 **인접 차로 병주가 구조적으로 불가능**했다(출하 라벨에서 횡거리 4 m 미만
+    쌍이 단 한 쌍도 없다). 정체열 모드는 시도의 65.6% 가 이 원으로 기각됐다.
+    """
+    ax, ay, ayaw, aex, aey = a
+    bx, by, byaw, bex, bey = b
+    ca, sa = math.cos(math.radians(ayaw)), math.sin(math.radians(ayaw))
+    cb, sb = math.cos(math.radians(byaw)), math.sin(math.radians(byaw))
+    dx, dy = bx - ax, by - ay
+    for ux, uy in ((ca, sa), (-sa, ca), (cb, sb), (-sb, cb)):
+        ra = _halfproj(ux, uy, ca, sa, aex, aey)
+        rb = _halfproj(ux, uy, cb, sb, bex, bey)
+        if abs(dx * ux + dy * uy) > ra + rb + pad:
+            return False
+    return True
 
 
 def occupancy_half_l_cm(path, yaw):
@@ -521,7 +553,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     buf = unreal.load_asset("/Game/Road/Kit_City_Road/SM_ROAD_19_5_0_19_buffer")
     if buf:
         bb2 = buf.get_bounds()
-        for ly in (-350.0, 350.0):
+        for ly in LANE_LINES_CM:
             lx = 0.0
             while lx < ROAD_LEN_CM:
                 a = spawn_sm(buf, lx - bb2.origin.x, ly - bb2.origin.y, 0, 0)
@@ -544,7 +576,6 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         tries += 1
         m = random.choice(vehicles)
         e = m.get_bounds().box_extent
-        r = math.hypot(e.x / 100, e.y / 100)
         mode = random.random()
         if mode < 0.34 and placed:
             # 정체 열: 직전 차량 뒤 6~9m 같은 차선 (실도로 밀도의 핵심 — 3심 지적).
@@ -553,7 +584,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
             # 전 구간 최대 5.0m(차로 폭의 143%)의 횡 어긋남이 생긴다 — 한 차선에 나란히
             # 서야 할 정체 열이 옆 차선으로 새거나 차선을 밟는다(모사 2만 회: 중앙값
             # 1.13m, 90분위 3.08m). 세계 좌표는 placed 에 있으므로 그것을 쓴다.
-            px, py, _pr = placed[-1]
+            px, py, _pyaw, _pex, _pey = placed[-1]
             x = px + random.uniform(6.0, 9.0)
             y = py + random.uniform(-0.3, 0.3)
             yaw = (180.0 if y < 0 else 0.0) + random.uniform(-4, 4)
@@ -572,7 +603,8 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                         - random.uniform(0.20, 0.45))
             yaw = (180.0 if side < 0 else 0.0) + random.uniform(-4, 4)
         else:
-            x = random.uniform(6, 48)
+            # x 를 도로 전 구간에 퍼뜨리되 근경을 살짝 더 뽑는다(원경만 차면 공허해 보인다).
+            x = 6.0 + (ROAD_X_END_CM / 100.0 - 12.0) * (random.random() ** 0.55)
             y = random.uniform(-7.5, 7.5)
             if mode < 0.88:
                 # 우측통행 차선 의미론: **y>0 이 우측 차선**(순방향), y<0 이 마주 옴.
@@ -582,16 +614,30 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                 # 4,323 라벨 실측에서 순방향의 88.6% 가 화면 왼쪽, 마주옴의 90.6% 가
                 # 화면 오른쪽이었다. 평가 도메인(Udacity CrowdAI, 캘리포니아)은 우측통행이므로
                 # 학습·평가가 좌우 거울상이었다.
+                # 차로 중심에 이산 배치 — 연속 U(-7.5,7.5) 는 차로 개념이 없어
+                # 주행차의 24.1% 가 도색선을 밟았다.
+                y = random.choice(LANE_CTRS) + random.gauss(0.0, 0.20)
                 yaw = (180.0 if y < 0 else 0.0) + random.uniform(-8, 8)
             else:
                 yaw = random.uniform(0, 360)   # 회전 중/무단 주차 등 자유
-        if any(math.hypot(x - px, y - py) < r + pr + 0.4 for px, py, pr in placed):
+                _t = math.radians(yaw)
+                _hy = abs(e.x / 100.0 * math.sin(_t)) + abs(e.y / 100.0 * math.cos(_t))
+                _lim = ROAD_HALF_W_CM / 100.0 - _hy - 0.2
+                if _lim <= 0.5:               # 자유요각이 연석을 넘는 조합은 버린다
+                    continue
+                y = random.uniform(-_lim, _lim)
+        _bo = m.get_bounds().origin           # 로컬 바운드 중심(cm) — 피벗과 다르다
+        _cy, _sy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+        cand = (x + (_bo.x * _cy - _bo.y * _sy) / 100.0,
+                y + (_bo.x * _sy + _bo.y * _cy) / 100.0,
+                yaw, e.x / 100.0, e.y / 100.0)
+        if any(obb_hit(cand, o) for o in placed):
             continue
         a = ground(spawn_sm(m, x * 100, y * 100, 0, yaw))
         rf = random.random()
         a.static_mesh_component.set_default_custom_primitive_data_float(1, pack_rf(rf))
         wo, _ = a.get_actor_bounds(False)
-        placed.append((x, y, r))
+        placed.append(cand)
         # 라벨은 카메라 좌표계 (지터 반영: 평행이동 + -cam_yaw 회전)
         cyr = math.radians(cam_yaw)
         dx_, dy_ = wo.x / 100, wo.y / 100
