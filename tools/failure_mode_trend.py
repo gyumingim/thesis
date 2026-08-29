@@ -17,11 +17,19 @@ from scipy import stats
 FIELDS = (("out_of_road_rate", "이탈"), ("crash_rate", "충돌"), ("success_rate", "성공"))
 
 
-def per_seed_tau(pattern, field):
+def per_seed_tau(pattern, field, include_final=False):
+    """시드별 Kendall τ.
+
+    final.pt 는 기본으로 제외하되 include_final 로 포함할 수 있다. 제외 사유는 시간축
+    문제가 **아니다** — 정숙 런의 final 은 t003300 에서 정확히 300s 뒤로 등간격 위에 있다.
+    종점 체크포인트가 추세 통계에 미치는 지렛대가 커서 양쪽을 병기하려는 것이며,
+    실제로 충돌률 추세는 final 포함 시 유의성을 잃는다(§6.2 에 그대로 보고).
+    """
     out = []
     for f in sorted(glob.glob(pattern)):
         rows = sorted(json.load(open(f)), key=lambda r: r["elapsed_s"])
-        rows = [r for r in rows if r["ckpt"] != "final.pt"]   # final 은 시간축이 어긋난다
+        if not include_final:
+            rows = [r for r in rows if r["ckpt"] != "final.pt"]
         if len(rows) < 4:
             continue
         out.append(stats.kendalltau([r["elapsed_s"] for r in rows],
@@ -37,15 +45,18 @@ def fisher(ps):
 def report(name, pattern):
     print("== %s" % name)
     for field, label in FIELDS:
-        ts = per_seed_tau(pattern, field)
-        if not ts:
-            print("   %s: 자료 없음" % label)
-            continue
-        chi, pf = fisher([p for _, p in ts])
-        same = len({np.sign(t) for t, _ in ts}) == 1
-        print("   %-4s τ=%s | 부호 일치 %s | Fisher χ²=%.2f df=%d p=%.4f"
-              % (label, ", ".join("%+.2f" % t for t, _ in ts),
-                 "예" if same else "아니오", chi, 2 * len(ts), pf))
+        for inc in (False, True):
+            ts = per_seed_tau(pattern, field, include_final=inc)
+            if not ts:
+                if not inc:
+                    print("   %s: 자료 없음" % label)
+                continue
+            chi, pf = fisher([p for _, p in ts])
+            same = len({np.sign(t) for t, _ in ts}) == 1
+            print("   %-4s final %s τ=%s | 부호 일치 %s | Fisher p=%.4f"
+                  % (label, "포함" if inc else "제외",
+                     ", ".join("%+.2f" % t for t, _ in ts),
+                     "예" if same else "아니오", pf))
 
 
 def main():
