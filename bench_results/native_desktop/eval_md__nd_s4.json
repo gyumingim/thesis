@@ -1,0 +1,15 @@
+[
+  {
+    "ckpt": "final.pt",
+    "elapsed_s": 3600.2359595298767,
+    "global_step": 3978240,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.7666666666666667,
+    "crash_rate": 0.13333333333333333,
+    "out_of_road_rate": 0.1,
+    "timeout_rate": 0.0,
+    "mean_return": 108.57982659387812,
+    "mean_length": 96.83333333333333
+  }
+]
