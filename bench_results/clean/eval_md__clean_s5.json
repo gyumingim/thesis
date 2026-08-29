@@ -1,0 +1,67 @@
+[
+  {
+    "ckpt": "final.pt",
+    "elapsed_s": 3600.884771823883,
+    "global_step": 144834560,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.6,
+    "crash_rate": 0.26666666666666666,
+    "out_of_road_rate": 0.13333333333333333,
+    "timeout_rate": 0.0,
+    "mean_return": 93.84433015582641,
+    "mean_length": 115.33333333333333
+  },
+  {
+    "ckpt": "t000300.pt",
+    "elapsed_s": 300.1434223651886,
+    "global_step": 12582912,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.5666666666666667,
+    "crash_rate": 0.36666666666666664,
+    "out_of_road_rate": 0.06666666666666667,
+    "timeout_rate": 0.0,
+    "mean_return": 90.77648370549244,
+    "mean_length": 123.43333333333334
+  },
+  {
+    "ckpt": "t000600.pt",
+    "elapsed_s": 601.0087401866913,
+    "global_step": 24444928,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.6,
+    "crash_rate": 0.3333333333333333,
+    "out_of_road_rate": 0.06666666666666667,
+    "timeout_rate": 0.0,
+    "mean_return": 92.89999892536753,
+    "mean_length": 117.83333333333333
+  },
+  {
+    "ckpt": "t000900.pt",
+    "elapsed_s": 900.0263588428497,
+    "global_step": 35782656,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.6333333333333333,
+    "crash_rate": 0.3,
+    "out_of_road_rate": 0.06666666666666667,
+    "timeout_rate": 0.0,
+    "mean_return": 94.78864819581284,
+    "mean_length": 120.6
+  },
+  {
+    "ckpt": "t001200.pt",
+    "elapsed_s": 1201.4523675441742,
+    "global_step": 46923776,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.4666666666666667,
+    "crash_rate": 0.3333333333333333,
+    "out_of_road_rate": 0.2,
+    "timeout_rate": 0.0,
+    "mean_return": 85.04510279435141,
+    "mean_length": 108.46666666666667
+  }
+]
