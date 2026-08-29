@@ -386,13 +386,19 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         e = m.get_bounds().box_extent
         r = math.hypot(e.x / 100, e.y / 100)
         mode = random.random()
-        if mode < 0.34 and len(labels) >= 2:
-            # 정체 열: 직전 차량 뒤 6~9m 같은 차선 (실도로 밀도의 핵심 — 3심 지적)
-            prev = labels[-1]["relative_position_m"]
-            x = prev["x"] + random.uniform(6.0, 9.0)
-            y = prev["y"] + random.uniform(-0.3, 0.3)
+        if mode < 0.34 and placed:
+            # 정체 열: 직전 차량 뒤 6~9m 같은 차선 (실도로 밀도의 핵심 — 3심 지적).
+            # ★ 2026-08-29 정정: 이전 판은 직전 차량의 **카메라 좌표**(라벨 값)를 세계
+            # 좌표로 오용했다. 카메라는 ±6° 요각 지터가 있어, x=30m 지점에서 최대 3m,
+            # 전 구간 최대 5.0m(차로 폭의 143%)의 횡 어긋남이 생긴다 — 한 차선에 나란히
+            # 서야 할 정체 열이 옆 차선으로 새거나 차선을 밟는다(모사 2만 회: 중앙값
+            # 1.13m, 90분위 3.08m). 세계 좌표는 placed 에 있으므로 그것을 쓴다.
+            px, py, _pr = placed[-1]
+            x = px + random.uniform(6.0, 9.0)
+            y = py + random.uniform(-0.3, 0.3)
             yaw = (0.0 if y < 0 else 180.0) + random.uniform(-4, 4)
-            if x > 55: continue
+            if x > 55:            # 도로 끝(세계 좌표 기준) 밖이면 버린다
+                continue
         elif mode < 0.52:   # 노변 주차열 증량 (생활감)
             # 평행주차: 갓길(|y|≈8.2m)에 차선과 나란히
             x = random.uniform(6, 48)
