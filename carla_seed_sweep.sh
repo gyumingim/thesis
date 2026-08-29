@@ -33,7 +33,7 @@ ensure() {
 round=0
 while [ $round -lt 6 ]; do
   round=$((round+1))
-  for pol in fix_s1 fix_s2 fix_s3 clean_s1 clean_s2 clean_s3 slip; do
+  for pol in fix_s1 fix_s2 fix_s3 clean_s1 clean_s2 clean_s3 clean_s4 clean_s5 slip; do
     ensure || { echo "[$(date +%H:%M)] 서버 복구 실패" >> $LOG; sleep 60; continue; }
     tag="sw_r${round}_${pol}"
     echo "[$(date +%H:%M)] R$round $pol" >> $LOG
