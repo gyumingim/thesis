@@ -40,7 +40,7 @@ import random
 import struct
 
 LEVEL_DIR = "/Game/GenScenes"
-OUTPUT_DIR = r"C:\ue\out_cs2"
+OUTPUT_DIR = os.environ.get("CS_OUT", r"C:\ue\out_cs2")   # 검증 세트는 CS_OUT 으로 분리
 W, H, FOV = 1280, 720, 90.0
 FX = FY = (W / 2) / math.tan(math.radians(FOV / 2))   # 640.0
 CX, CY = W / 2, H / 2
