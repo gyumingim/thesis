@@ -106,16 +106,35 @@ def main():
     except Exception:
         pass
 
-    # 처리량 실현 배수 (데스크톱 정숙): 경량 136M vs 같은 장비 네이티브 2.17M
-    try:
-        cl = [r for r in json.load(open("bench_results/clean/eval_md__clean_s1.json"))
-              if r["ckpt"] == "final.pt"][0]["global_step"]
-        nd = [r for r in json.load(open("bench_results/desktop/eval_md__dt_md__1.json"))
-              if r["ckpt"] == "final.pt"][0]["global_step"]
-        # 분모(데스크톱 네이티브)가 경합 구간 값이라 잠정치다 — 정숙 재측정 후 갱신할 것
-        checks.append(("데스크톱 실현 배수(잠정)", "62.6", "%.1f" % (cl / nd)))
-    except Exception:
-        pass
+    # 동일 장비 대조 (데스크톱 정숙 네이티브 3시드) — 헤드라인 판정의 근거
+    def curve_mean(pattern, ckpt, field="success_rate"):
+        vals = []
+        for f in sorted(glob.glob(pattern)):
+            hit = [r for r in json.load(open(f)) if r["ckpt"] == ckpt]
+            if hit:
+                vals.append(100 * hit[0][field])
+        return np.mean(vals) if vals else float("nan")
+
+    ND = "bench_results/native_desktop/eval_md__nd_s*.json"
+    LT = "bench_results/clean/eval_md__clean_s*.json"
+    nd_final = [100 * [r for r in json.load(open(f)) if r["ckpt"] == "final.pt"][0]["success_rate"]
+                for f in sorted(glob.glob(ND))
+                if [r for r in json.load(open(f)) if r["ckpt"] == "final.pt"]]
+    if len(nd_final) >= 3:
+        checks += [
+            ("동일장비 네이티브 최종", "63.3", "%.1f" % np.mean(nd_final)),
+            ("동일장비 네이티브 σ", "15.3", "%.1f" % np.std(nd_final, ddof=1)),
+            ("네이티브 5분", "41.1", "%.1f" % curve_mean(ND, "t000300.pt")),
+            ("네이티브 15분", "60.0", "%.1f" % curve_mean(ND, "t000900.pt")),
+            ("5분 우위", "17.8", "%.1f" % (curve_mean(LT, "t000300.pt") - curve_mean(ND, "t000300.pt"))),
+        ]
+        # 실현 배수: 같은 장비·같은 조건의 스텝 수 비
+        def steps(pattern):
+            v = [[r for r in json.load(open(f)) if r["ckpt"] == "final.pt"][0]["global_step"]
+                 for f in sorted(glob.glob(pattern))
+                 if [r for r in json.load(open(f)) if r["ckpt"] == "final.pt"]]
+            return np.mean(v)
+        checks.append(("실현 배수(동일 장비 정숙)", "34.7", "%.1f" % (steps(LT) / steps(ND))))
     bad = 0
     for name, expected, actual in checks:
         ok = expected == actual
@@ -130,7 +149,7 @@ def main():
                      (r"성능 손실 없이", "처리량이 성능으로 무손실 환산된다는 주장"),
                      (r"15분 피크 60", "피크는 5분 58.9% 다"),
                      (r"4배 (이상|넘게) 과장", "격차 기준 과장 배수는 3.56 이다"),
-                     (r"28x as realized", "실현 배수는 62.6× (데스크톱 정숙)"),
+                     (r"28x as realized", "실현 배수는 34.7배 (동일 장비 정숙)"),
                      (r"statistically on par", "영문 초록의 동률 주장"),
                      (r"동일 하드웨어·동일 시간 예산", "헤드라인 비교는 장비 교차다"),
                      (r"carla_policy_ab\.sh", "스윕 스크립트 이름은 carla_seed_sweep.sh"),
@@ -138,6 +157,14 @@ def main():
         for m in re.finditer(pat, text):
             line = text[:m.start()].count(chr(10)) + 1
             print("  잔존 표현 %-18s (L%d) — %s" % (pat, line, why)); bad += 1
+
+    # 62.6배(경합 분모의 과대치)가 라벨 없이 쓰이지 않았는지 — 문맥 200자 안에 사유가 있어야 한다
+    for m in re.finditer(r"62\.6", text):
+        ctx = text[max(0, m.start() - 200):m.end() + 200]
+        if not any(w in ctx for w in ("과대", "경합", "한때")):
+            line = text[:m.start()].count(chr(10)) + 1
+            print("  라벨 없는 62.6배 (L%d) — 경합 분모의 과대치다" % line)
+            bad += 1
 
     print(("불일치 %d 건" % bad) if bad else "전 항목 일치")
     return 1 if bad else 0
