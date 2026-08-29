@@ -47,6 +47,13 @@ CX, CY = W / 2, H / 2
 CAM_Z_CM = 150.0
 N_VEH_RANGE = (6, 14)
 ROAD_TILES = 6                    # 20m x 6 = 120m
+ROAD_SEG_CM = 2000.0
+ROAD_LEN_CM = ROAD_TILES * ROAD_SEG_CM        # 12000 = 120 m
+ROAD_X_END_CM = ROAD_LEN_CM                   # 타일 원점 정렬 후 아스팔트 끝
+SIDEWALK_Z_CM = 15.0              # 인도 보행면 높이 (연석 턱). 도로면은 z=0.
+# ★ 2026-08-29: 이전 판은 타일을 바운드 **중심** 기준으로 깔아 아스팔트가 -10~110 m 였는데
+#   나머지 요소는 전부 0~120 m 를 가정했다 — 원단 10 m 가 비고 원점 뒤 10 m 가 낭비됐다.
+#   타일을 +seg/2 옮겨 0~120 m 로 맞춘다.
 ROAD_HALF_W_CM = 1050
 CORRIDOR_CM = 1300                # 건물 금지 회랑 반폭
 ROAD_MESH = "/Game/Road/Kit_City_Road/SM_ROAD_19_20_0_0_road"
@@ -171,6 +178,19 @@ def spawn_sm(mesh, x, y, z=0.0, yaw=0.0):
     return a
 
 
+def ground_at(a, z_cm=0.0):
+    """바닥면을 z=z_cm 에 맞춘다. ground() 의 일반화.
+
+    2026-08-29: 인도 스트립은 상면을 z=0 에 맞춘 뒤 +15 cm 올라가는데(연석 턱),
+    그 위의 가로등·가로수·소품은 전부 ground()(바닥을 z=0=도로면에 맞춤)를 써서
+    **장면당 26.7개가 보행면에 15 cm 매몰**돼 있었다. 접지면도 그림자도 없이 밑동이
+    잘려 보인다(scene_100.png 좌측 인도 실측). 인도 위 물체는 z_cm=SIDEWALK_Z_CM.
+    """
+    wo, we = a.get_actor_bounds(False)
+    a.add_actor_world_offset(unreal.Vector(0, 0, z_cm - (wo.z - we.z)), False, False)
+    return a
+
+
 def ground(a):
     """바닥을 z=0 에 (피벗이 메시마다 달라 월드바운드 실측 정렬 — v1의 침몰 수정)."""
     wo, we = a.get_actor_bounds(False)
@@ -283,28 +303,54 @@ def visibility(labels, step=8):
     return [0.0 if am[i] == 0 else hit[i] / float(am[i]) for i in range(n)]
 
 
+NEAR = 0.3
+
+
 def bbox2d(lb):
-    """GT 3D 박스 8모서리의 핀홀 투영 (카메라 = 원점, yaw 0). 잘리면 None."""
+    """GT 3D 박스의 핀홀 투영. (bbox2d, truncation, near_clipped) 를 돌려준다.
+
+    2026-08-29 정정 두 가지.
+    (a) 이전 판은 8모서리 루프 **안**에서 x<=0.3 이면 곧바로 None 을 냈다 — 한 모서리만
+        근평면 뒤에 있어도 라벨 전체가 버려진다(클리핑이 아니라 폐기). 지금은 앞쪽 모서리와
+        변∩평면 보간점으로 잘린 다면체의 볼록껍질을 만들어 투영한다. 원근투영은 x>0 에서
+        사영변환이므로 볼록다면체의 극값은 꼭짓점에서 달성되고, 전쌍 보간이 인접쌍을
+        포함하므로 꼭짓점을 모두 덮는다(대각쌍 보간점은 껍질 내부라 bbox 를 넓히지 않는다).
+    (b) 프레임 밖을 클램프만 하고 **잘린 정도를 기록하지 않았다**. 출하 4,323 라벨 중
+        8.4% 가 클램프됐고, 프레임내/amodal 면적비 중앙값 0.453 · 최소 0.0025 였다 —
+        0.25% 만 보이는 차량이 온전한 차량과 같은 GT 를 받는다. 이제 truncation 을 함께
+        내보내고 0.7 초과는 ignore 로 표시한다.
+    """
     p, s = lb["relative_position_m"], lb["size_m"]
     l2, w2, h2 = s["l"] / 2, s["w"] / 2, s["h"] / 2
     yr = math.radians(lb["relative_yaw_deg"])
     c, sn = math.cos(yr), math.sin(yr)
-    us, vs = [], []
+    pts = []
     for dx in (-l2, l2):
         for dy in (-w2, w2):
             for dz in (-h2, h2):
-                x = p["x"] + dx * c - dy * sn
-                y = p["y"] + dx * sn + dy * c
-                z = p["z"] + dz
-                if x <= 0.3:
-                    return None
-                us.append(CX + FX * y / x)
-                vs.append(CY - FY * z / x)
-    u0, u1 = max(0, min(us)), min(W, max(us))
-    v0, v1 = max(0, min(vs)), min(H, max(vs))
+                pts.append((p["x"] + dx * c - dy * sn,
+                            p["y"] + dx * sn + dy * c, p["z"] + dz))
+    near_clipped = any(q[0] <= NEAR for q in pts)
+    proj = [q for q in pts if q[0] > NEAR]
+    if not proj:
+        return None, 1.0, True
+    if near_clipped:
+        for a in pts:
+            for b in pts:
+                if a[0] > NEAR >= b[0]:
+                    t = (NEAR - a[0]) / (b[0] - a[0])
+                    proj.append((NEAR, a[1] + t * (b[1] - a[1]), a[2] + t * (b[2] - a[2])))
+    us = [CX + FX * q[1] / q[0] for q in proj]
+    vs = [CY - FY * q[2] / q[0] for q in proj]
+    fu0, fu1, fv0, fv1 = min(us), max(us), min(vs), max(vs)
+    u0, u1 = max(0.0, fu0), min(float(W), fu1)
+    v0, v1 = max(0.0, fv0), min(float(H), fv1)
     if u1 - u0 < 4 or v1 - v0 < 4:
-        return None
-    return [round(u0, 1), round(v0, 1), round(u1, 1), round(v1, 1)]
+        return None, 1.0, near_clipped
+    full = (fu1 - fu0) * (fv1 - fv0)
+    trunc = 0.0 if full <= 0 else max(0.0, 1.0 - ((u1 - u0) * (v1 - v0)) / full)
+    return ([round(u0, 1), round(v0, 1), round(u1, 1), round(v1, 1)],
+            round(trunc, 3), near_clipped)
 
 
 def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, trees=(), props=()):
@@ -315,25 +361,28 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     rb = road.get_bounds()
     seg = 2 * rb.box_extent.x
     for k in range(ROAD_TILES):
-        top0(spawn_sm(road, k * seg - rb.origin.x, -rb.origin.y))
+        top0(spawn_sm(road, k * seg + seg / 2 - rb.origin.x, -rb.origin.y))
     # 건물 하부 채움: 지면이 인도까지만 있으면 건물이 허공 위에 떠 보인다(scene_75 공극 실측).
     # 도로 타일을 측면 스트립으로 깔아 블록 전체를 아스팔트로 채운다 (도심 주차장/뒷길 외관).
     for k in range(ROAD_TILES):
-        for yc in (-4200, -2100, 2100, 4200):
-            a = top0(spawn_sm(road, k * seg - rb.origin.x, yc - rb.origin.y))
+        # 화면 가장자리(u=0) 광선은 y/x = -1 이라 |y|=52.5 m 에서 지면이 끝나 하늘 띠가
+        # 보였다(실측 약 22 px). 커버리지를 |y| ≤ 178.5 m 로 넓혀 지평선까지 지면이 간다.
+        for yc in (-16800, -14700, -12600, -10500, -8400, -6300, -4200, -2100,
+                   2100, 4200, 6300, 8400, 10500, 12600, 14700, 16800):
+            a = top0(spawn_sm(road, k * seg + seg / 2 - rb.origin.x, yc - rb.origin.y))
             a.add_actor_world_offset(unreal.Vector(0, 0, -3), False, False)  # 본도로보다 3cm 아래
     if crosswalk and random.random() < 0.6:       # 횡단보도를 도로 위에 겹쳐 깔기 (데칼처럼 2cm 위)
-        cw_x = random.uniform(8, ROAD_TILES * 20 - 15) * 100
+        cw_x = random.uniform(8, ROAD_LEN_CM / 100.0 - 15) * 100
         cb = crosswalk.get_bounds()
         a = top0(spawn_sm(crosswalk, cw_x - cb.origin.x, -cb.origin.y))
         a.add_actor_world_offset(unreal.Vector(0, 0, 2), False, False)
 
     sb = sw.get_bounds()
-    for k in range(ROAD_TILES * 20 // 6 + 2):
+    for k in range(int(ROAD_LEN_CM // 600) + 2):
         for side in (-1, 1):
             a = top0(spawn_sm(sw, k * 600 - sb.origin.x,
                               side * (ROAD_HALF_W_CM + 150) - sb.origin.y))
-            a.add_actor_world_offset(unreal.Vector(0, 0, 15), False, False)
+            a.add_actor_world_offset(unreal.Vector(0, 0, SIDEWALK_Z_CM), False, False)
 
     # 기상·시간 프리셋. 판정 기준은 "예쁜 사진"이 아니라 "평범한 실사"이므로 표본을
     # 일상적 조건에 몰아준다 — 황혼·역광 같은 극적 조건은 사진으로는 좋아 보여도
@@ -348,22 +397,24 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     if lamps_on:
         for k in range(1, ROAD_TILES):
             for side, yaw in ((-1, 0), (1, 180)):
-                ground(spawn_sm(pole, k * 2200, side * (ROAD_HALF_W_CM + 150), 0, yaw))
+                ground_at(spawn_sm(pole, k * 2200, side * (ROAD_HALF_W_CM + 150), 0, yaw),
+                          SIDEWALK_Z_CM)
     for k in range(1, ROAD_TILES):                     # 가로수: 가로등 사이 중간점
         for side in (-1, 1):
             if trees and random.random() < 0.6:
-                ground(spawn_sm(random.choice(trees), k * 2200 + 1100,
-                                side * (ROAD_HALF_W_CM + 200), 0, random.uniform(0, 360)))
+                ground_at(spawn_sm(random.choice(trees), min(k * 2200 + 1100, ROAD_X_END_CM),
+                                   side * (ROAD_HALF_W_CM + 200), 0,
+                                   random.uniform(0, 360)), SIDEWALK_Z_CM)
     for k in range(ROAD_TILES * 2):                    # 소품: 인도 위 산포
         for m, pr in props:
             if random.random() < pr * 0.5:
                 side = random.choice((-1, 1))
-                ground(spawn_sm(m, random.uniform(500, ROAD_TILES * 2000),
-                                side * (ROAD_HALF_W_CM + random.uniform(120, 260)), 0,
-                                random.uniform(0, 360)))
+                ground_at(spawn_sm(m, random.uniform(500, ROAD_LEN_CM),
+                                   side * (ROAD_HALF_W_CM + random.uniform(120, 260)), 0,
+                                   random.uniform(0, 360)), SIDEWALK_Z_CM)
 
     # 소실점 폐쇄: 도로 끝 너머(x=140~220m)에 타워 행렬 — "백색 공허" 제거 (3심 1순위)
-    endx = ROAD_TILES * 2000
+    endx = ROAD_X_END_CM
     # 이 두 행은 도로가 끝난 뒤(x > 120m)라 회랑 규칙이 적용되지 않는다 — 오히려 도로
     # 축 근처에 놓아야 소실점이 막힌다. 따라서 y 를 직접 준다.
     for k in range(3):
@@ -374,7 +425,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                    random.choice((-1, 1)) * random.uniform(1200, 3400), random.uniform(0, 360))
     x = 2000.0
     n_bldg = 0
-    while x < ROAD_TILES * 2000 + 4000:
+    while x < ROAD_X_END_CM + 4000:
         for side in (-1, 1):
             if random.random() < 0.8:
                 path = random.choice(list(BLDG_POOL))
@@ -430,7 +481,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         bb2 = buf.get_bounds()
         for ly in (-350.0, 350.0):
             lx = 0.0
-            while lx < ROAD_TILES * 2000:
+            while lx < ROAD_LEN_CM:
                 a = spawn_sm(buf, lx - bb2.origin.x, ly - bb2.origin.y, 0, 0)
                 wo, we = a.get_actor_bounds(False)
                 a.add_actor_world_offset(unreal.Vector(0, 0, 1.5 - (wo.z + we.z)), False, False)
@@ -440,7 +491,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                + find_asset(DECAL_DIR, ("SprayPaint",))[:6])) if m]
     for _ in range(random.randint(3, 8)):
         if decals:
-            a = spawn_sm(random.choice(decals), random.uniform(600, ROAD_TILES * 2000),
+            a = spawn_sm(random.choice(decals), random.uniform(600, ROAD_LEN_CM - 600),
                          random.uniform(-900, 900), 0, random.uniform(0, 360))
             wo, we = a.get_actor_bounds(False)
             a.add_actor_world_offset(unreal.Vector(0, 0, 1.5 - (wo.z - we.z)), False, False)
@@ -508,9 +559,13 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                   relative_position_m=dict(x=rel_x, y=rel_y, z=(wo.z - cam_z) / 100),
                   relative_yaw_deg=((yaw - cam_yaw + 180) % 360) - 180,
                   size_m=dict(l=2 * e.x / 100, w=2 * e.y / 100, h=2 * e.z / 100))
-        bb = bbox2d(lb)
+        bb, trunc, nclip = bbox2d(lb)
         if bb:
             lb["bbox2d"] = bb
+            lb["truncation"] = trunc
+            lb["near_clipped"] = bool(nclip)
+            if trunc > 0.7:
+                lb["ignore"] = True
         labels.append(lb)
 
     # 가시비 부여 — 완전 가림 라벨은 지우지 않고 ignore 로 표시한다(3D-only GT 보존).
