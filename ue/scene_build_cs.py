@@ -395,8 +395,8 @@ def bbox2d(lb):
 
 def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, trees=(), props=()):
     random.seed(seed_base + i)
-    path = "%s/gen_%d" % (LEVEL_DIR, i)
-    open_clean_level(path)
+    level_path = "%s/gen_%d" % (LEVEL_DIR, i)
+    open_clean_level(level_path)
 
     rb = road.get_bounds()
     seg = 2 * rb.box_extent.x
@@ -434,24 +434,51 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     sun_int = random.uniform(*preset["sun_int"])
     fog_d = random.uniform(*preset["fog"])
     lamps_on = preset["lamps"] if isinstance(preset["lamps"], bool) else random.random() < preset["lamps"]
+    # 인도 액터에는 분리 검사가 없어 소품끼리·가로등·가로수와 겹치는 장면이 52.9% 였다.
+    # 또 가로등 k*2200, 가로수 k*2200+1100, 인도 6 m, 도로 20 m 주기가 전부 x=0 에
+    # 위상 고정이라 **시드를 바꿔도 위상 분산이 정확히 0** 이었다 — 데이터셋 평균에서
+    # 합성 판별 신호가 된다. 위상 오프셋을 장면 시드로 굴린다.
+    occ_prop = []
+
+    def _prop_free(px, py, pr):
+        if any(math.hypot(px - ox, py - oy) < pr + orr for ox, oy, orr in occ_prop):
+            return False
+        occ_prop.append((px, py, pr))
+        return True
+
+    phase = random.uniform(0, 2200)
     if lamps_on:
         for k in range(1, ROAD_TILES):
             for side, yaw in ((-1, 0), (1, 180)):
-                ground_at(spawn_sm(pole, k * 2200, side * (ROAD_HALF_W_CM + 150), 0, yaw),
-                          SIDEWALK_Z_CM)
+                lx = min(k * 2200 + phase, ROAD_X_END_CM)
+                if _prop_free(lx, side * (ROAD_HALF_W_CM + 150), 60.0):
+                    ground_at(spawn_sm(pole, lx, side * (ROAD_HALF_W_CM + 150), 0, yaw),
+                              SIDEWALK_Z_CM)
     for k in range(1, ROAD_TILES):                     # 가로수: 가로등 사이 중간점
         for side in (-1, 1):
             if trees and random.random() < 0.6:
-                ground_at(spawn_sm(random.choice(trees), min(k * 2200 + 1100, ROAD_X_END_CM),
-                                   side * (ROAD_HALF_W_CM + 200), 0,
-                                   random.uniform(0, 360)), SIDEWALK_Z_CM)
+                tx = min(k * 2200 + 1100 + phase, ROAD_X_END_CM)
+                if _prop_free(tx, side * (ROAD_HALF_W_CM + 200), 90.0):
+                    ground_at(spawn_sm(random.choice(trees), tx,
+                                       side * (ROAD_HALF_W_CM + 200), 0,
+                                       random.uniform(0, 360)), SIDEWALK_Z_CM)
     for k in range(ROAD_TILES * 2):                    # 소품: 인도 위 산포
         for m, pr in props:
             if random.random() < pr * 0.5:
                 side = random.choice((-1, 1))
-                ground_at(spawn_sm(m, random.uniform(500, ROAD_LEN_CM),
-                                   side * (ROAD_HALF_W_CM + random.uniform(120, 260)), 0,
-                                   random.uniform(0, 360)), SIDEWALK_Z_CM)
+                sx = random.uniform(500, ROAD_LEN_CM)
+                sy = side * (ROAD_HALF_W_CM + random.uniform(120, 260))
+                nm = m.get_name()
+                # 표지판은 통행 방향을 향해야 한다(임의 방향이면 뒷면·측면이 보인다).
+                # y>0 연석은 +x 로 오는 차량을, y<0 연석은 -x 로 오는 차량을 상대한다.
+                if "StopSign" in nm:
+                    yaw = (180.0 if side > 0 else 0.0) + random.uniform(-6, 6)
+                elif "BusStopSign" in nm:            # 날개형 — 차로와 나란히
+                    yaw = (90.0 if side > 0 else 270.0) + random.uniform(-6, 6)
+                else:
+                    yaw = random.uniform(0, 360)
+                if _prop_free(sx, sy, 45.0):
+                    ground_at(spawn_sm(m, sx, sy, 0, yaw), SIDEWALK_Z_CM)
 
     # 소실점 폐쇄: 도로 끝 너머(x=140~220m)에 타워 행렬 — "백색 공허" 제거 (3심 1순위)
     # ★ 2026-08-29: 건물-건물 분리 검사가 아예 없었다. 2만 장면 모사에서 같은 쪽 인접 쌍의
@@ -497,13 +524,13 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     while x < ROAD_X_END_CM + 4000:
         for side in (-1, 1):
             if random.random() < 0.8:
-                path = random.choice(list(BLDG_POOL))
+                bpath = random.choice(list(BLDG_POOL))
                 jit = random.uniform(-FLANK_YAW_JITTER, FLANK_YAW_JITTER)
                 byaw = jit + (0 if side < 0 else 180)
                 bx = x + random.uniform(-500, 500)
-                if not reserve_side(side, bx, occupancy_half_l_cm(path, byaw)):
+                if not reserve_side(side, bx, occupancy_half_l_cm(bpath, byaw)):
                     continue
-                if place_flank(path, bx, side, byaw):
+                if place_flank(bpath, bx, side, byaw):
                     n_bldg += 1
         # 스텝은 밀도용, 예약은 관통 방지용 — 역할을 나눈다. 6200~7000 은 장면당 약
         # 4.5동으로 "공허함" 감점을 피하면서 예약 실패율을 낮게 유지하는 값이다.
@@ -560,15 +587,33 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                 wo, we = a.get_actor_bounds(False)
                 a.add_actor_world_offset(unreal.Vector(0, 0, 1.5 - (wo.z + we.z)), False, False)
                 lx += 2 * bb2.box_extent.x
-    decals = [m for m in (unreal.load_asset(a) for a in
-              (find_asset(DECAL_DIR, ("Painted_Arrow",)) + find_asset(DECAL_DIR, ("Parking_Line",))
-               + find_asset(DECAL_DIR, ("SprayPaint",))[:6])) if m]
-    for _ in range(random.randint(3, 8)):
-        if decals:
-            a = spawn_sm(random.choice(decals), random.uniform(600, ROAD_LEN_CM - 600),
-                         random.uniform(-900, 900), 0, random.uniform(0, 360))
-            wo, we = a.get_actor_bounds(False)
-            a.add_actor_world_offset(unreal.Vector(0, 0, 1.5 - (wo.z - we.z)), False, False)
+    # 방향성 도색(화살표·주차선)과 낙서를 한 리스트에 합쳐 같은 uniform(0,360) 으로
+    # 굴리고 있었다 — 도로축 45° 이상 기운 것이 50.2%, 즉 차로 화살표가 사선으로 눕는다.
+    # 낙서는 자유 요각이 정상이므로 풀을 나눈다.
+    _load = lambda pats: [m for m in (unreal.load_asset(a) for a in pats) if m]
+    arrows = _load(find_asset(DECAL_DIR, ("Painted_Arrow",)))
+    plines = _load(find_asset(DECAL_DIR, ("Parking_Line",)))
+    graffi = _load(find_asset(DECAL_DIR, ("SprayPaint",))[:6])
+
+    def _drop(mesh, dx, dy, dyaw):
+        a = spawn_sm(mesh, dx, dy, 0, dyaw)
+        wo, we = a.get_actor_bounds(False)
+        a.add_actor_world_offset(unreal.Vector(0, 0, 1.5 - (wo.z - we.z)), False, False)
+
+    for _ in range(random.randint(0, 3)):          # 차로 화살표: 차로 중심, 도로축 정렬
+        if arrows:
+            _drop(random.choice(arrows), random.uniform(600, ROAD_LEN_CM - 600),
+                  random.choice(LANE_CTRS) * 100.0,
+                  random.choice((0.0, 180.0)) + random.uniform(-2, 2))
+    for _ in range(random.randint(0, 2)):          # 주차선: 연석 안쪽, 도로축 정렬
+        if plines:
+            _drop(random.choice(plines), random.uniform(600, ROAD_LEN_CM - 600),
+                  random.choice((-1, 1)) * random.uniform(850, 1020),
+                  random.choice((0.0, 180.0)) + random.uniform(-2, 2))
+    for _ in range(random.randint(2, 5)):          # 낙서: 자유 요각 유지
+        if graffi:
+            _drop(random.choice(graffi), random.uniform(600, ROAD_LEN_CM - 600),
+                  random.uniform(-900, 900), random.uniform(0, 360))
 
     n_veh = random.randint(*N_VEH_RANGE)
     placed, labels, tries = [], [], 0
@@ -584,11 +629,20 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
             # 전 구간 최대 5.0m(차로 폭의 143%)의 횡 어긋남이 생긴다 — 한 차선에 나란히
             # 서야 할 정체 열이 옆 차선으로 새거나 차선을 밟는다(모사 2만 회: 중앙값
             # 1.13m, 90분위 3.08m). 세계 좌표는 placed 에 있으므로 그것을 쓴다.
-            px, py, _pyaw, _pex, _pey = placed[-1]
-            x = px + random.uniform(6.0, 9.0)
+            px, py, pyaw, _pex, _pey = placed[-1]
+            # 앞차의 요각을 상속한다. 이전 판은 새 y 의 부호로 요각을 **재결정**해
+            # |Δyaw|>90° 인 배치가 6.31%(그런 쌍 포함 장면 15.0%) 나왔다 — 원인의 91%는
+            # 앞차가 자유요각으로 놓인 경우였다(중앙선 넘김은 9%뿐).
+            _ax = abs(((pyaw + 180) % 360) - 180)
+            if min(_ax, abs(_ax - 180)) > 20:      # 앞차가 도로 정렬이 아니면 열을 만들지 않는다
+                continue
+            _fwd = 1.0 if _ax < 90 else -1.0       # 앞차 진행이 +x 인가
+            x = px - _fwd * random.uniform(6.0, 9.0)   # 언제나 앞차 '뒤'에 붙는다
             y = py + random.uniform(-0.3, 0.3)
-            yaw = (180.0 if y < 0 else 0.0) + random.uniform(-4, 4)
-            if x > 55:            # 도로 끝(세계 좌표 기준) 밖이면 버린다
+            if (y * py) <= 0.0:                    # 열이 중앙선을 넘지 않게 반사
+                y = py - (y - py)
+            yaw = pyaw + random.uniform(-2, 2)
+            if x < 6.0 or x > ROAD_X_END_CM / 100.0 - 5.0:
                 continue
         elif mode < 0.52:   # 노변 주차열 증량 (생활감)
             # 평행주차: 갓길(|y|≈8.2m)에 차선과 나란히
@@ -666,7 +720,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
 
     lvl.save_current_level()
     with open(os.path.join(OUTPUT_DIR, "scene_%d.json" % i), "w") as f:
-        json.dump(dict(scene=i, level=path,
+        # ★ level 은 반드시 레벨 경로여야 한다. 이전 판은 건물 루프가 같은 이름
+        # (path)을 덮어써서 출하된 464/464 JSON 이 마지막 건물 에셋 경로를 기록했다.
+        assert level_path.startswith(LEVEL_DIR)
+        json.dump(dict(scene=i, level=level_path,
                        camera=dict(fov_deg=FOV, z_m=round(cam_z / 100, 3), yaw_deg=round(cam_yaw, 2), width=W, height=H),
                        sun=dict(pitch=round(sun_pitch, 1), yaw=round(sun_yaw, 1)),
                        weather=dict(preset=preset["name"], sun_intensity=round(sun_int, 2),
