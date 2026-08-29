@@ -134,6 +134,25 @@ def main():
                  if [r for r in json.load(open(f)) if r["ckpt"] == "final.pt"]]
             return np.mean(v)
         checks.append(("실현 배수(동일 장비 정숙)", "35.9", "%.1f" % (steps(LT) / steps(ND))))
+    # 오라클 이득이 선택 편향인지 (§6.2·§7 (5)) — 널 분포 안이면 신호가 아니다
+    try:
+        import numpy as _np
+        rng = _np.random.default_rng(0)
+        fins, ors, nck = [], [], None
+        for f in sorted(glob.glob("bench_results/clean/eval_md__clean_s*.json")):
+            rows = json.load(open(f))
+            fins.append(100 * [r for r in rows if r["ckpt"] == "final.pt"][0]["success_rate"])
+            ors.append(max(100 * r["success_rate"] for r in rows))
+            nck = len(rows)
+        pr = _np.mean(fins) / 100.0
+        null = _np.array([(rng.binomial(30, pr, size=(len(fins), nck)) / 30 * 100)
+                          .max(axis=1).mean() for _ in range(4000)])
+        lo, hi = _np.percentile(null, [2.5, 97.5])
+        inside = lo <= _np.mean(ors) <= hi
+        checks.append(("오라클 이득 = 선택 편향", "예", "예" if inside else "아니오"))
+    except Exception:
+        pass
+
     # DPC 재산출 (§6.3) — tools/dpc_recompute.py 와 같은 정의로 다시 계산
     try:
         sys.path.insert(0, "tools")
