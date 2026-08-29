@@ -1,0 +1,80 @@
+[
+  {
+    "ckpt": "final.pt",
+    "elapsed_s": 3600.071387052536,
+    "global_step": 154337280,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.4,
+    "crash_rate": 0.3,
+    "out_of_road_rate": 0.3,
+    "timeout_rate": 0.0,
+    "mean_return": 86.99947003106489,
+    "mean_length": 101.76666666666667
+  },
+  {
+    "ckpt": "t000300.pt",
+    "elapsed_s": 301.00086522102356,
+    "global_step": 12910592,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.4,
+    "crash_rate": 0.3,
+    "out_of_road_rate": 0.3,
+    "timeout_rate": 0.0,
+    "mean_return": 86.02151529594029,
+    "mean_length": 115.16666666666667
+  },
+  {
+    "ckpt": "t000600.pt",
+    "elapsed_s": 601.0920543670654,
+    "global_step": 25821184,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.4666666666666667,
+    "crash_rate": 0.26666666666666666,
+    "out_of_road_rate": 0.26666666666666666,
+    "timeout_rate": 0.0,
+    "mean_return": 89.96150503555971,
+    "mean_length": 109.0
+  },
+  {
+    "ckpt": "t000900.pt",
+    "elapsed_s": 900.2292082309723,
+    "global_step": 38666240,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.5666666666666667,
+    "crash_rate": 0.2,
+    "out_of_road_rate": 0.23333333333333334,
+    "timeout_rate": 0.0,
+    "mean_return": 96.1176207183715,
+    "mean_length": 113.93333333333334
+  },
+  {
+    "ckpt": "t001200.pt",
+    "elapsed_s": 1200.057285785675,
+    "global_step": 51511296,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.5666666666666667,
+    "crash_rate": 0.2,
+    "out_of_road_rate": 0.23333333333333334,
+    "timeout_rate": 0.0,
+    "mean_return": 96.57764682247412,
+    "mean_length": 111.6
+  },
+  {
+    "ckpt": "t001500.pt",
+    "elapsed_s": 1500.1380858421326,
+    "global_step": 64225280,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.43333333333333335,
+    "crash_rate": 0.2,
+    "out_of_road_rate": 0.36666666666666664,
+    "timeout_rate": 0.0,
+    "mean_return": 92.94119476885142,
+    "mean_length": 112.56666666666666
+  }
+]

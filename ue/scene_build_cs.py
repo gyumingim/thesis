@@ -673,7 +673,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
 
     n_veh = random.randint(*N_VEH_RANGE)
     placed, labels, tries = [], [], 0
-    while len(labels) < n_veh and tries < 100:
+    while len(labels) < n_veh and tries < 150:   # 새 기각 경로가 시도를 더 쓴다
         tries += 1
         m = random.choice(vehicles)
         e = m.get_bounds().box_extent
@@ -701,8 +701,9 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
             if x < 6.0 or x > ROAD_X_END_CM / 100.0 - 5.0:
                 continue
         elif mode < 0.52:   # 노변 주차열 증량 (생활감)
-            # 평행주차: 갓길(|y|≈8.2m)에 차선과 나란히
-            x = random.uniform(6, 48)
+            # 평행주차: 갓길에 차선과 나란히. x 도 도로 전 구간으로 폈다 — 6~48 m 로
+            # 묶어 두면 원경 연석이 비어 보인다.
+            x = random.uniform(6, ROAD_X_END_CM / 100.0 - 6.0)
             side = random.choice((-1, 1))
             # 연석에서 역산한다. 고정 7.4~7.9m 는 차폭·요각을 무시해 차체 바깥면–연석
             # 간격이 중앙값 1.6~1.9m(최대 2.2m)까지 벌어졌다 — 실제 평행주차 0.2~0.5m 의
@@ -715,7 +716,6 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         else:
             # x 를 도로 전 구간에 퍼뜨리되 근경을 살짝 더 뽑는다(원경만 차면 공허해 보인다).
             x = 6.0 + (ROAD_X_END_CM / 100.0 - 12.0) * (random.random() ** 0.55)
-            y = random.uniform(-7.5, 7.5)
             if mode < 0.88:
                 # 우측통행 차선 의미론: **y>0 이 우측 차선**(순방향), y<0 이 마주 옴.
                 # ★ 2026-08-29 정정: UE 좌수계에서 +y 는 카메라 오른쪽이다(이 파일의
