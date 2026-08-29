@@ -216,6 +216,73 @@ def place_flank(path, x, side, yaw):
     return spawn_bldg(path, x, y, yaw)
 
 
+def visibility(labels, step=8):
+    """OBB 레이캐스트 z-버퍼로 라벨별 가시비(보이는 픽셀 / 자기 실루엣 픽셀)를 낸다.
+
+    왜 필요한가. 이 생성기는 절두체 안에 있고 4px 이상이면 모두 GT 박스를 붙여 왔다.
+    출하된 464장면 4,320 라벨을 재검사하니 **20.7~22.8% 가 다른 차량에 완전히 가려**
+    한 픽셀도 보이지 않는데 온전한 박스를 달고 있었고, 그런 라벨이 하나 이상인 장면이
+    76~80% 였다. 검출기 학습셋에서 이는 순수한 오탐 지도다.
+
+    구현 제약: UE 5.8 내장 파이썬에는 numpy 가 없다(실측). `build_scene` 이 main 의
+    try/except 안이라 ImportError 가 삼켜져 산출물이 0개가 되므로 **순수 파이썬**으로 쓴다.
+    step=8 에서 장면당 0.058s (실측, 라벨 9개 기준).
+    """
+    boxes = []
+    for lb in labels:
+        p, s = lb["relative_position_m"], lb["size_m"]
+        yr = math.radians(lb["relative_yaw_deg"])
+        boxes.append((p["x"], p["y"], p["z"], s["l"] / 2, s["w"] / 2, s["h"] / 2,
+                      math.cos(yr), math.sin(yr)))
+    n = len(boxes)
+    am = [0] * n
+    hit = [0] * n
+    v = step / 2.0
+    while v < H:
+        dz = -(v - CY) / FY
+        u = step / 2.0
+        while u < W:
+            dy = (u - CX) / FX
+            best = 1e18
+            bi = -1
+            for i, (px, py, pz, ex, ey, ez, c, sn) in enumerate(boxes):
+                # 광선 원점(카메라)=0, 방향 (1, dy, dz) 를 박스 로컬로 옮긴다
+                lox = -px * c - py * sn
+                loy = px * sn - py * c
+                loz = -pz
+                ldx = c + dy * sn
+                ldy = -sn + dy * c
+                ldz = dz
+                tmin, tmax, ok = 0.0, 1e18, True
+                for lo, ld, e in ((lox, ldx, ex), (loy, ldy, ey), (loz, ldz, ez)):
+                    if abs(ld) < 1e-12:
+                        if lo < -e or lo > e:
+                            ok = False
+                            break
+                        continue
+                    t1 = (-e - lo) / ld
+                    t2 = (e - lo) / ld
+                    if t1 > t2:
+                        t1, t2 = t2, t1
+                    if t1 > tmin:
+                        tmin = t1
+                    if t2 < tmax:
+                        tmax = t2
+                    if tmin > tmax:
+                        ok = False
+                        break
+                if ok and tmax >= tmin:
+                    am[i] += 1
+                    if tmin < best:
+                        best = tmin
+                        bi = i
+            if bi >= 0:
+                hit[bi] += 1
+            u += step
+        v += step
+    return [0.0 if am[i] == 0 else hit[i] / float(am[i]) for i in range(n)]
+
+
 def bbox2d(lb):
     """GT 3D 박스 8모서리의 핀홀 투영 (카메라 = 원점, yaw 0). 잘리면 None."""
     p, s = lb["relative_position_m"], lb["size_m"]
@@ -396,21 +463,33 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
             px, py, _pr = placed[-1]
             x = px + random.uniform(6.0, 9.0)
             y = py + random.uniform(-0.3, 0.3)
-            yaw = (0.0 if y < 0 else 180.0) + random.uniform(-4, 4)
+            yaw = (180.0 if y < 0 else 0.0) + random.uniform(-4, 4)
             if x > 55:            # 도로 끝(세계 좌표 기준) 밖이면 버린다
                 continue
         elif mode < 0.52:   # 노변 주차열 증량 (생활감)
             # 평행주차: 갓길(|y|≈8.2m)에 차선과 나란히
             x = random.uniform(6, 48)
             side = random.choice((-1, 1))
-            y = side * random.uniform(7.4, 7.9)   # 연석 여유 (걸침 지적)
-            yaw = (0.0 if side < 0 else 180.0) + random.uniform(-4, 4)
+            # 연석에서 역산한다. 고정 7.4~7.9m 는 차폭·요각을 무시해 차체 바깥면–연석
+            # 간격이 중앙값 1.6~1.9m(최대 2.2m)까지 벌어졌다 — 실제 평행주차 0.2~0.5m 의
+            # 4~8배이고, 6차로 환산 시 최외곽 차로를 통째로 점유하는 폭이다.
+            _jit = math.radians(4.0)
+            y = side * (ROAD_HALF_W_CM / 100.0 - e.y / 100.0
+                        - abs(e.x / 100.0 * math.sin(_jit))
+                        - random.uniform(0.20, 0.45))
+            yaw = (180.0 if side < 0 else 0.0) + random.uniform(-4, 4)
         else:
             x = random.uniform(6, 48)
             y = random.uniform(-7.5, 7.5)
             if mode < 0.88:
-                # 우측통행 차선 의미론: y<0(우측 차선) 순방향, y>0 마주 옴
-                yaw = (0.0 if y < 0 else 180.0) + random.uniform(-8, 8)
+                # 우측통행 차선 의미론: **y>0 이 우측 차선**(순방향), y<0 이 마주 옴.
+                # ★ 2026-08-29 정정: UE 좌수계에서 +y 는 카메라 오른쪽이다(이 파일의
+                # bbox2d 가 u = CX + FX*y/x 로 그렇게 투영한다). 이전 판은 y<0 을 우측
+                # 차선으로 잘못 적어 **좌측통행 장면**을 만들고 있었다 — 출하된 464장면
+                # 4,323 라벨 실측에서 순방향의 88.6% 가 화면 왼쪽, 마주옴의 90.6% 가
+                # 화면 오른쪽이었다. 평가 도메인(Udacity CrowdAI, 캘리포니아)은 우측통행이므로
+                # 학습·평가가 좌우 거울상이었다.
+                yaw = (180.0 if y < 0 else 0.0) + random.uniform(-8, 8)
             else:
                 yaw = random.uniform(0, 360)   # 회전 중/무단 주차 등 자유
         if any(math.hypot(x - px, y - py) < r + pr + 0.4 for px, py, pr in placed):
@@ -433,6 +512,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         if bb:
             lb["bbox2d"] = bb
         labels.append(lb)
+
+    # 가시비 부여 — 완전 가림 라벨은 지우지 않고 ignore 로 표시한다(3D-only GT 보존).
+    _vis_src = [l for l in labels if "bbox2d" in l]
+    if _vis_src:
+        for _lb, _v in zip(_vis_src, visibility(_vis_src)):
+            _lb["visibility"] = round(_v, 3)
+            if _v < 0.15:
+                _lb["ignore"] = True
 
     lvl.save_current_level()
     with open(os.path.join(OUTPUT_DIR, "scene_%d.json" % i), "w") as f:
