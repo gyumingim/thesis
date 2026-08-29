@@ -1,0 +1,15 @@
+[
+  {
+    "ckpt": "final.pt",
+    "elapsed_s": 3601.921107530594,
+    "global_step": 19988480,
+    "target": "custom",
+    "episodes": 64,
+    "success_rate": 0.765625,
+    "crash_rate": 0.21875,
+    "out_of_road_rate": 0.015625,
+    "timeout_rate": 0.0,
+    "mean_return": 112.63724023778923,
+    "mean_length": 94.390625
+  }
+]

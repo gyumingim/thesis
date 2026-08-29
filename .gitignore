@@ -1,5 +1,17 @@
 runs/
 bench_results/
+# ── 예외: 논문 수치의 원자료는 반드시 버전 관리한다 (2026-08-29) ──
+# 감사에서 "CARLA n=180 풀의 출처 미기재"가 지적됐고, 확인해 보니 bench_results 전체가
+# 무시되고 있어 논문의 실증 기반이 저장소 밖에 있었다. 평가 JSON·에피소드 JSON·학습 로그는
+# 전부 합쳐 1MB 미만이므로 포함하고, 체크포인트(.pt)와 runs/ 만 계속 제외한다.
+!bench_results/
+!bench_results/**/
+!bench_results/**/eval_*.json
+!bench_results/**/*.log
+!bench_results/**/*.md
+!bench_results/carla/**/*.json
+!bench_results/**/DONE
+bench_results/**/*.pt
 .venv/
 __pycache__/
 *.pyc
