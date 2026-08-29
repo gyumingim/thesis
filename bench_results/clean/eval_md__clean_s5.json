@@ -63,5 +63,83 @@
     "timeout_rate": 0.0,
     "mean_return": 85.04510279435141,
     "mean_length": 108.46666666666667
+  },
+  {
+    "ckpt": "t001500.pt",
+    "elapsed_s": 1500.0725600719452,
+    "global_step": 58720256,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.5666666666666667,
+    "crash_rate": 0.3,
+    "out_of_road_rate": 0.13333333333333333,
+    "timeout_rate": 0.0,
+    "mean_return": 91.8178000516387,
+    "mean_length": 111.13333333333334
+  },
+  {
+    "ckpt": "t001800.pt",
+    "elapsed_s": 1800.7651908397675,
+    "global_step": 70909952,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.36666666666666664,
+    "crash_rate": 0.3,
+    "out_of_road_rate": 0.3333333333333333,
+    "timeout_rate": 0.0,
+    "mean_return": 83.31546256175494,
+    "mean_length": 105.13333333333334
+  },
+  {
+    "ckpt": "t002100.pt",
+    "elapsed_s": 2101.5005950927734,
+    "global_step": 82837504,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.6,
+    "crash_rate": 0.26666666666666666,
+    "out_of_road_rate": 0.13333333333333333,
+    "timeout_rate": 0.0,
+    "mean_return": 93.49982983558706,
+    "mean_length": 114.5
+  },
+  {
+    "ckpt": "t002400.pt",
+    "elapsed_s": 2400.710924386978,
+    "global_step": 94765056,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.5666666666666667,
+    "crash_rate": 0.3333333333333333,
+    "out_of_road_rate": 0.1,
+    "timeout_rate": 0.0,
+    "mean_return": 90.57122587390505,
+    "mean_length": 118.56666666666666
+  },
+  {
+    "ckpt": "t002700.pt",
+    "elapsed_s": 2700.7556529045105,
+    "global_step": 106823680,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.6,
+    "crash_rate": 0.3,
+    "out_of_road_rate": 0.1,
+    "timeout_rate": 0.0,
+    "mean_return": 91.17777233761618,
+    "mean_length": 113.26666666666667
+  },
+  {
+    "ckpt": "t003000.pt",
+    "elapsed_s": 3000.0916912555695,
+    "global_step": 119472128,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.5,
+    "crash_rate": 0.36666666666666664,
+    "out_of_road_rate": 0.13333333333333333,
+    "timeout_rate": 0.0,
+    "mean_return": 86.57097347029988,
+    "mean_length": 114.86666666666666
   }
 ]
