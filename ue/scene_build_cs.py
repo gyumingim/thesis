@@ -645,6 +645,9 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
 
     # 차로 경계: 도로 키트의 도색 buffer 스트립 (플레인+기본머티리얼은 저대비로 비가시 실측)
     buf = unreal.load_asset("/Game/Road/Kit_City_Road/SM_ROAD_19_5_0_19_buffer")
+    n_line = 0
+    if buf is None:
+        log("경고: 차선 도색 메시 로드 실패 — 차선이 그려지지 않는다")
     if buf:
         bb2 = buf.get_bounds()
         for ly in LANE_LINES_CM:
@@ -653,6 +656,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                 a = spawn_sm(buf, lx - bb2.origin.x, ly - bb2.origin.y, 0, 0)
                 wo, we = a.get_actor_bounds(False)
                 a.add_actor_world_offset(unreal.Vector(0, 0, 1.5 - (wo.z + we.z)), False, False)
+                n_line += 1
                 lx += 2 * bb2.box_extent.x
     # 방향성 도색(화살표·주차선)과 낙서를 한 리스트에 합쳐 같은 uniform(0,360) 으로
     # 굴리고 있었다 — 도로축 45° 이상 기운 것이 50.2%, 즉 차로 화살표가 사선으로 눕는다.
@@ -802,7 +806,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                        weather=dict(preset=preset["name"], sun_intensity=round(sun_int, 2),
                                     fog_density=round(fog_d, 5), lamps=bool(lamps_on)),
                        vehicles=labels), f, indent=2)
-    log("scene_%d OK (차량 %d, 건물 %d)" % (i, len(labels), n_bldg))
+    log("scene_%d OK (차량 %d, 건물 %d, 차선조각 %d)" % (i, len(labels), n_bldg, n_line))
 
 
 def main():

@@ -16,7 +16,8 @@
 
 **핵심 실증 결과**: 답은 **예산에 달렸다**. 동일 장비·동일 정숙 조건에서 각 5시드로
 계층 정합을 마친 경량 시뮬의 제로샷 전이는 **5분 예산에서 54.7%로 네이티브 36.7%를
-18.0%p 앞선다**(Welch p=0.039, 25개 시드쌍 중 22쌍에서 우세). 10분에 +8.7%p 로 줄고
+18.0%p 앞선다**(25개 시드쌍 중 22쌍에서 우세; 미보정 p=0.039 이나 12개 체크포인트 중 최소
+p 라 다중비교 보정 후에는 유의하지 않다 — §6.2). 10분에 +8.7%p 로 줄고
 **15분에 교차하며**, **1시간 예산에서는 49.3%±16.1% 로 네이티브 62.0%±14.5% 에 12.7%p
 뒤진다**(p=0.227, 95% 구간 [−35.0, +9.7]%p — 유의하지 않다). 즉 처리량 35.9배는 초반
 예산에서 약 1.5배의 벽시계 단축으로 환산되지만 **최종 성능의 천장으로는 환산되지 않는다**.
@@ -96,8 +97,9 @@
 > 같은 GPU-시간에서, 물리를 추상화한 경량 시뮬레이터의 대량 샘플이 고충실도 시뮬레이터의
 > 소량 샘플을 이기는가? 이기려면 두 시뮬레이터는 얼마나, 그리고 "무엇이" 같아야 하는가?
 
-**전반부 답: 예산에 달렸다.** 동일 장비·각 5시드 대조에서 경량 시뮬은 **5분 예산이면
-유의하게 이기고**(54.7% 대 36.7%, p=0.039), **15분에 교차하며**, **1시간 예산이면 진다**
+**전반부 답: 예산에 달렸다.** 동일 장비·각 5시드 대조에서 경량 시뮬은 **5분 예산이면 앞서고**
+(54.7% 대 36.7%, 25쌍 중 22쌍; 다중비교 보정 후에는 유의하지 않다), **15분에 교차하며**,
+**1시간 예산이면 진다**
 (49.3%±16.1% 대 62.0%±14.5%, 다만 p=0.227 로 비유의). 처리량 35.9배는 초반의 약 1.5배
 벽시계 단축으로 환산되지만 최종 천장을 올리지는 못한다 — 경량 곡선은 첫 체크포인트부터
 평탄한 반면 네이티브는 계속 오르므로, 교차는 경량의 하강이 아니라 **네이티브의 상승**으로
@@ -105,8 +107,8 @@
 본 연구가 단일 지점 비교에서 얻은 가장 실용적인 교훈이다.
 처리량 우위(수십 배)는 전이 성능으로 온전히 환산되지 않는다. 다만 정합 결함이 남아 있으면
 같은 조건이 0% 로 보인다는 점이 본 연구의 실질적 발견이다(§4.7).
-단 n=3 에서 이 격차는 유의하지 않고(Welch t=−1.54, df≈2.4, p≈0.24) 두 수치는 서로 다른
-장비에서 얻어졌으므로(§7), 이는 점추정 방향의 잠정 판정이다.
+다만 이 격차는 동일 장비·동일 정숙 조건 각 5시드 대조에서도 유의하지 않으므로
+(Welch t=−1.31, df=7.9, p=0.227, 95% CI [−35.0, +9.7]%p), 판정은 점추정 방향에 한한다.
 
 **후반부가 본 연구의 실질이다.** "무엇이 같아야 하는가"의 답은 세 층위다. (i) 관측·동역학·
 종료규칙·기하의 **계층 정합**(§4), (ii) 관측 **지지집합 점유 패턴**의 일치(§5) — 학습보다
@@ -121,8 +123,9 @@
    정합된 경량 환경은 1,024 병렬에서 1.0M steps/s (MetaDrive 12프로세스 정점의 144배; 최종
    R6 환경 959K 기준으로는 138배)이고, 학습을 포함한 실현 배수는 동일 장비 정숙 조건에서
    35.9배다. 이 프로토콜이 드러낸 것은 승패가 아니라 **교차**다: 동일 장비·각 5시드 대조에서
-   경량은 5분 예산에 54.7% 로 네이티브 36.7% 를 **18.0%p 유의하게 앞서고**(p=0.039),
-   15분에 교차하며, 1시간에는 49.3% 로 62.0% 에 12.7%p 뒤진다(비유의, p=0.227; §6.2).
+   경량은 5분 예산에 54.7% 로 네이티브 36.7% 를 **18.0%p 앞서고**(25쌍 중 22쌍),
+   15분에 교차하며, 1시간에는 49.3% 로 62.0% 에 12.7%p 뒤진다. **어느 단일 시점의 격차도
+   다중비교 보정 후에는 유의하지 않으며, 재현되는 것은 교차 구조 자체다**(§6.2).
    **처리량 우위는 초기 학습 속도로 환산되지만 최종 성능의 천장으로는 환산되지 않는다.**
 2. **일곱 라운드 실패 지문 분류(§4)** — 각 계층의 불일치는 실패 지문을 남기지만 **일대일 대응은 아니다** —
    "회전 경로만 전멸·직진 정상"은 경로 기하(R6)와 횡방향 규약(R7) 양쪽에서 나타나며,
@@ -140,7 +143,7 @@
 ### 1.4 논문 구성
 
 본 논문은 두 갈래를 함께 달린다. **실증 갈래**의 결론은 "동일 벽시계 비교의 답은 예산에
-의존한다"이고 — 경량 시뮬은 초반을 3배 앞당기지만 최종 천장을 올리지 못한다(§6.2) —
+의존한다"이고 — 경량 시뮬은 초반을 약 1.5배 앞당기지만 최종 천장을 올리지 못한다(§6.2) —
 **방법론 갈래**의 스파인은 단일 명제다: **"시뮬레이터 간 전이를 지배하는 것은 충실도의
 명목이 아니라, 규약·지지집합 수준에서 학습 분포와 시험 분포가 실제로 겹치는가이다."**
 두 갈래는 독립이 아니다 — 정합이 깨진 상태에서는 예산-성능 곡선 자체가 측정되지 않으며,
@@ -571,7 +574,7 @@ steps(+81%)로 늘었고 성능도 53.3% → 63.4% 로 회복했다. 즉 **경�
 깎고 있었고, 그 상태의 대조(격차 4.4%p)는 경량에 유리한 과소추정이었다**
 (docs/HARDWARE_CONFOUND.md).
 
-**처리량 우위는 어디로 가는가 — 초반 예산의 3배 단축**. 동일 장비 대조는 최종 성능만
+**처리량 우위는 어디로 가는가 — 초반 예산의 약 1.5배 단축**. 동일 장비 대조는 최종 성능만
 비교하면 보이지 않는 것을 보여준다. 두 시드평균 곡선을 같은 시간축에 놓으면:
 
 | 벽시계 | 5분 | 10분 | 15분 | 25분 | 40분 | 최종(60분) |
@@ -579,10 +582,18 @@ steps(+81%)로 늘었고 성능도 53.3% → 63.4% 로 회복했다. 즉 **경�
 | 경량 전이 | 54.7% | **55.3%** (피크) | 51.3% | 48.0% | 50.0% | 49.3% |
 | 네이티브(동일 장비) | 36.7% | 46.7% | **59.3%** | 67.3% | 62.0% | 62.0% |
 
-**5분 시점에서 경량이 18.0%p 앞서며, 이 우위는 유의하다** — 54.7% 대 36.7%, Welch p=0.039,
-25개 시드쌍 중 **22쌍**에서 경량 우세. 10분에는 +8.7%p(p=0.286)로 줄고 **15분에 교차한다**
-(51.3% 대 59.3%). 처리량 35.9배는 초반 예산에서 **약 1.5배의 벽시계 단축**으로 환산된다
-(네이티브가 경량 피크 수준에 닿는 시간의 중앙값 15분 대 경량 10분).
+**5분 시점에서 경량이 18.0%p 앞선다** — 54.7% 대 36.7%, 25개 시드쌍 중 **22쌍**에서 경량
+우세. 10분에는 +8.7%p 로 줄고 **15분에 교차한다**(51.3% 대 59.3%).
+
+> **다중비교 고지.** 5분의 미보정 Welch p 는 0.039 지만 이는 **12개 체크포인트 중 최소
+> p** 이므로 그대로 인용할 수 없다. 보정하면 Bonferroni p=0.47, 순열 max-T p=0.26 으로
+> 유의하지 않다. 이는 본 논문이 같은 날 §6.2 에서 철회한 "5분→40분 낙폭"과 정확히 같은
+> 함정이며(사후 극값 선택), 그 정정 상자를 쓴 뒤에 같은 실수를 반복했다는 사실을 그대로
+> 남긴다. **12개 시점에서 일관되게 재현되는 것은 개별 p 가 아니라 부호 패턴이다** —
+> 5·10분에 양(+18.0, +8.7), 15분부터 최종까지 열두 시점 중 열 시점이 음이고 부호 전환은
+> 한 번뿐이다. 교차 구조는 이 패턴이 근거이며, 어느 단일 시점의 유의성이 아니다. 처리량 35.9배는 초반 예산에서 **약 1.5배의 벽시계 단축**으로 환산된다
+(네이티브가 경량 피크 수준에 닿는 시간의 중앙값 15분 대 경량 10분. 기준을 경량의 5분
+수준으로 잡으면 15분 대 5분이라 3배가 되므로, 본 논문은 **피크 기준을 표준**으로 쓴다).
 
 **주목할 점은 교차의 원인이다.** 3시드 시점에는 경량이 하강하는 것처럼 보였으나, 5시드에서
 경량 곡선은 **첫 체크포인트부터 사실상 평탄하다**(54.7 → 49.3, 최대-최저 폭 7.3%p, 시드별
@@ -1139,19 +1150,21 @@ MetaDrive 전이를 절반 가까이 떨어뜨렸다. 이유는 §4 의 정합 �
   83→27·73→67·**47→53** 으로 방향이 갈린다. 애초에 정숙 런 내부의 시간축도 5시드에서는
   평탄하므로(§6.2) "피크 후 하강"이라는 서술 자체가 성립하지 않는다. 장비·조건에 따라 절대 수치가 크게
   이동하므로 단일 장비 비교만으로 우열을 단정할 수 없다.
-  **여기서 본 논문 주 결론의 가장 큰 한계를 명시한다**: 확정 전이 48.9% 는 데스크톱(RTX 5080)
-  정숙 조건에서, 비교 기준선 68%±9% 는 노트북(RTX 4060) 5시드에서 얻었다. 즉 헤드라인
-  비교는 **장비 교차 비교**다. 동일 장비 대조에서는 데스크톱 네이티브가 53.3%(단일 시드,
-  30ep)로 격차가 4.4pp 까지 좁혀지며, 이는 시드 표준편차(20.4%p) 안에 완전히 들어간다.
-  단, 데스크톱 네이티브는 같은 1시간에 2.17M steps(602 SPS)만 모아 노트북 네이티브
-  (~4.9M steps, 1,360 SPS)의 절반에 못 미치므로, 53.3% 를 장비 효과만으로 읽을 수 없다.
-  실제로 같은 데스크톱에서 정숙 조건으로 재측정한 네이티브 3시드는 **1,096 SPS·3.95M
-  steps(표본 +81%)**로, 53.3% 는 경합으로 표본이 깎인 값임이 확인됐다. 이 3시드의 전이
-  성능이 헤드라인 비교를 확정한다(§6.2; 근거: docs/HARDWARE_CONFOUND.md).
-  또한 같은 장비의 경량 전이는 조건에 따라 48.9%(정숙)와 67.8%(경합) 사이에서 움직여
-  **동일 장비 대조로도 우열이 조건에 종속된다**. 따라서 "경량이 네이티브에 미치지 못한다"는
-  **점추정 방향의 잠정 판정**이며, 확정하려면 동일 장비 다시드 네이티브 기준선이 필요하다
-  (bench/run_native_desktop.sh 로 진행 중).
+  **장비 교락은 해소했다.** 헤드라인 비교는 동일 데스크톱(RTX 5080)·동일 정숙 조건에서
+  각 5시드로 수행했다 — 경량 49.3%±16.1% 대 네이티브 62.0%±14.5%, 격차 −12.7%p(p=0.227).
+  초판에서는 이 비교가 장비 교차였고(경량=데스크톱, 기준선=노트북 68%±9%), 같은 데스크톱의
+  단일 시드 네이티브가 53.3% 라 격차가 4.0%p 까지 좁혀지는 듯 보였다. 그러나 그 실행은
+  GPU 경합 구간이어서 같은 1시간에 2.17M steps(602 SPS)밖에 모으지 못했고 — 정숙 조건
+  재측정은 3.95M steps(1,096 SPS, 표본 +81%) — 성능도 53.3% → 62.0% 로 회복했다. 즉
+  **경합은 네이티브 쪽을 더 크게 깎고 있었고, 그 상태의 "격차 4.0%p"는 경량에 유리한
+  과소추정이었다**(docs/HARDWARE_CONFOUND.md).
+
+  **남는 한계는 두 가지다.** (i) 같은 장비의 경량 전이도 조건에 따라 49.3%(정숙)와
+  67.8%(GPU 경합)를 오간다 — "정숙 조건만이 동일 벽시계 프로토콜에 부합한다"는 것이 정숙
+  런을 확정치로 택한 근거이나, 이 선택이 결론 방향을 좌우한다는 점은 남는다. (ii) n=5 에서도
+  1시간 격차는 유의하지 않고(p=0.227) 어느 단일 체크포인트의 격차도 다중비교 보정을
+  통과하지 못한다(§6.2). 따라서 "경량이 네이티브에 미치지 못한다"는 **점추정 방향의 판정**
+  이며, 재현되는 것은 수치가 아니라 예산에 따른 **부호 전환 구조**다.
 - **좌표 규약 오류는 한 번이 아니었다 (2026-08-29 집계)**: 본 연구가 이 결함 유형을 핵심
   기여로 내세우는 근거는 사례 하나가 아니라 **같은 프로젝트에서 독립적으로 여섯 번** 나왔다는
   사실이다.
@@ -1187,12 +1200,12 @@ MetaDrive 전이를 절반 가까이 떨어뜨렸다. 이유는 §4 의 정합 �
 
 **연구 질문의 회수.** (RQ-전반) 같은 GPU-시간에서 경량 대량 샘플이 고충실도 소량 샘플을
 이기는가 — **예산에 달렸다**. 동일 장비·동일 정숙 조건, 각 5시드 대조에서 경량 시뮬은
-5분 예산에서 54.7% 로 네이티브 36.7% 를 **18.0%p 앞서며 이 우위는 유의하다**(Welch p=0.039,
-25개 시드쌍 중 22쌍). 15분에 교차하고, 1시간 예산에서는 49.3%±16.1% 로 네이티브
-62.0%±14.5% 에 12.7%p 뒤진다 — 다만 이 후반부 격차는 유의하지 않다(p=0.227, 95% 구간
-[−35.0, +9.7]%p). 즉 **처리량 35.9배는 초기 학습 속도로는 환산되지만 최종 성능의 천장으로는
-환산되지 않는다.** 시드를 3에서 5로 늘려도 이 구조는 유지됐고, 오히려 초반 우위가 비유의
-(p=0.138)에서 유의(p=0.039)로 바뀌었다.
+5분 예산에서 54.7% 로 네이티브 36.7% 를 **18.0%p 앞선다**(25개 시드쌍 중 22쌍).
+15분에 교차하고, 1시간 예산에서는 49.3%±16.1% 로 네이티브 62.0%±14.5% 에 12.7%p 뒤진다.
+즉 **처리량 35.9배는 초기 학습 속도로는 환산되지만 최종 성능의 천장으로는 환산되지 않는다.**
+다만 **어느 단일 시점의 격차도 다중비교 보정 후에는 유의하지 않다**(1시간 p=0.227; 5분은
+미보정 0.039 이나 12개 시점 중 최소 p 로 Bonferroni 0.47·순열 max-T 0.26). 재현되는 것은
+개별 시점의 유의성이 아니라 **부호 패턴**이다 — 5·10분 양, 15분 이후 음, 전환 1회.
 그러나 이 결론의 **크기는
 정합 품질에 극도로 민감하다**: 단일 부호 규약 오류가 같은 조건을 0%(이탈 88~97%)로 보이게 했고,
 그 위에서 우리는 붕괴·착취·처방 기각이라는 일관된 서사를 구축했다(§4.7). (RQ-후반) 무엇이 같아야 하는가 — 계층 정합(§4),
@@ -1211,14 +1224,14 @@ docs/CARLA_CLOSED_LOOP.md — 확정 정숙 조건 136M 정책의 재현은 향�
 단, 오류가 만든 것은 결론의 **방향**이 아니라 **크기**였다 — 경량이 네이티브에 못 미친다는
 판정 자체는 정정 후에도 유지된다. 규약 오류는 격차를 19.1%p 에서 68%p 로 약 3.6배 부풀렸을 뿐
 부호를 뒤집지는 않았고, 이 구분이 정정 보고의 핵심이다.
-(다만 실패 구성의 시간 추세는 정정 후에도 경계 밀착 가설과 방향이 같다 — §6.2 의
-미검증 관찰.)
+(실패 구성의 시간 추세 역시 n=5 에서는 성립하지 않아, 경계 밀착 가설의
+마지막 간접 증거도 남지 않는다 — §6.2.)
 **시뮬레이터 간 전이 실패를 알고리즘적 병리로 해석하기 전에, 규약 수준의 일치를 기하학적으로
 증명하라.** 이것이 본 논문이 가장 비싸게 배운 교훈이다.
 
-**향후 연구.** (1) 정정판 5시드 확장과 §5 재측정, (2) 도메인 랜덤화(좁은 로드웨이·타이어
+**향후 연구.** (1) §5 검증 (b) 마스킹 대조의 시드 보강(현재 V=2·n=2), (2) 도메인 랜덤화(좁은 로드웨이·타이어
 슬립)로 CARLA 속도 거버너 없이 주행, (3) 카메라 전용 인지로의 전환(8채널 리그 구축 완료),
-(4) DPC 의 **독립 재현** — 확정 정숙 조건 재산출에서 신뢰 창 구조가 재현됐으나(전반 τ=+0.457, 순열 p=0.029; 후반 +0.053) n=3 이고 경량 신호의 동적 범위가 평균의 1% 수준이라, 다른 시뮬레이터 쌍·다른 과제에서 곡선 형식의 유효성을 확인해야 한다. (5) bottleneck 등 과제 일반화, (5-c) **통행 방향 정정판 재학습** — 합성 학습 장면이 좌측통행이었음이 확인됐으므로(§6.4) 정정된 생성기로 4-arm 을 재실행해야 잔여 갭에서 이 요인을 분리할 수 있다, (5-b) **엔트로피 하한 처방의 시험** — §6.3 에서 확인한 탐색 붕괴가 전이 하강의 기제라면 entropy bonus 스케줄이나 로그표준편차 하한이 직접 처방이 되나 본 연구에서 시험하지 않았다, (6) **확정 정숙 조건 136M 체크포인트의 CARLA 폐루프 재현** — 현행 CARLA 결과는 전부 20M 경합 조건 체크포인트로 얻었다. 1라운드 예비에서 20M 95% 대 136M 60%(각 n=20, 시드 1, 격차는 전부 회전 구간)로 갈렸으나 시드 품질이 교락돼 있어 시드 정합 스윕이 필요하다(carla_seed_sweep.sh), (7) **동일 장비 다시드 네이티브 기준선** — 헤드라인 비교의 장비 교차 문제를 해소한다(bench/run_native_desktop.sh).
+(4) DPC 의 **독립 재현** — 확정 정숙 5시드 재산출에서 신뢰 창 구조는 성립하지 않았고(전반 τ=+0.190 p=0.422, 후반 +0.039 p=0.804, 전 구간 +0.097 p=0.513), 경량 신호의 동적 범위가 평균의 1% 수준이라, DPC 는 실증이 아니라 형식·절차의 제안이다. 다른 시뮬레이터 쌍·다른 과제에서 곡선 형식의 유효성을 처음부터 확인해야 한다. (5) bottleneck 등 과제 일반화, (5-c) **통행 방향 정정판 재학습** — 합성 학습 장면이 좌측통행이었음이 확인됐으므로(§6.4) 정정된 생성기로 4-arm 을 재실행해야 잔여 갭에서 이 요인을 분리할 수 있다, (5-b) **엔트로피 하한 처방의 시험** — §6.3 의 탐색 붕괴가 소스 수익의 미세 하강 및 전이 성능의 정체(첫 체크포인트 이후 개선 없음)와 관련이 있다면 entropy bonus 스케줄이나 로그표준편차 하한이 직접 처방이 되나 본 연구에서 시험하지 않았다, (6) **확정 정숙 조건 136M 체크포인트의 CARLA 폐루프 재현** — 현행 CARLA 결과는 전부 20M 경합 조건 체크포인트로 얻었다. 1라운드 예비에서 20M 95% 대 136M 60%(각 n=20, 시드 1, 격차는 전부 회전 구간)로 갈렸으나 시드 품질이 교락돼 있어 시드 정합 스윕이 필요하다(carla_seed_sweep.sh).
 
 ## 참고문헌
 
@@ -1341,22 +1354,29 @@ termination semantics, geometry), and measured on the environment alone (no lear
 the calibrated environment steps 138x faster than MetaDrive -- 144x for the full build with
 16 surrounding-vehicle observation slots -- while the
 headline run realized 35.9x end-to-end including training, measured against a quiet-condition
-native baseline on the same desktop (3 seeds, 3.95M steps). Zero-shot transfer from the
-lightweight simulator reaches 48.9%+/-20.4%
-success at the one-hour budget. The answer to the headline question turns out to depend on
-the budget. On matched hardware under matched quiet conditions, the lightweight simulator is
-17.8pp AHEAD at the five-minute checkpoint (58.9% vs 41.1%; the sign agrees across all three
-seed pairs), and the native baseline needs fifteen minutes to reach that level -- so a 34.7x
-realized throughput advantage buys roughly a 3x wall-clock speedup early on. The curves then
-cross, and at one hour the lightweight simulator is 14.5pp BEHIND (48.9%+/-20.4% vs
-63.3%+/-15.3%). The price of abstraction is therefore not early learning speed but the final
-performance ceiling. Two caveats are stated up front. With n=3 seeds neither gap is
-statistically significant (one hour: Welch t = -0.98, df = 3.7, p = 0.385, with a 95%
-confidence interval on the difference of [-56.6, +27.6]pp; five minutes: p = 0.138), so both
-are point-estimate directions pending more seeds. And an earlier version of this comparison
-was cross-machine -- the 68%+/-9% baseline was measured on a laptop (RTX 4060) while the
-48.9% came from a desktop (RTX 5080); the matched-hardware baseline reported here replaces
-it (Section 7).
+native baseline on the same desktop (5 seeds, 3.95M steps). Zero-shot transfer from the
+lightweight simulator reaches 49.3%+/-16.1% success at the one-hour budget.
+
+The answer to the headline question turns out to depend on the budget. On matched hardware
+under matched quiet conditions with 5 seeds per arm, the lightweight simulator is 18.0pp
+AHEAD at the five-minute checkpoint (54.7% vs 36.7%; it wins 22 of 25 seed pairs), and the
+native baseline needs fifteen minutes to reach the lightweight peak -- so a 35.9x realized
+throughput advantage buys roughly a 1.5x wall-clock speedup early on. The curves cross at
+fifteen minutes, and at one hour the lightweight simulator is 12.7pp BEHIND (49.3%+/-16.1%
+vs 62.0%+/-14.5%). Notably the crossing is driven by the native curve rising, not by the
+lightweight curve falling: the lightweight curve is flat from its first checkpoint (spread
+7.3pp, per-seed Kendall tau disagreeing in sign). The price of abstraction is therefore not
+early learning speed but the final performance ceiling.
+
+Three caveats are stated up front. (i) The one-hour gap is not statistically significant
+(Welch t = -1.31, df = 7.9, p = 0.227, 95% CI on the difference [-35.0, +9.7]pp). (ii) The
+five-minute advantage has an uncorrected p of 0.039, but it is the smallest p among twelve
+checkpoints and does not survive multiple-comparison correction (Bonferroni p = 0.47;
+permutation max-T adjusted p = 0.26) -- what the twelve checkpoints do show consistently is
+the sign pattern: positive at 5 and 10 minutes, negative from 15 minutes onward. (iii) An
+earlier version of this comparison was cross-machine -- the 68%+/-9% baseline was measured
+on a laptop (RTX 4060) while the then-current desktop figure was 48.9% (n=3, RTX 5080); the
+matched-hardware baseline reported here replaces it (Section 7).
 
 The path to that result is the paper's substantive contribution. Calibration required
 seven rounds of failure-diagnosis-repair, and the final round uncovered a single
@@ -1368,8 +1388,10 @@ three remedies -- all of which dissolved once the sign was corrected. Because th
 transform preserves per-dimension means, variances and support sets, and reduces to the
 identity on straight segments, standard distributional checks cannot detect it. Correcting
 the sign did not restore parity; it re-scaled the failure. The original conclusion's
-direction was right, but its magnitude was overstated by roughly 3.6x in gap terms -- a
-19.1pp shortfall had been rendered as a 68pp collapse. We ship the field-level geometric
+direction was right, but its magnitude was inflated: the sign-error build rendered a modest
+shortfall as a total collapse. Against the same laptop baseline the corrected shortfall is
+18.7pp where 68pp was reported, an overstatement of roughly 3.6x in gap terms; on matched
+hardware the shortfall is 12.7pp. We ship the field-level geometric
 round-trip audit as a script (tools/align_audit.py); on the corrected kernel it matches
 MetaDrive's convention to a mean absolute residual of 0.00000.
 
