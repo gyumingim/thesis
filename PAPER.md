@@ -1188,17 +1188,20 @@ the calibrated environment steps 138x faster than MetaDrive -- 144x for the full
 headline run realized 34.7x end-to-end including training, measured against a quiet-condition
 native baseline on the same desktop (3 seeds, 3.95M steps). Zero-shot transfer from the
 lightweight simulator reaches 48.9%+/-20.4%
-success against 68%+/-9% for native training -- a point-estimate shortfall, not a tie, and
-not the total collapse we first reported: the throughput advantage does not convert losslessly into
-transfer performance. The transfer curve peaks at the first checkpoint (5 min, 58.9%),
-bottoms out at 40 min (40.0%), and partially recovers to 48.9%. Two caveats are stated up
-front. With n=3 seeds and sigma = 20.4 percentage points, the gap is not statistically
-significant (Welch t = -1.54, df = 2.4, p = 0.24). And the two numbers come from different machines -- the 48.9%
-from a desktop (RTX 5080), the 68% baseline from a laptop (RTX 4060); a single-seed native
-run on the desktop under the same protocol scored 53.3%, which would narrow the gap to 4.4pp
--- but that run collected only 2.17M steps against the laptop baseline's ~4.9M and appears to
-have been GPU-contended (a quiet re-measurement on the same desktop runs 76% faster), so it
-does not isolate a hardware effect and 4.4pp is likely an underestimate (Section 7).
+success at the one-hour budget. The answer to the headline question turns out to depend on
+the budget. On matched hardware under matched quiet conditions, the lightweight simulator is
+17.8pp AHEAD at the five-minute checkpoint (58.9% vs 41.1%; the sign agrees across all three
+seed pairs), and the native baseline needs fifteen minutes to reach that level -- so a 34.7x
+realized throughput advantage buys roughly a 3x wall-clock speedup early on. The curves then
+cross, and at one hour the lightweight simulator is 14.5pp BEHIND (48.9%+/-20.4% vs
+63.3%+/-15.3%). The price of abstraction is therefore not early learning speed but the final
+performance ceiling. Two caveats are stated up front. With n=3 seeds neither gap is
+statistically significant (one hour: Welch t = -0.98, df = 3.7, p = 0.385, with a 95%
+confidence interval on the difference of [-56.6, +27.6]pp; five minutes: p = 0.138), so both
+are point-estimate directions pending more seeds. And an earlier version of this comparison
+was cross-machine -- the 68%+/-9% baseline was measured on a laptop (RTX 4060) while the
+48.9% came from a desktop (RTX 5080); the matched-hardware baseline reported here replaces
+it (Section 7).
 
 The path to that result is the paper's substantive contribution. Calibration required
 seven rounds of failure-diagnosis-repair, and the final round uncovered a single
