@@ -55,7 +55,10 @@ SIDEWALK_Z_CM = 15.0              # 인도 보행면 높이 (연석 턱). 도로
 #   나머지 요소는 전부 0~120 m 를 가정했다 — 원단 10 m 가 비고 원점 뒤 10 m 가 낭비됐다.
 #   타일을 +seg/2 옮겨 0~120 m 로 맞춘다.
 ROAD_HALF_W_CM = 1050
-CORRIDOR_CM = 1300                # 건물 금지 회랑 반폭
+SIDEWALK_HALF_W_CM = 150.0
+CORRIDOR_CM = ROAD_HALF_W_CM + 2 * SIDEWALK_HALF_W_CM + 50   # 1400 — 건물 금지 회랑 반폭
+# ★ 2026-08-29: 1300 은 인도 바깥 끝(1350)보다 좁아 후퇴거리 지터가 50 cm 미만이면
+#   건물이 인도를 파고들었다(재모사 6.05%, 깊이 최대 0.50 m).
 ROAD_MESH = "/Game/Road/Kit_City_Road/SM_ROAD_19_20_0_0_road"
 CROSSWALK_MESH = "/Game/Road/Kit_City_Road/SM_ROAD_19_3_0_19_crosswalk"   # 20x4m
 DECAL_DIR = "/Game/Road/Kit_MeshDecals_A"
@@ -83,7 +86,7 @@ LANE_LINES_CM = (-875.0, -525.0, -175.0, -20.0, 20.0, 175.0, 525.0, 875.0)
 #   (실제의 2배). 차량 y 도 U(-7.5, 7.5) 연속이라 차로 개념이 없었고, 주행차의 24.1%
 #   가 도색선을 밟고 있었다. 중앙 이중선(±20 cm)이 없으면 가운데 두 차로가 한 덩어리로
 #   읽혀 6차로로 보이지 않는다.
-FLANK_YAW_JITTER = 5.0            # 측면 건물 요각 지터(도). ±10 에서 축소.
+FLANK_YAW_JITTER = 1.5            # 측면 건물 요각 지터(도). ±10 → ±5 → ±1.5.
 # 요각 보정만으로도 침범은 0 이 되지만, 지터가 클수록 건물이 회랑 밖으로 더 밀려나
 # 가로 협곡이 벌어진다(±10° 는 B동 기준 6.9 m 추가). 실제 가로의 전면이 거의 평행한
 # 점을 감안해 5° 로 둔다.
@@ -109,11 +112,11 @@ PROP_POOL = [   # (경로, 인도 배치 확률) — v5: 생활감 증량 (판�
 # "안개는 짙은데 그림자는 쨍한" 물리적으로 불가능한 조합이 나온다(구판의 실제 결함).
 WEATHER = [
     dict(w=0.34, name="흐림",       overcast=True,  sun_int=(1.5, 3.2),  fog=(0.0030, 0.0055),
-         pitch=(-62, -28), temp=(5400, 6600), lamps=True),
+         pitch=(-62, -28), temp=(6300, 7100), lamps=True),
     dict(w=0.22, name="짙은 흐림",  overcast=True,  sun_int=(0.9, 1.8),  fog=(0.0055, 0.0090),
-         pitch=(-70, -40), temp=(6000, 7200), lamps=True),
+         pitch=(-70, -40), temp=(6600, 7400), lamps=True),
     dict(w=0.18, name="비 온 뒤",   overcast=True,  sun_int=(2.4, 4.4),  fog=(0.0020, 0.0040),
-         pitch=(-55, -22), temp=(5000, 6200), lamps=0.5),
+         pitch=(-55, -22), temp=(6200, 7000), lamps=0.5),
     dict(w=0.14, name="옅은 해",    overcast=False, sun_int=(5.0, 8.0),  fog=(0.0015, 0.0030),
          pitch=(-50, -20), temp=(4800, 5800), lamps=0.2),
     dict(w=0.08, name="맑음",       overcast=False, sun_int=(8.0, 12.0), fog=(0.0008, 0.0018),
@@ -270,9 +273,16 @@ def occupancy_half_l_cm(path, yaw):
     return (hl * abs(math.cos(t)) + hw * abs(math.sin(t))) * 100
 
 
-def place_flank(path, x, side, yaw):
-    """도로 양옆 배치 — 회랑(|y| < CORRIDOR_CM) 밖을 요각까지 반영해 보장한다."""
-    y = side * (CORRIDOR_CM + occupancy_half_w_cm(path, yaw) + random.uniform(0, 600))
+def place_flank(path, x, side, yaw, setback):
+    """도로 양옆 배치 — 회랑 밖 보장 + **장면 공통 후퇴거리**로 전면선 정렬.
+
+    이전 판은 건물마다 uniform(0, 600) 을 독립으로 굴려 벽면 거리가 13.0~19.0 m 로
+    흩어졌다(중앙 16.0, sd 1.74). 실제 가로는 전면선이 정렬돼 있으므로 후퇴거리를
+    장면 단위로 공유하고 개별 지터는 ±60 cm 만 준다. 산포의 절반은 요각이 만드는
+    파사드 비평행 성분이었으므로 FLANK_YAW_JITTER 축소와 함께 적용해야 효과가 난다.
+    """
+    y = side * (CORRIDOR_CM + occupancy_half_w_cm(path, yaw)
+                + setback + random.uniform(-60, 60))
     return spawn_bldg(path, x, y, yaw)
 
 
@@ -344,6 +354,33 @@ def visibility(labels, step=8):
 
 
 NEAR = 0.3
+
+
+def cam_basis(roll, pitch, yaw):
+    """UE Rotator(roll, pitch, yaw) 의 회전행렬. **pitch 양수 = 기수 상향**이라
+    Ry 의 부호가 오른손 표준과 반대다(검증: pitch+2 의 전방벡터 z=+0.035).
+
+    반환값 R 에 대해 카메라 좌표는 p_cam = Rᵀ (p_world − cam_pos) 다.
+    yaw 만 줄 때 이전 판의 2D 회전과 정확히 일치함을 확인했다(부동소수 한계).
+    """
+    cr, sr = math.cos(math.radians(roll)), math.sin(math.radians(roll))
+    cp, sp = math.cos(math.radians(pitch)), math.sin(math.radians(pitch))
+    cy, sy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    rz = ((cy, -sy, 0.0), (sy, cy, 0.0), (0.0, 0.0, 1.0))
+    ry = ((cp, 0.0, -sp), (0.0, 1.0, 0.0), (sp, 0.0, cp))
+    rx = ((1.0, 0.0, 0.0), (0.0, cr, -sr), (0.0, sr, cr))
+
+    def mm(a, b):
+        return tuple(tuple(sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3))
+                     for i in range(3))
+    return mm(mm(rz, ry), rx)
+
+
+def to_cam(px, py, pz, cam, rot):
+    """세계 좌표(m) → 카메라 좌표(전방 x, 우 y, 상 z)."""
+    r = cam_basis(*rot)
+    d = (px - cam[0], py - cam[1], pz - cam[2])
+    return tuple(sum(r[k][i] * d[k] for k in range(3)) for i in range(3))
 
 
 def bbox2d(lb):
@@ -485,6 +522,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     #   87.7% 가 서로 관통했고(깊이 중앙 16.9 m, 장면당 3.4쌍) 소실점 타워는 100% 장면에서
     #   겹쳤다. 원인은 구조적이다 — x 중심간격 평균 45 m 인데 반장 합이 평균 59 m 다.
     #   구간 예약(측면)과 AABB 예약(타워)으로 막고, x 스텝을 반장 합 이상으로 넓힌다.
+    setback = random.uniform(150.0, 450.0)     # 장면 공통 후퇴거리 (전면선 정렬)
     occ_side = {-1: [], 1: []}
 
     def reserve_side(side, cx, hl):
@@ -530,7 +568,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                 bx = x + random.uniform(-500, 500)
                 if not reserve_side(side, bx, occupancy_half_l_cm(bpath, byaw)):
                     continue
-                if place_flank(bpath, bx, side, byaw):
+                if place_flank(bpath, bx, side, byaw, setback):
                     n_bldg += 1
         # 스텝은 밀도용, 예약은 관통 방지용 — 역할을 나눈다. 6200~7000 은 장면당 약
         # 4.5동으로 "공허함" 감점을 피하면서 예약 실패율을 낮게 유지하는 값이다.
@@ -549,11 +587,16 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     def ov(name, val):
         st.set_editor_property("override_" + name, True)
         st.set_editor_property(name, val)
-    ov("film_grain_intensity", random.uniform(0.15, 0.35))
+    # 그레인·블룸이 조도와 완전 무상관이었다(corr = -0.003). sun_int 동적범위가 13.3배인데
+    # 그레인은 항상 U(0.15,0.35) — 어두운 장면일수록 노이즈가 늘어야 카메라답다.
+    dim = max(0.0, min(1.0, (12.0 - sun_int) / 11.1))         # 0=맑음 1=어두움
+    ov("film_grain_intensity", 0.10 + 0.28 * dim + random.uniform(-0.03, 0.03))
     ov("scene_fringe_intensity", random.uniform(0.15, 0.4))   # 색수차 — 1.2 는 엣지 글리치(실측)
     ov("vignette_intensity", random.uniform(0.3, 0.5))
-    ov("bloom_intensity", random.uniform(0.12, 0.28))        # 0.4~0.7 은 소실점 백화(3심 재지적)
-    ov("auto_exposure_bias", random.uniform(-1.1, -0.5))     # 하이라이트 보존 (백화 억제)
+    ov("bloom_intensity", 0.24 - 0.12 * dim + random.uniform(-0.03, 0.03))   # 0.4~0.7 은 소실점 백화
+    # 100% 음수(U(-1.1,-0.5))라 화면이 평균 42% 어둡게 고정돼 있었다. 백화 억제라는
+    # 원래 의도는 유지하되 평균을 -0.25 로 올리고 양쪽으로 연다.
+    ov("auto_exposure_bias", random.gauss(-0.25, 0.30))
     ppv.set_editor_property("settings", st)
 
     sun_pitch = random.uniform(*preset["pitch"])
@@ -567,13 +610,26 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     # 시안 단색조 타파 — 물리 색온도 사용 (3심: 청백 일변도 재지적)
     sun.light_component.set_editor_property("use_temperature", True)
     sun.light_component.set_editor_property("temperature", random.uniform(*preset["temp"]))
+    if overcast:
+        # overcast 플래그가 정의만 되고 소비처가 0곳이었다(장면의 73.8%가 흐림 계열인데도).
+        # 태양 원반각을 키워 그림자 가장자리를 풀어 준다. UI 상한이 5° 근방이므로 3~6 만.
+        sun.light_component.set_editor_property("light_source_angle", random.uniform(3.0, 6.0))
+        sun.light_component.set_editor_property("contact_shadow_length", 0.02)
     act.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 1000), unreal.Rotator(0, 0, 0))
     act.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
 
     cam_z = random.uniform(130.0, 185.0)          # 승용차~SUV 시점
     cam_yaw = random.uniform(-6.0, 6.0)
-    cam = act.spawn_actor_from_class(unreal.CameraActor, unreal.Vector(0, 0, cam_z),
-                                     unreal.Rotator(0, 0, cam_yaw))
+    # ★ 2026-08-29: 이전 판은 pitch=roll=0, x=y=0 고정이라 (a) 자차가 21 m 도로의 정중앙
+    #   (중앙선 위)에 걸쳐 있었고 (b) **지평선이 v=360.0 px 에 프레임 간 표준편차 0.0** 으로
+    #   못박혀 있었다. 단일 스칼라의 분산이 0 이면 데이터셋 수준에서 즉시 합성 판별이 된다.
+    cam_y = random.choice((-5.25, -1.75, 1.75, 5.25)) + random.gauss(0.0, 0.15)
+    cam_pitch = random.gauss(-1.0, 1.2)
+    cam_roll = random.gauss(0.0, 0.4)
+    cam_rot = (cam_roll, cam_pitch, cam_yaw)
+    cam = act.spawn_actor_from_class(unreal.CameraActor,
+                                     unreal.Vector(0, cam_y * 100.0, cam_z),
+                                     unreal.Rotator(cam_roll, cam_pitch, cam_yaw))
     cam.set_editor_property("auto_activate_for_player", unreal.AutoReceiveInput.PLAYER0)
 
     # 차로 경계: 도로 키트의 도색 buffer 스트립 (플레인+기본머티리얼은 저대비로 비가시 실측)
@@ -692,13 +748,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         a.static_mesh_component.set_default_custom_primitive_data_float(1, pack_rf(rf))
         wo, _ = a.get_actor_bounds(False)
         placed.append(cand)
-        # 라벨은 카메라 좌표계 (지터 반영: 평행이동 + -cam_yaw 회전)
-        cyr = math.radians(cam_yaw)
-        dx_, dy_ = wo.x / 100, wo.y / 100
-        rel_x = dx_ * math.cos(cyr) + dy_ * math.sin(cyr)
-        rel_y = -dx_ * math.sin(cyr) + dy_ * math.cos(cyr)
+        # 라벨은 카메라 좌표계. yaw 만이던 2D 회전을 roll·pitch 까지 반영한 3D 변환으로
+        # 바꿨다(yaw 만 줄 때 이전 판과 부동소수 한계까지 일치). relative_yaw_deg 는
+        # 여전히 yaw 성분만 쓴다 — pitch·roll 이 ±3° 이내라 박스 자체의 방위 오차가
+        # 30 m 거리에서 3 px 미만이기 때문이다.
+        rel_x, rel_y, rel_z = to_cam(wo.x / 100.0, wo.y / 100.0, wo.z / 100.0,
+                                     (0.0, cam_y, cam_z / 100.0), cam_rot)
         lb = dict(mesh=m.get_name(), paint_rf=round(rf, 3),
-                  relative_position_m=dict(x=rel_x, y=rel_y, z=(wo.z - cam_z) / 100),
+                  relative_position_m=dict(x=rel_x, y=rel_y, z=rel_z),
                   relative_yaw_deg=((yaw - cam_yaw + 180) % 360) - 180,
                   size_m=dict(l=2 * e.x / 100, w=2 * e.y / 100, h=2 * e.z / 100))
         bb, trunc, nclip = bbox2d(lb)
@@ -724,7 +781,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         # (path)을 덮어써서 출하된 464/464 JSON 이 마지막 건물 에셋 경로를 기록했다.
         assert level_path.startswith(LEVEL_DIR)
         json.dump(dict(scene=i, level=level_path,
-                       camera=dict(fov_deg=FOV, z_m=round(cam_z / 100, 3), yaw_deg=round(cam_yaw, 2), width=W, height=H),
+                       camera=dict(fov_deg=FOV, z_m=round(cam_z / 100, 3),
+                                   y_m=round(cam_y, 3), yaw_deg=round(cam_yaw, 2),
+                                   pitch_deg=round(cam_pitch, 2), roll_deg=round(cam_roll, 2),
+                                   width=W, height=H),
                        sun=dict(pitch=round(sun_pitch, 1), yaw=round(sun_yaw, 1)),
                        weather=dict(preset=preset["name"], sun_intensity=round(sun_int, 2),
                                     fog_density=round(fog_d, 5), lamps=bool(lamps_on)),
