@@ -84,12 +84,6 @@ def main():
     nou = [tot[0] - m["유턴"][0], tot[1] - m["유턴"][1]]
     checks += [("표4 전체", "87.8", pct(tot)), ("표4 유턴제외", "94.9", pct(nou))]
 
-    bad = 0
-    for name, expected, actual in checks:
-        ok = expected == actual
-        bad += not ok
-        print("  %-24s 논문 %-6s 원자료 %-6s %s" % (name, expected, actual, "OK" if ok else "불일치"))
-
     # 시드 스윕 — 두 시험장의 순위 상관 (§6.6). 라운드가 결정론 반복이므로 r1 만 쓴다.
     try:
         from scipy import stats as _st
@@ -129,6 +123,12 @@ def main():
             checks.append(("스윕 라운드 = 결정론 반복", "예", "예" if det else "아니오"))
     except Exception:
         pass
+
+    bad = 0
+    for name, expected, actual in checks:
+        ok = expected == actual
+        bad += not ok
+        print("  %-24s 논문 %-6s 원자료 %-6s %s" % (name, expected, actual, "OK" if ok else "불일치"))
 
     # 방향 정보 부재 확인 — 구판 기록은 turn_deg 가 절댓값이라 좌/우를 가를 수 없다
     neg = sum(1 for f in glob.glob(os.path.join(ROOT, "**", "*.json"), recursive=True)
