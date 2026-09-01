@@ -111,17 +111,17 @@ PROP_POOL = [   # (경로, 인도 배치 확률) — v5: 생활감 증량 (판�
 # 색온도, 가로등 점등확률) 를 서로 정합하게 묶는다. 개별 파라미터를 따로 굴리면
 # "안개는 짙은데 그림자는 쨍한" 물리적으로 불가능한 조합이 나온다(구판의 실제 결함).
 WEATHER = [
-    dict(w=0.34, name="흐림",       overcast=True,  sun_int=(1.5, 3.2),  fog=(0.0030, 0.0055),
+    dict(w=0.34, name="흐림", wet=True,       overcast=True,  sun_int=(1.5, 3.2),  fog=(0.0030, 0.0055),
          pitch=(-62, -28), temp=(6300, 7100), lamps=True),
-    dict(w=0.22, name="짙은 흐림",  overcast=True,  sun_int=(0.9, 1.8),  fog=(0.0055, 0.0090),
+    dict(w=0.22, name="짙은 흐림", wet=True,  overcast=True,  sun_int=(0.9, 1.8),  fog=(0.0055, 0.0090),
          pitch=(-70, -40), temp=(6600, 7400), lamps=True),
-    dict(w=0.18, name="비 온 뒤",   overcast=True,  sun_int=(2.4, 4.4),  fog=(0.0020, 0.0040),
+    dict(w=0.18, name="비 온 뒤", wet=True,   overcast=True,  sun_int=(2.4, 4.4),  fog=(0.0020, 0.0040),
          pitch=(-55, -22), temp=(6200, 7000), lamps=0.5),
-    dict(w=0.14, name="옅은 해",    overcast=False, sun_int=(5.0, 8.0),  fog=(0.0015, 0.0030),
+    dict(w=0.14, name="옅은 해", wet=False,    overcast=False, sun_int=(5.0, 8.0),  fog=(0.0015, 0.0030),
          pitch=(-50, -20), temp=(4800, 5800), lamps=0.2),
-    dict(w=0.08, name="맑음",       overcast=False, sun_int=(8.0, 12.0), fog=(0.0008, 0.0018),
+    dict(w=0.08, name="맑음", wet=False,       overcast=False, sun_int=(8.0, 12.0), fog=(0.0008, 0.0018),
          pitch=(-52, -18), temp=(4400, 5400), lamps=0.05),
-    dict(w=0.04, name="이른 아침",  overcast=False, sun_int=(3.0, 5.5),  fog=(0.0045, 0.0080),
+    dict(w=0.04, name="이른 아침", wet=False,  overcast=False, sun_int=(3.0, 5.5),  fog=(0.0045, 0.0080),
          pitch=(-22, -8),  temp=(4200, 5000), lamps=0.6),
 ]
 
@@ -166,6 +166,22 @@ def find_asset(root, must, exclude=()):
         if all(k in a for k in must):
             out.append(a.split(".")[0])
     return sorted(set(out))
+
+
+def probe_assets(root, keys, label, limit=12):
+    """키워드가 들어간 자산 경로를 로그로 남긴다 — UE 밖에서는 자산 목록을 볼 수 없어
+    '무엇을 쓸 수 있는지' 자체가 미지였다. 빌드 1회로 후보를 수확한다."""
+    try:
+        found = []
+        for a in eal.list_assets(root, recursive=True, include_folder=False):
+            n = a.split("/")[-1].split(".")[0].lower()
+            if any(k.lower() in n for k in keys):
+                found.append(a.split(".")[0])
+        log("자산탐색[%s] %d개: %s" % (label, len(found), found[:limit]))
+        return found
+    except Exception as e:
+        log("자산탐색[%s] 실패: %s" % (label, e))
+        return []
 
 
 def open_clean_level(path):
@@ -461,11 +477,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         a.add_actor_world_offset(unreal.Vector(0, 0, 2), False, False)
 
     sb = sw.get_bounds()
+    # 인도를 **두 줄**로 깐다. 한 줄(폭 3 m)이면 연석 턱만 보이고 보도가 사실상 없어
+    # 도로가 건물까지 이어진 것처럼 읽혔다(검증 렌더 10장 공통).
     for k in range(int(ROAD_LEN_CM // 600) + 2):
         for side in (-1, 1):
-            a = top0(spawn_sm(sw, k * 600 - sb.origin.x,
-                              side * (ROAD_HALF_W_CM + 150) - sb.origin.y))
-            a.add_actor_world_offset(unreal.Vector(0, 0, SIDEWALK_Z_CM), False, False)
+            for band in (150, 450):
+                a = top0(spawn_sm(sw, k * 600 - sb.origin.x,
+                                  side * (ROAD_HALF_W_CM + band) - sb.origin.y))
+                a.add_actor_world_offset(unreal.Vector(0, 0, SIDEWALK_Z_CM), False, False)
 
     # 기상·시간 프리셋. 판정 기준은 "예쁜 사진"이 아니라 "평범한 실사"이므로 표본을
     # 일상적 조건에 몰아준다 — 황혼·역광 같은 극적 조건은 사진으로는 좋아 보여도
@@ -477,6 +496,20 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     sun_int = random.uniform(*preset["sun_int"])
     fog_d = random.uniform(*preset["fog"])
     lamps_on = preset["lamps"] if isinstance(preset["lamps"], bool) else random.random() < preset["lamps"]
+
+    # 노면 습윤: 재질 파라미터(Puddle/Roughness)는 LAYER_PARAMETER 연관이라 파이썬에서
+    # 못 건드린다(2026-08-24 실측). 대신 **재질 자체를 갈아끼운다** — 마른 계열 프리셋에는
+    # M_Freeway_Asphalt 를, 젖은 계열에는 기본(M_Asphalt_Master_Inst)을 쓴다.
+    if not preset["wet"]:
+        dry = unreal.load_asset("/Game/Road/Material/M_Freeway_Asphalt")
+        if dry:
+            for a in act.get_all_level_actors():
+                smc = getattr(a, "static_mesh_component", None)
+                if smc and smc.static_mesh == road:
+                    smc.set_material(0, dry)
+        elif i == 0:
+            log("경고: 마른 노면 재질 로드 실패 — 젖은 노면 유지")
+
     # 인도 액터에는 분리 검사가 없어 소품끼리·가로등·가로수와 겹치는 장면이 52.9% 였다.
     # 또 가로등 k*2200, 가로수 k*2200+1100, 인도 6 m, 도로 20 m 주기가 전부 x=0 에
     # 위상 고정이라 **시드를 바꿔도 위상 분산이 정확히 0** 이었다 — 데이터셋 평균에서
@@ -644,7 +677,27 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     cam.set_editor_property("auto_activate_for_player", unreal.AutoReceiveInput.PLAYER0)
 
     # 차로 경계: 도로 키트의 도색 buffer 스트립 (플레인+기본머티리얼은 저대비로 비가시 실측)
-    buf = unreal.load_asset("/Game/Road/Kit_City_Road/SM_ROAD_19_5_0_19_buffer")
+    # ★ 2026-08-29 두 단계 정정.
+    #   (1) 기존 SM_ROAD_19_5_0_19_buffer 는 도로 키트의 **아스팔트 버퍼 스트립**이라
+    #       노면과 같은 색이다 — 48조각이 정상 스폰되는데도 차선이 하나도 안 보였다.
+    #   (2) 그래서 SM_Painted_Parking_Line_01_inst 로 바꿔 봤더니 도색은 보이나 그 메시가
+    #       **주차 구획선**이라 가로줄까지 그려져 주차장 격자가 됐다.
+    #   결론: 형상은 버퍼 스트립(길쭉한 종방향), **재질만 도색 메시에서 빌려 온다.**
+    #   (3) 재질만 버퍼 슬래브(20×6×0.6 m)에 입혀 봤더니 UV 가 늘어나 도색이 사라졌다.
+    #   최종: 도색 메시(평면 5.12×5.12 m, 두께 0)를 **길게·얇게 스케일**해 종방향 줄로 쓴다.
+    #   반extent 실측 — 도색 (256, 256, 0) / 버퍼 (1002, 302, 29).
+    buf = unreal.load_asset("/Game/Road/Kit_MeshDecals_A/Mesh/SM_Painted_Parking_Line_01_inst")
+    #   (4) Y 를 0.06 으로 눌렀더니 텍스처의 도색 폭까지 16배 얇아져 머리카락 선이 됐다.
+    #   텍스처 안 도색선의 위치를 알 수 없으므로, **얇은 줄을 3 cm 간격으로 5줄 겹쳐**
+    #   실제 차선 폭(약 13 cm)을 만든다 — 텍스처 배치에 의존하지 않는 방법이다.
+    #   (5) 3 cm 간격 5줄은 빗살로 갈라져 보였다 — 조각 안 도색폭이 평면 폭의 약 5%
+    #   (0.31 m 평면에 1.5 cm 도색)이기 때문이다. 역산하면 원본 텍스처의 도색은 약 0.26 m
+    #   이므로 Y 를 거의 누르지 않아야 실제 차선 폭이 나온다. 1 cm 간격 9줄로 겹쳐 8 cm
+    #   연속 띠를 만든다.
+    LINE_SX, LINE_SY = 4.0, 0.06
+    LINE_OFFS = tuple(float(v) for v in range(-4, 5))    # cm, 1 cm 간격 9줄
+    paint_mat = None
+
     n_line = 0
     if buf is None:
         log("경고: 차선 도색 메시 로드 실패 — 차선이 그려지지 않는다")
@@ -653,11 +706,11 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         for ly in LANE_LINES_CM:
             lx = 0.0
             while lx < ROAD_LEN_CM:
-                a = spawn_sm(buf, lx - bb2.origin.x, ly - bb2.origin.y, 0, 0)
-                wo, we = a.get_actor_bounds(False)
-                a.add_actor_world_offset(unreal.Vector(0, 0, 1.5 - (wo.z + we.z)), False, False)
-                n_line += 1
-                lx += 2 * bb2.box_extent.x
+                for off in LINE_OFFS:
+                    a = spawn_sm(buf, lx, ly + off, 1.5, 0)
+                    a.set_actor_scale3d(unreal.Vector(LINE_SX, LINE_SY, 1.0))
+                    n_line += 1
+                lx += 2 * bb2.box_extent.x * LINE_SX
     # 방향성 도색(화살표·주차선)과 낙서를 한 리스트에 합쳐 같은 uniform(0,360) 으로
     # 굴리고 있었다 — 도로축 45° 이상 기운 것이 50.2%, 즉 차로 화살표가 사선으로 눕는다.
     # 낙서는 자유 요각이 정상이므로 풀을 나눈다.
@@ -753,6 +806,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                 if _lim <= 0.5:               # 자유요각이 연석을 넘는 조합은 버린다
                     continue
                 y = random.uniform(-_lim, _lim)
+        # 자차 주변 배제 — 카메라가 주차열이나 다른 차량 사이에 끼는 장면이 나왔다
+        # (검증 세트 4행 우). 전방 8 m·측방 2.5 m 안에는 아무것도 두지 않는다.
+        if x < 8.0 and abs(y - cam_y) < 2.5:
+            continue
         _bo = m.get_bounds().origin           # 로컬 바운드 중심(cm) — 피벗과 다르다
         _cy, _sy = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
         cand = (x + (_bo.x * _cy - _bo.y * _sy) / 100.0,
