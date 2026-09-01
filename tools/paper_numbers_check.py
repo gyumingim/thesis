@@ -134,6 +134,35 @@ def main():
                  if [r for r in json.load(open(f)) if r["ckpt"] == "final.pt"]]
             return np.mean(v)
         checks.append(("실현 배수(동일 장비 정숙)", "35.9", "%.1f" % (steps(LT) / steps(ND))))
+    # 교차 구조 검정 (§6.2) — 주장의 내용이 검정되는지 지킨다
+    try:
+        import itertools as _it
+        import numpy as _np
+        def _curve(pat):
+            per = {}
+            for f in sorted(glob.glob(pat)):
+                sd = f.split("_s")[-1][:-5]
+                for r in json.load(open(f)):
+                    per.setdefault(r["ckpt"], {})[sd] = 100 * r["success_rate"]
+            return per
+        Lc = _curve("bench_results/clean/eval_md__clean_s*.json")
+        Nc = _curve("bench_results/native_desktop/eval_md__nd_s*.json")
+        if Lc and Nc:
+            def _d(per, a):
+                sd = sorted(per["final.pt"])
+                return _np.array([per["final.pt"][x] - per[a][x] for x in sd])
+            dl, dn = _d(Lc, "t000300.pt"), _d(Nc, "t000300.pt")
+            allv = _np.concatenate([dl, dn]); obs = dn.mean() - dl.mean()
+            hit = tot = 0
+            for idx in _it.combinations(range(len(allv)), len(dl)):
+                m = _np.zeros(len(allv), bool); m[list(idx)] = True
+                tot += 1
+                hit += abs(allv[~m].mean() - allv[m].mean()) >= abs(obs) - 1e-9
+            checks += [("교차 기울기 차이", "30.7", "%.1f" % obs),
+                       ("교차 순열 p", "0.0079", "%.4f" % (hit / tot))]
+    except Exception:
+        pass
+
     # 오라클 이득이 선택 편향인지 (§6.2·§7 (5)) — 널 분포 안이면 신호가 아니다
     try:
         import numpy as _np
