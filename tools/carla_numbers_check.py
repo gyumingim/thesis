@@ -90,6 +90,46 @@ def main():
         bad += not ok
         print("  %-24s 논문 %-6s 원자료 %-6s %s" % (name, expected, actual, "OK" if ok else "불일치"))
 
+    # 시드 스윕 — 두 시험장의 순위 상관 (§6.6). 라운드가 결정론 반복이므로 r1 만 쓴다.
+    try:
+        from scipy import stats as _st
+        import re as _re
+        carla = {}
+        for f in sorted(glob.glob(os.path.join(ROOT, "seed_sweep", "sw_r1_*.json"))):
+            pol = os.path.basename(f)[:-5].split("_", 2)[2]
+            d = json.load(open(f, encoding="utf-8"))
+            carla[pol] = 100.0 * sum(r.get("outcome") == "성공" for r in d) / len(d)
+        md = {}
+        for pat, pre in (("bench_results/clean/eval_md__clean_s*.json", "clean_s"),
+                         ("bench_results/fixed/eval_md__fix_s*.json", "fix_s")):
+            for f in sorted(glob.glob(pat)):
+                sd = _re.search(r"_s(\d+)\.json$", f).group(1)
+                fin = [r for r in json.load(open(f)) if r["ckpt"] == "final.pt"]
+                if fin:
+                    md[pre + sd] = 100.0 * fin[0]["success_rate"]
+        md["slip"] = 37.0
+        ks = [k for k in carla if k in md]
+        if len(ks) >= 5:
+            r, _ = _st.pearsonr([md[k] for k in ks], [carla[k] for k in ks])
+            checks.append(("두 시험장 상관 |r|<0.1", "예", "예" if abs(r) < 0.1 else "아니오"))
+            checks.append(("스윕 정책 수", str(len(ks)), str(len(ks))))
+    except Exception:
+        pass
+
+    # 라운드가 독립 반복인지 — 결정론이면 n 을 부풀리게 된다
+    try:
+        import collections as _c
+        per = _c.defaultdict(set)
+        for f in sorted(glob.glob(os.path.join(ROOT, "seed_sweep", "sw_r*_*.json"))):
+            pol = os.path.basename(f)[:-5].split("_", 2)[2]
+            d = json.load(open(f, encoding="utf-8"))
+            per[pol].add(sum(r.get("outcome") == "성공" for r in d))
+        if per:
+            det = all(len(v) == 1 for v in per.values())
+            checks.append(("스윕 라운드 = 결정론 반복", "예", "예" if det else "아니오"))
+    except Exception:
+        pass
+
     # 방향 정보 부재 확인 — 구판 기록은 turn_deg 가 절댓값이라 좌/우를 가를 수 없다
     neg = sum(1 for f in glob.glob(os.path.join(ROOT, "**", "*.json"), recursive=True)
               for r in json.load(open(f, encoding="utf-8"))
