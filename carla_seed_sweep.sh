@@ -11,6 +11,8 @@
 # 축: 정책 6종(fix_s1..s3 = 20M, clean_s1..s3 = 136M) + slip.
 # 나머지 고정: 전체 회전, NPC 3, 슬롯 3, --mask-degen, 거버너 0.8g.
 # ★ 순차 실행 — 두 클라이언트가 같은 서버를 tick 하면 결과가 오염된다(실측).
+# ★ 라운드마다 --seed 를 바꾼다. 안 바꾸면 평가가 결정론이라 라운드가 전부
+#   동일해진다(2026-09-01 실측: 6라운드가 바이트 단위로 같았다).
 set -u
 LOG=/c/carla/seed_sweep.log
 RES=/c/carla/seed_sweep
@@ -38,7 +40,7 @@ while [ $round -lt 6 ]; do
     tag="sw_r${round}_${pol}"
     echo "[$(date +%H:%M)] R$round $pol" >> $LOG
     PYTHONUTF8=1 $PY /c/Users/a3162/thesis/carla_drive.py --policy "C:/ue/policy_${pol}.npz" \
-      --episodes 20 --max-steps 500 --turn-kind 전체 --npc 3 --governor 0.8 --mask-degen \
+      --episodes 20 --max-steps 500 --turn-kind 전체 --npc 3 --governor 0.8 --mask-degen \n      --seed $round \
       --out "$RES/$tag.json" > $RES/$tag.log 2>&1
     grep -E "=== 전체" $RES/$tag.log | sed "s/^/  [$tag] /" >> $LOG 2>/dev/null
   done

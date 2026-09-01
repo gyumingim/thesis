@@ -439,7 +439,11 @@ def run(a):
     cs = cam = q = None
 
     for ep in range(a.episodes):
-        wp0, kind, wexit, wenter = anchors[(ep * 7 + 3) % len(anchors)]   # 앵커를 흩어 선택
+        # 앵커를 흩어 선택. seed 를 바꾸면 다른 에피소드 집합이 된다 —
+        # ★ 2026-09-01: seed 인자가 없던 시절 시드 스윕을 6라운드 돌렸더니 **여섯 라운드가
+        #   전부 바이트 단위로 동일**했다(정책별 12/20 이 여섯 번). 평가가 결정론이라
+        #   반복이 반복이 아니었고, n=120 으로 집계하면 신뢰구간이 2.4배 좁아진다.
+        wp0, kind, wexit, wenter = anchors[(ep * 7 + 3 + a.seed * 13) % len(anchors)]
         try:
             route = route_grp(cmap, wp0, dest_wp=wexit)
         except Exception as ex:
@@ -677,6 +681,9 @@ if __name__ == "__main__":
                     help="곡률 기반 속도 제한의 횡가속 한계(g). 0 이면 비활성")
     ap.add_argument("--obs-slots", type=int, default=3,
                     help="주변 장애물 관측 슬롯 수 — 학습 밀도(V=3)와 맞추는 것이 기본")
+    ap.add_argument("--seed", type=int, default=0,
+                    help="에피소드 집합 시드. 값을 바꾸면 다른 앵커 조합이 뽑힌다 "
+                         "— 반복 측정에는 반드시 다른 값을 줄 것(평가가 결정론이다).")
     ap.add_argument("--mask-degen", action="store_true",
                     help="학습 중 퇴화(분산 0) 차원을 학습값으로 고정 — §5 지지집합 처방")
     run(ap.parse_args())
