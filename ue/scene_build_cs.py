@@ -81,11 +81,24 @@ BLDG_HALF_L = {   # 에디터 세션 실측 (v7 로그: A01 e(29,23), B01 e(30,3
 }
 LANE_W_M = 3.5                    # 실제 도시부 차로 폭
 LANE_CTRS = (-8.75, -5.25, -1.75, 1.75, 5.25, 8.75)      # 편도 3차로 × 2
-LANE_LINES_CM = (-875.0, -525.0, -175.0, -20.0, 20.0, 175.0, 525.0, 875.0)
+LANE_LINES_CM = (-1030.0, -700.0, -350.0, -20.0, 20.0, 350.0, 700.0, 1030.0)
 # ★ 2026-08-29: 도로 폭 21 m 에 선이 y=±3.5 m 두 줄뿐이라 **7 m 밴드 3개**로 보였다
 #   (실제의 2배). 차량 y 도 U(-7.5, 7.5) 연속이라 차로 개념이 없었고, 주행차의 24.1%
 #   가 도색선을 밟고 있었다. 중앙 이중선(±20 cm)이 없으면 가운데 두 차로가 한 덩어리로
 #   읽혀 6차로로 보이지 않는다.
+# ★ 2026-09-02 재정정: 그때 넣은 값 (±175, ±525, ±875) 은 **차로 경계가 아니라
+#   차로 중심**이었다 — LANE_CTRS 와 글자 그대로 같은 수다. 그래서 모든 주행차가
+#   자기 차로 한복판의 도색을 타고 달렸다(검증 10장면: 차로 위 차량 71대 전원이
+#   도색선에서 0.2 m 이내). 폭 3.5 m 차로의 경계는 0, ±3.5, ±7.0, ±10.5 이므로
+#   중앙 이중선(±0.2) + 차로 구분선(±3.5, ±7.0) + 가장자리선(±10.3, 연석
+#   0.2 m 안쪽) 이 맞다. 아래 자기검사가 이 관계를 강제한다.
+# 회귀 방지: 도색선은 차로 **경계**여야 한다. 어떤 차로 중심이든 가장 가까운 도색선이
+# 반 차로폭(1.75 m) 근처에 있어야 하며, 0 에 가까우면 차량이 도색을 밟는다는 뜻이다.
+_MIN_CTR_TO_LINE = min(min(abs(c * 100.0 - l) for l in LANE_LINES_CM) for c in LANE_CTRS)
+assert _MIN_CTR_TO_LINE > 100.0, (
+    "차선 도색이 차로 중심에 겹친다(최소 %.0f cm) — LANE_LINES_CM 은 경계값이어야 한다"
+    % _MIN_CTR_TO_LINE)
+
 FLANK_YAW_JITTER = 1.5            # 측면 건물 요각 지터(도). ±10 → ±5 → ±1.5.
 # 요각 보정만으로도 침범은 0 이 되지만, 지터가 클수록 건물이 회랑 밖으로 더 밀려나
 # 가로 협곡이 벌어진다(±10° 는 B동 기준 6.9 m 추가). 실제 가로의 전면이 거의 평행한
@@ -366,6 +379,73 @@ def visibility(labels, step=8):
                 hit[bi] += 1
             u += step
         v += step
+
+    # step 격자에 광선이 한 발도 걸리지 않은 박스는 «완전히 가려짐» 이 아니라
+    # **격자보다 작다**. 둘을 같은 0.0 으로 내보내면 잘 보이는 원경 소형 차량이
+    # 가림 라벨로 오분류된다(검증 10장면: 196 중 4건). 그런 박스만 자기 화면
+    # 영역에서 1 px 로 다시 쏜다 — 대상이 적고 영역이 작아 비용은 무시할 만하다.
+    for i in range(n):
+        if am[i] > 0:
+            continue
+        px, py, pz, ex, ey, ez, c, sn = boxes[i]
+        us, vs = [], []
+        for sx in (-ex, ex):
+            for sy in (-ey, ey):
+                for sz in (-ez, ez):
+                    cx = px + sx * c - sy * sn
+                    cy_ = py + sx * sn + sy * c
+                    cz = pz + sz
+                    if cx <= NEAR:
+                        continue
+                    us.append(CX + FX * cy_ / cx)
+                    vs.append(CY - FY * cz / cx)
+        if not us:
+            continue
+        u0 = max(0.0, min(us) - 1.0)
+        u1 = min(float(W), max(us) + 1.0)
+        v0 = max(0.0, min(vs) - 1.0)
+        v1 = min(float(H), max(vs) + 1.0)
+        vv = v0 + 0.5
+        while vv < v1:
+            dz = -(vv - CY) / FY
+            uu = u0 + 0.5
+            while uu < u1:
+                dy = (uu - CX) / FX
+                best, bi = 1e18, -1
+                for k, (qx, qy, qz, gx, gy, gz, gc, gs) in enumerate(boxes):
+                    lox = -qx * gc - qy * gs
+                    loy = qx * gs - qy * gc
+                    loz = -qz
+                    ldx = gc + dy * gs
+                    ldy = -gs + dy * gc
+                    ldz = dz
+                    tmin, tmax, ok = 0.0, 1e18, True
+                    for lo, ld, e in ((lox, ldx, gx), (loy, ldy, gy), (loz, ldz, gz)):
+                        if abs(ld) < 1e-12:
+                            if lo < -e or lo > e:
+                                ok = False
+                                break
+                            continue
+                        t1 = (-e - lo) / ld
+                        t2 = (e - lo) / ld
+                        if t1 > t2:
+                            t1, t2 = t2, t1
+                        if t1 > tmin:
+                            tmin = t1
+                        if t2 < tmax:
+                            tmax = t2
+                        if tmin > tmax:
+                            ok = False
+                            break
+                    if ok and tmax >= tmin:
+                        if k == i:
+                            am[i] += 1
+                        if tmin < best:
+                            best, bi = tmin, k
+                if bi == i:
+                    hit[i] += 1
+                uu += 1.0
+            vv += 1.0
     return [0.0 if am[i] == 0 else hit[i] / float(am[i]) for i in range(n)]
 
 
@@ -799,7 +879,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                 y = random.choice(LANE_CTRS) + random.gauss(0.0, 0.20)
                 yaw = (180.0 if y < 0 else 0.0) + random.uniform(-8, 8)
             else:
-                yaw = random.uniform(0, 360)   # 회전 중/무단 주차 등 자유
+                # 회전 중/무단 주차 등 자유 요각. 다만 **도로축에 정렬된 자유 요각은
+                # 뽑지 않는다** — 그 조합은 차로 한복판에 도로와 나란히 선 차를 만드는데,
+                # 차로 방향과 반대면 «회전 중» 이 아니라 그냥 역주행으로 읽힌다.
+                # 검증 10장면 실측: 차로 위 차량 71대 중 6대(8.5%)가 이 경로에서 나온
+                # 역주행이었고 전부 중앙선 옆 차로(y=−1.75)에 있었다. 정렬된 배치는
+                # 위 차로 경로가 이미 담당하므로 여기서는 ±25° 이상 기울인 것만 쓴다.
+                yaw = random.choice((0.0, 180.0)) + random.choice((-1.0, 1.0)) *                     random.uniform(25.0, 155.0)
+                yaw %= 360.0
                 _t = math.radians(yaw)
                 _hy = abs(e.x / 100.0 * math.sin(_t)) + abs(e.y / 100.0 * math.cos(_t))
                 _lim = ROAD_HALF_W_CM / 100.0 - _hy - 0.2
