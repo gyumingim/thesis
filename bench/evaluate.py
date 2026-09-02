@@ -74,7 +74,7 @@ def eval_custom(agent, mean, std, episodes, seed, device, n_vehicles=3):
     E = min(64, episodes)
     env = IntersectionEnv(E, n_vehicles, seed=seed)
     counts = np.zeros(5, int)
-    rets, lens = [], []
+    rets, lens, per_ep = [], [], []
     ret = np.zeros(E)
     length = np.zeros(E, int)
     obs = env.obs.copy()
@@ -87,10 +87,12 @@ def eval_custom(agent, mean, std, episodes, seed, device, n_vehicles=3):
                 counts[fl[e]] += 1
                 rets.append(float(ret[e]))
                 lens.append(int(length[e]))
+                per_ep.append(dict(slot=int(e), flag=int(fl[e]), success=int(fl[e] == 3),
+                                   ret=round(float(ret[e]), 3), length=int(length[e])))
             ret[e] = 0
             length[e] = 0
         obs = o.copy()
-    return counts, rets, lens
+    return counts, rets, lens, per_ep
 
 
 def eval_metadrive(agent, mean, std, episodes, seed, device, density=0.1):
@@ -98,7 +100,7 @@ def eval_metadrive(agent, mean, std, episodes, seed, device, density=0.1):
     # 에피소드마다 다른 교통 시나리오 (reset seed = start_seed+ep 가 유효 범위이도록)
     env = MetaDriveGT(seed=seed, density=density, num_scenarios=episodes)
     counts = np.zeros(5, int)
-    rets, lens = [], []
+    rets, lens, per_ep = [], [], []
     for ep in range(episodes):
         obs, _ = env.reset(seed=seed + ep)
         ret, n = 0.0, 0
@@ -110,17 +112,26 @@ def eval_metadrive(agent, mean, std, episodes, seed, device, density=0.1):
             if tm or tr:
                 if info.get("arrive_dest"):
                     counts[3] += 1
+                    flag = 3
                 elif info.get("crash"):
                     counts[1] += 1
+                    flag = 1
                 elif info.get("out_of_road"):
                     counts[2] += 1
+                    flag = 2
                 else:
                     counts[4] += 1
+                    flag = 4
                 break
         rets.append(ret)
         lens.append(n)
+        # 시나리오 인덱스를 남긴다. 모든 체크포인트·시드가 **같은 30 시나리오**를 보므로,
+        # 이것이 없으면 시나리오 난이도가 만드는 급내 상관을 사후에 추정할 수 없다
+        # (오라클 편향 널의 독립 가정이 이 값에 달려 있다 — tools/oracle_bias.py).
+        per_ep.append(dict(scenario=int(seed + ep), flag=flag, success=int(flag == 3),
+                           ret=round(float(ret), 3), length=int(n)))
     env.close()
-    return counts, rets, lens
+    return counts, rets, lens, per_ep
 
 
 def main():
@@ -158,7 +169,7 @@ def main():
             agent, mean, std, meta = load_agent(cp, device)
             fn = eval_custom if a.target == "custom" else eval_metadrive
             kw = dict(n_vehicles=a.n_vehicles) if a.target == "custom" else {}
-            counts, rets, lens = fn(agent, mean, std, a.episodes, a.seed, device, **kw)
+            counts, rets, lens, per_ep = fn(agent, mean, std, a.episodes, a.seed, device, **kw)
         except Exception as e:
             # ckpt 하나의 실패(엔진 재초기화, 잘린 파일)로 나머지 결과까지 잃지 않는다.
             print(f"[skip] {os.path.basename(cp)}: {type(e).__name__}: {e}", flush=True)
@@ -168,7 +179,8 @@ def main():
                    global_step=int(meta["global_step"]), target=a.target, episodes=int(n),
                    success_rate=float(counts[3] / n), crash_rate=float(counts[1] / n),
                    out_of_road_rate=float(counts[2] / n), timeout_rate=float(counts[4] / n),
-                   mean_return=float(np.mean(rets)), mean_length=float(np.mean(lens)))
+                   mean_return=float(np.mean(rets)), mean_length=float(np.mean(lens)),
+                   eval_seed=int(a.seed), per_episode=per_ep)
         rows.append(row)
         flush(rows)   # 증분 저장 — 도중 사망 시에도 완료분은 남는다
         print(f"{os.path.basename(cp):>14} t={meta['elapsed_s']:6.0f}s steps={meta['global_step']:>10,} "

@@ -124,6 +124,101 @@ def main():
     except Exception:
         pass
 
+    # 표 2·3·4 의 반복도 같은 20 앵커의 재측정이다 — 유효 표본이 n 이 아니다
+    try:
+        import collections as _c
+        import statistics as _stt
+        for sub, tag in (("evolve", "표2"), ("evolve5", "표3")):
+            anc = _c.defaultdict(list)
+            for f in sorted(glob.glob(os.path.join(ROOT, sub, "*.json"))):
+                b = os.path.basename(f)[:-5]
+                if "전체" not in b or "npc3" not in b or not b.endswith("_nomask"):
+                    continue
+                if "g0.8" in b:
+                    continue
+                for r in json.load(open(f, encoding="utf-8")):
+                    anc[r.get("ep")].append(r.get("outcome") == "성공")
+            if len(anc) >= 5 and max(len(v) for v in anc.values()) >= 2:
+                m = [sum(v) / len(v) for v in anc.values()]
+                n_ep = sum(len(v) for v in anc.values())
+                pbar = sum(sum(v) for v in anc.values()) / n_ep
+                se_c = _stt.stdev(m) / (len(m) ** 0.5)
+                se_n = (pbar * (1 - pbar) / n_ep) ** 0.5
+                deff = (se_c / se_n) ** 2
+                checks.append(("%s 유효표본<30" % tag, "예",
+                               "예" if n_ep / deff < 30 else "아니오"))
+        # 경로는 라운드 간 동일한가 — turn_deg 수열의 라운드 간 유일성
+        same = tot = 0
+        for sub in ("evolve", "evolve5"):
+            grp = _c.defaultdict(list)
+            for f in sorted(glob.glob(os.path.join(ROOT, sub, "*.json"))):
+                parts = os.path.basename(f)[:-5].split("_")
+                rs = [t for t in parts if t.startswith("r") and t[1:].isdigit()]
+                if not rs:
+                    continue
+                rows = json.load(open(f, encoding="utf-8"))
+                if not rows or not isinstance(rows[0], dict):
+                    continue
+                grp["_".join(t for t in parts if t != rs[0])].append(
+                    tuple(r.get("turn_deg") for r in rows))
+            for k, v in grp.items():
+                # 표 2·3·4 에 들어가는 조건만 본다. 접두 v4 가 아닌 것들은 어댑터 개발
+                # 도중의 6에피소드 예비 실행이라 라운드마다 앵커 집합 자체가 달랐다.
+                if k.startswith("v4_") and len(v) >= 3:
+                    tot += 1
+                    same += len(set(v)) == 1
+        if tot:
+            checks.append(("표2·3 경로 라운드 간 동일", "%d/%d" % (tot, tot),
+                           "%d/%d" % (same, tot)))
+    except Exception:
+        pass
+
+    # 표 5 (시드 스윕) — 구판이 철회한 설명 대신 남긴 수치들
+    try:
+        import itertools as _it
+        import statistics as _s2
+        pol = {}
+        for f in sorted(glob.glob(os.path.join(ROOT, "seed_sweep", "*.json"))):
+            parts = os.path.basename(f)[:-5].split("_")
+            k = "_".join(t for t in parts if not (t.startswith("r") and t[1:].isdigit()))
+            if k not in pol:
+                pol[k] = json.load(open(f, encoding="utf-8"))
+        if pol:
+            def _man(r):
+                a = abs(r["turn_deg"])
+                if a >= 150:
+                    return "유턴"
+                if a < 30:
+                    return "직진"
+                return "우회전" if r["turn_deg"] > 0 else "좌회전"
+            rt = {m: [] for m in ("우회전", "좌회전")}
+            for k in sorted(pol):
+                for m in rt:
+                    rs = [r for r in pol[k] if _man(r) == m]
+                    rt[m].append(100 * sum(r["outcome"] == "성공" for r in rs) / len(rs))
+            d = [l - r for l, r in zip(rt["좌회전"], rt["우회전"])]
+            obs = abs(_s2.mean(d))
+            hit = sum(1 for sg in _it.product([1, -1], repeat=len(d))
+                      if abs(_s2.mean(a * b for a, b in zip(d, sg))) >= obs - 1e-12)
+            checks.append(("표5 좌−우 대응 차이", "23.6", "%.1f" % _s2.mean(d)))
+            checks.append(("표5 부호 순열 p", "0.0312", "%.4f" % (hit / 2 ** len(d))))
+            checks.append(("표5 좌우 역전 정책 수", "0", str(sum(x < 0 for x in d))))
+            # 정책 간 분산이 이항 잡음을 넘는가 — 우회전만 넘어야 한다
+            for m, k_ep, exp in (("우회전", 8, "2.14"), ("좌회전", 3, "1.13")):
+                pb = _s2.mean(rt[m]) / 100
+                ratio = _s2.pstdev(rt[m]) / (100 * (pb * (1 - pb) / k_ep) ** 0.5)
+                checks.append(("표5 %s 분산/잡음" % m, exp, "%.2f" % ratio))
+            # 미공개 필터 규모
+            allr = [r for rs in pol.values() for r in rs]
+            st = [r for r in allr if _man(r) == "직진"]
+            rt2 = [r for r in allr if _man(r) == "우회전"]
+            checks.append(("표5 직진 min_R 센티널", "36",
+                           str(sum(r["min_R"] >= 999 for r in st))))
+            checks.append(("표5 우회전 entry=0", "50",
+                           str(sum(r["entry_kmh"] == 0 for r in rt2))))
+    except Exception:
+        pass
+
     bad = 0
     for name, expected, actual in checks:
         ok = expected == actual

@@ -13,12 +13,18 @@
 """
 import glob
 import json
+import math
 import sys
 
 import numpy as np
 
 N_EP = 30
 N_MC = 20000
+# 같은 30 시나리오(500000~500029)를 12개 체크포인트가 **모두** 본다. 따라서 체크포인트
+# 점수는 독립이 아니라 시나리오 난이도를 공유해 양의 상관을 갖는다. 상관이 커질수록
+# 최댓값 편향은 작아지므로, 독립 가정만으로 "이득 전부가 편향" 이라고 말할 수 없다.
+# 잠재 프로빗 모형으로 급내 상관 ρ 를 넣어 편향이 얼마나 줄어드는지 함께 본다.
+RHOS = (0.0, 0.1, 0.2, 0.3, 0.5, 0.7)
 
 
 def main():
@@ -58,6 +64,39 @@ def main():
         print("  → 관측이 널 구간 안이다. **이 이득은 신호가 아니라 선택 편향이다.**")
     else:
         print("  → 관측이 널 구간 밖이다. 편향을 넘는 몫이 있다.")
+
+    # --- 시나리오 공유를 넣으면 편향은 얼마나 줄어드는가 -------------------------
+    from math import erf, sqrt
+
+    def phi_inv(q):                        # 이항 확률 → 잠재 임계값 (이분 탐색)
+        lo_, hi_ = -8.0, 8.0
+        for _ in range(80):
+            mid = (lo_ + hi_) / 2
+            if 0.5 * (1 + erf(mid / sqrt(2))) < q:
+                lo_ = mid
+            else:
+                hi_ = mid
+        return (lo_ + hi_) / 2
+
+    thr = phi_inv(p)
+    n_mc2 = max(2000, N_MC // 5)
+    print()
+    print("  같은 30 시나리오를 12 체크포인트가 공유한다 — 급내 상관 ρ 를 넣은 널")
+    print("    %5s %12s %12s %s" % ("ρ", "널 오라클", "편향 몫", "관측 %.1f%% 설명" % obs))
+    for rho in RHOS:
+        a_, b_ = math.sqrt(rho), math.sqrt(1 - rho)
+        acc = np.empty(n_mc2)
+        for i in range(n_mc2):
+            u = rng.standard_normal(N_EP)                       # 시나리오 난이도(전 조건 공유)
+            e = rng.standard_normal((n_seed, n_ck, N_EP))
+            hit = (a_ * u + b_ * e < thr).mean(axis=2) * 100
+            acc[i] = hit.max(axis=1).mean()
+        nb = acc.mean() - 100 * p
+        print("    %5.2f %11.1f%% %11.1f%%p %s"
+              % (rho, acc.mean(), nb,
+                 "%.0f%%" % (100 * nb / gain) if gain else "-"))
+    print("  ρ 가 커질수록 편향 몫이 줄어든다. ρ 를 자료에서 추정하려면 **에피소드 단위**")
+    print("  결과가 필요한데 현재 평가는 집계값만 남긴다 — 이 표는 민감도이지 추정이 아니다.")
     return 0
 
 

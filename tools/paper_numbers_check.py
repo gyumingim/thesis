@@ -203,12 +203,17 @@ def main():
     except Exception:
         pass
 
+    # 본문에 인용되지 **않는 것이 맞는** 항목 — 값은 지키되 누락 경고를 내지 않는다.
+    # 이탈/충돌 종점은 "실패가 충돌에서 이탈로 옮겨간다" 주장이 n=5 에서 철회되면서
+    # 본문에서 빠졌다(§6.2). 값 자체는 회귀 감시를 위해 계속 대조한다.
+    NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
+
     bad = 0
     for name, expected, actual in checks:
         ok = expected == actual
         bad += not ok
         print("  %-26s 논문 %-12s 원자료 %-12s %s" % (name, expected, actual, "OK" if ok else "불일치"))
-        if ok and expected not in text and name not in ("피크 체크포인트",):
+        if ok and expected not in text and name not in NOT_CITED:
             print("      ! 이 값이 PAPER.md 본문에서 발견되지 않는다 — 반영 누락 가능")
 
     # 본문에 남아 있으면 안 되는 표현
@@ -222,7 +227,20 @@ def main():
                      (r"statistically on par", "영문 초록의 동률 주장"),
                      (r"동일 하드웨어·동일 시간 예산", "헤드라인 비교는 장비 교차다"),
                      (r"carla_policy_ab\.sh", "스윕 스크립트 이름은 carla_seed_sweep.sh"),
-                     (r"rejection of three\s+remedies", "세 처방 중 둘만 기각됐다")):
+                     (r"rejection of three\s+remedies", "세 처방 중 둘만 기각됐다"),
+                     # 아래는 2026-09-02 심사 시뮬레이션에서 철회한 주장들.
+                     # 인용 형태(«…» 안)로 남기는 것은 허용하되 단정형은 금지한다.
+                     (r"n 을 더 늘려도 이 격차는 유의해지지 않을",
+                      "사후 검정력 역추론 — 실제 사전 검정력은 0.19 다"),
+                     (r"대응 설계는 순위 비교에 유리하므로", "상관의 정밀도는 정책 수 9 가 지배한다"),
+                     (r"\*\*두 시험장의 순위 상관은 0 이다\*\*", "n=9 의 95% 구간은 [−0.67, +0.66] 다"),
+                     (r"\*\*실패율이 경로 최소 반경을 따라간다\*\*",
+                      "좌회전 14.9m 가 직진 33.1m 보다 덜 실패한다 — 단조가 아니다"),
+                     (r"거버너가 겨우 버티는 구간이 우회전이다",
+                      "좌회전이 0.83g 로 더 높은데 더 잘 간다 — 이 설명은 철회됐다"),
+                     (r"좌회전은 아홉 정책 모두[\s\S]{0,3}2~3/3", "실제 범위는 1~3/3 이며 검출력 부재다"),
+                     (r'(?<!")마스킹을 켜면 거버너가 \+13\.3pp 를 준다',
+                      "앵커 대응 검정에서 p=0.25 — 유지하지 않는다")):
         for m in re.finditer(pat, text):
             line = text[:m.start()].count(chr(10)) + 1
             print("  잔존 표현 %-18s (L%d) — %s" % (pat, line, why)); bad += 1
