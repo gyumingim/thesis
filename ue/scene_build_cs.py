@@ -584,7 +584,16 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     # 렌더 티가 드러나고, 무엇보다 실제 주행 데이터의 다수가 아니다.
     # 가중치 합 1.0. 노면 재질이 젖은 상태로 고정돼 있어(위 주석) 마른 노면을 전제하는
     # 쨍한 정오는 비중을 낮게 둔다 — 마른 노면 변형을 만들면 그때 재조정할 것.
-    preset = _weighted_choice(WEATHER)
+    # ★ 2026-09-06: 검증용 **층화 추출**. 가중 추첨(맑음 8%·옅은 해 14%)으로 10장을 뽑으면
+    #   맑음 계열이 평균 2.2장뿐이라, render_audit 의 «맑음 vs 흐림» 중앙값이 표본 2개에
+    #   얹힌다. 그 상태에서는 건물을 늘리는 것 같은 기하 변경만으로도 (보이는 하늘 조각과
+    #   노면 그림자가 달라져) 판정이 통과↔실패로 뒤집힌다 — 실제로 두 번 겪었다.
+    #   생성기의 기본 동작은 실제 빈도를 따르는 가중 추첨이므로 그대로 두고,
+    #   검증 렌더에서만 프리셋을 순환시켜 각 조건에 같은 장면 수를 준다.
+    if os.environ.get("CS_PRESET_CYCLE"):
+        preset = WEATHER[i % len(WEATHER)]
+    else:
+        preset = _weighted_choice(WEATHER)
     overcast = preset["overcast"]
     sun_int = random.uniform(*preset["sun_int"])
     fog_d = random.uniform(*preset["fog"])

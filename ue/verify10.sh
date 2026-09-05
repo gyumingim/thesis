@@ -14,9 +14,11 @@ PROJ="C:/Users/a3162/Documents/Unreal Projects/CitySample/CitySample.uproject"
 OUT=/c/ue/verify10
 mkdir -p "$OUT"
 export CS_OUT="C:/ue/verify10"
-N=${1:-10}
+N=${1:-12}      # 프리셋 6종 × 2장 — 층화의 최소 단위
 echo "=== build 0-$((N-1)) $(date +%H:%M) ===" >> $OUT/log
-MSYS_NO_PATHCONV=1 CS_OUT="C:/ue/verify10" timeout -k 60 1800 "$UE" "$PROJ" \
+# 프리셋 층화 — 가중 추첨이면 맑음 계열이 10장 중 2장뿐이라 감사 판정이 표본 2개에
+# 얹힌다(기하만 바꿔도 통과↔실패가 뒤집힌다). 검증에서는 조건마다 같은 장면 수를 준다.
+MSYS_NO_PATHCONV=1 CS_OUT="C:/ue/verify10" CS_PRESET_CYCLE=1 timeout -k 60 1800 "$UE" "$PROJ" \
   -run=pythonscript -script="C:/Users/a3162/thesis/ue/scene_build_cs.py $N seed=90000" \
   -unattended -nosplash -abslog="C:/ue/verify10/build.log" > /dev/null 2>&1
 echo "build rc=$? $(date +%H:%M)" >> $OUT/log
