@@ -870,6 +870,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                 yw = random.uniform(0, 360)
                 cx = bgx + random.uniform(-jit, jit)
                 cy = side * (band + random.uniform(-jit, jit))
+                # ★ 2026-09-06: **회랑 검사가 빠져 있었다.** 소실점 타워는 도로 끝 너머
+                #   (x>177 m)에 서므로 침범할 수 없지만, 이 배경 열은 x −100~260 m 로
+                #   도로 **옆구리**를 따라간다. 그런데 TOWER_POOL 에는 반폭 106.8 m 짜리도
+                #   있어서 90 m 밴드에 놓이면 y=−16.8 까지 뻗어 **도로를 덮는다**.
+                #   실측: 건물 풀 확장 후 12장 중 3장(25%)에서 건물이 도로 위를 지나갔다.
+                #   측면 건물 경로는 이미 하는 검사를 여기서도 한다.
+                if abs(cy) - occupancy_half_w_cm(q, yw) < CORRIDOR_CM:
+                    continue
                 if reserve_tower(cx, cy, occupancy_half_l_cm(q, yw),
                                  occupancy_half_w_cm(q, yw)):
                     spawn_bldg(q, cx, cy, yw)
