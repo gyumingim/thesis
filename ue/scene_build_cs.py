@@ -533,6 +533,16 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
 
     rb = road.get_bounds()
     seg = 2 * rb.box_extent.x
+    # ★ 2026-09-05: ROAD_HALF_W_CM(1050)·ROAD_SEG_CM(2000)·LANE_CTRS 는 전부 **상수**인데
+    #   실제 아스팔트 폭은 메시가 정한다. 키트에 19/27/37 폭 변종이 있고 우리는 19 계열을
+    #   쓰므로 둘이 어긋나면 가장자리 도색선이 아스팔트 밖에 놓인다. 매 장면 찍지 않고
+    #   첫 장면에서만 대조한다.
+    if i == 0:
+        _hw, _sg = rb.box_extent.y, 2 * rb.box_extent.x
+        log("  도로 메시: 반폭 %.0f cm (상수 %.0f) · 길이 %.0f cm (상수 %.0f)%s"
+            % (_hw, ROAD_HALF_W_CM, _sg, ROAD_SEG_CM,
+               "" if abs(_hw - ROAD_HALF_W_CM) < 30 and abs(_sg - ROAD_SEG_CM) < 30
+               else "   ← **불일치**"))
     for k in range(ROAD_TILES):
         top0(spawn_sm(road, k * seg + seg / 2 - rb.origin.x, -rb.origin.y))
     # 건물 하부 채움: 지면이 인도까지만 있으면 건물이 허공 위에 떠 보인다(scene_75 공극 실측).
@@ -851,7 +861,14 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         #   파선 주기는 미국 MUTCD 기준 도색 3 m + 공백 9 m(10 ft/30 ft)를 쓴다.
         #   타일 길이(seg)는 메시 바운드에 달려 있어 편집 시점에 모르므로, 주기 안에서의
         #   위치로 판정해 **타일 길이와 무관하게** 같은 비율이 나오도록 한다.
-        DASH_PERIOD_CM, DASH_PAINT_CM = 1200.0, 300.0
+        # ★ 2026-09-05 2차: 파선이 **렌더에서 거의 보이지 않는다**(검증 세트 재렌더 실측 —
+        #   실선인 중앙 이중선은 또렷한데 차로 구분선은 원경에 희미한 조각으로만 남는다).
+        #   원인 후보는 이 메시가 도색 데칼이라 X 스케일을 4.0 → 0.585 로 줄이면 텍스처
+        #   안의 도색 패턴까지 함께 줄어드는 것이다(Y 를 0.06 으로 눌렀을 때 도색 폭이
+        #   16배 얇아진 것과 같은 현상). 스케일 임계를 코드로 추정할 방법이 없어 환경변수로
+        #   열어 두고 **실측으로 고른다**. 기본값은 MUTCD 3 m / 12 m.
+        DASH_PAINT_CM = float(os.environ.get("CS_DASH_PAINT_M", "3.0")) * 100.0
+        DASH_PERIOD_CM = float(os.environ.get("CS_DASH_PERIOD_M", "12.0")) * 100.0
         # 실선 판정은 값 자체가 아니라 **크기**로 한다 — 상수를 조정해도 의미가 따라온다.
         is_solid = lambda y: abs(y) < 100.0 or abs(y) > 900.0   # 중앙 이중선 / 가장자리선
         # 파선을 «타일을 건너뛰어» 만들 수는 없다. 이 메시의 한 타일은 원단 5 m 에
