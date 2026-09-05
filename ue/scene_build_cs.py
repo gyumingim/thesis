@@ -79,6 +79,18 @@ BLDG_HALF_L = {   # 에디터 세션 실측 (v7 로그: A01 e(29,23), B01 e(30,3
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 29.0,
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
 }
+# ★ 2026-09-06: 건물 풀이 2종뿐이라 모든 장면의 모든 건물이 같아 보인다(육안 게이트에서
+#   내가 스스로 지적한 잔여 항목). 라이브러리에는 히어로 빌딩 월드가 39종 있고 전부
+#   로드는 된다(실측). 다만 2026-08-24 에 일부가 -game 로드에서 D3D12 페이탈을 일으킨
+#   전례가 있어 **1종씩 단독 렌더로 검증한 뒤에만 편입**한다. 그 검증용 스위치다.
+#   반폭은 실측 전까지 보수적으로 크게 잡는다 — 과대추정은 건물을 도로에서 더 멀리 밀
+#   뿐이라 회랑 침범 방향으로는 안전하다(occupancy_half_w_cm 주석과 같은 논리).
+_BLDG_ONLY = os.environ.get("CS_BLDG_ONLY", "")
+if _BLDG_ONLY:
+    _p = "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/" + _BLDG_ONLY
+    BLDG_POOL = {_p: 35.0}
+    BLDG_HALF_L = {_p: 35.0}
+
 LANE_W_M = 3.5                    # 실제 도시부 차로 폭
 LANE_CTRS = (-8.75, -5.25, -1.75, 1.75, 5.25, 8.75)      # 편도 3차로 × 2
 LANE_LINES_CM = (-1030.0, -700.0, -350.0, -20.0, 20.0, 350.0, 700.0, 1030.0)
