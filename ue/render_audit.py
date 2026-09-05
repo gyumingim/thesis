@@ -46,6 +46,20 @@ SKY_SMOOTH = 0.02       # 국소 표준편차 상한 (창문 격자를 배제)
 ROAD_ROWS = 500         # 하단 = 노면 위주
 
 
+def _local_sd(g, r=2):
+    """5x5 국소 표준편차 — 적분영상 없이 shift 누적으로 구한다."""
+    acc = np.zeros_like(g)
+    acc2 = np.zeros_like(g)
+    n = 0
+    for dy in range(-r, r + 1):
+        for dx in range(-r, r + 1):
+            sh = np.roll(np.roll(g, dy, axis=0), dx, axis=1)
+            acc += sh
+            acc2 += sh * sh
+            n += 1
+    return np.sqrt(np.maximum(acc2 / n - (acc / n) ** 2, 0.0))
+
+
 def measure(root):
     rows = []
     fs = sorted(glob.glob(os.path.join(root, "scene_*.png")),
@@ -59,28 +73,23 @@ def measure(root):
         lum = rgb.mean(axis=2)
         band = rgb[:int(rgb.shape[0] * SKY_BAND)]
         bl = band.mean(axis=2)
-        # 5x5 국소 표준편차 — 적분영상 없이 간단히 shift 로 구한다
-        acc, acc2, n = np.zeros_like(bl), np.zeros_like(bl), 0
-        for dy in (-2, -1, 0, 1, 2):
-            for dx in (-2, -1, 0, 1, 2):
-                sh = np.roll(np.roll(bl, dy, axis=0), dx, axis=1)
-                acc += sh
-                acc2 += sh * sh
-                n += 1
-        loc_sd = np.sqrt(np.maximum(acc2 / n - (acc / n) ** 2, 0.0))
-        m = (loc_sd < SKY_SMOOTH) & (bl > np.median(bl))
-        sky = band[m] if m.sum() > 200 else band.reshape(-1, 3)
+        loc_sd = _local_sd(bl)
+        # ★ 3차 정정: «매끄럽고 밝은» 만으로도 틀린다 — 유리 커튼월은 매끄럽고, 협곡이
+        #   좁으면 하늘 화소가 거의 없어 그늘진 벽면이 뽑힌다(짙은 흐림이 가장 파랗게
+        #   측정되는 역전이 남았다). 하늘의 진짜 정의는 «건물 윤곽선 위» 다. 열마다
+        #   구조(국소 분산)가 처음 나타나는 행을 찾아 그 **위쪽만** 하늘로 삼는다.
+        struct = loc_sd > SKY_SMOOTH
+        H = band.shape[0]
+        # 열별 최초 구조 행 (없으면 H)
+        first = np.where(struct.any(axis=0), struct.argmax(axis=0), H)
+        rows_idx = np.arange(H)[:, None]
+        m = rows_idx < first[None, :]
+        m &= ~struct                       # 잔여 구조 화소 제외
+        sky = band[m] if m.sum() > 300 else np.zeros((0, 3), np.float32)
         # 중앙대(세로 42~62%) 에서 같은 매끄러움 판정을 다시 한다
         h0, h1 = int(rgb.shape[0] * 0.42), int(rgb.shape[0] * 0.62)
         mid_l = rgb[h0:h1].mean(axis=2)
-        a1, a2, nn = np.zeros_like(mid_l), np.zeros_like(mid_l), 0
-        for dy in (-2, -1, 0, 1, 2):
-            for dx in (-2, -1, 0, 1, 2):
-                sh = np.roll(np.roll(mid_l, dy, axis=0), dx, axis=1)
-                a1 += sh
-                a2 += sh * sh
-                nn += 1
-        loc_sd_mid = np.sqrt(np.maximum(a2 / nn - (a1 / nn) ** 2, 0.0))
+        loc_sd_mid = _local_sd(mid_l)
         rows.append(dict(
             name=os.path.basename(f)[:-4],
             preset=d["weather"]["preset"],
@@ -89,8 +98,9 @@ def measure(root):
             sun=d["weather"]["sun_intensity"],
             mean=float(lum.mean()),
             road_sd=float(lum[ROAD_ROWS:].std()),
-            sky_br=float(np.median(sky[:, 2] - sky[:, 0])),
-            sky_lum=float(np.median(sky.mean(axis=1))),
+            sky_px=int(sky.shape[0]),
+            sky_br=float(np.median(sky[:, 2] - sky[:, 0])) if len(sky) else float("nan"),
+            sky_lum=float(np.median(sky.mean(axis=1))) if len(sky) else float("nan"),
             # 소실점 공허 — 화면 중앙대(수평선 부근)에 «매끄럽고 밝은» 화소가 많으면
             # 도심 협곡이 개활지로 열려 하늘/빈 지면이 보인다는 뜻이다. 닫힌 협곡이면
             # 그 대역은 건물 벽면·도로·차량이라 국소 분산이 크다.
@@ -106,16 +116,23 @@ def report(root):
         print("렌더 없음:", root)
         return None
     print("== %s (%d장)" % (root, len(rows)))
-    print("  %-9s %-9s %6s %7s %8s %8s %9s %8s" %
-          ("장면", "프리셋", "태양", "평균", "노면 대비", "하늘 밝기", "하늘 B−R", "과노출"))
+    print("  %-9s %-9s %6s %7s %8s %8s %9s %8s  %6s" %
+          ("장면", "프리셋", "태양", "평균", "노면 대비", "하늘 밝기", "하늘 B−R", "과노출",
+           "하늘px"))
     for r in rows:
-        print("  %-9s %-9s %6.2f %7.3f %8.3f %8.3f %9.3f %7.1f%%" %
+        print("  %-9s %-9s %6.2f %7.3f %8.3f %8.3f %9.3f %7.1f%%  %6d" %
               (r["name"], r["preset"], r["sun"], r["mean"], r["road_sd"],
-               r["sky_lum"], r["sky_br"], 100 * r["blown"]))
+               r["sky_lum"], r["sky_br"], 100 * r["blown"], r["sky_px"]))
 
-    oc = [r for r in rows if r["overcast"]]
-    cl = [r for r in rows if not r["overcast"] and not r["dawn"]]
-    dw = [r for r in rows if r["dawn"]]
+    import math as _m
+    has_sky = lambda r: r["sky_px"] >= 300 and not _m.isnan(r["sky_br"])
+    oc = [r for r in rows if r["overcast"] and has_sky(r)]
+    cl = [r for r in rows if not r["overcast"] and not r["dawn"] and has_sky(r)]
+    dw = [r for r in rows if r["dawn"] and has_sky(r)]
+    nosky = [r for r in rows if not has_sky(r)]
+    if nosky:
+        print("  (하늘 화소 부족으로 색 판정에서 제외: %s)"
+              % ", ".join("%s(%d px)" % (r["name"], r["sky_px"]) for r in nosky))
     out = {}
     print()
     if oc and cl:
