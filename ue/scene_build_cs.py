@@ -555,8 +555,11 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     # ★ 2026-08-29 검증 렌더에서 확인: 지면이 x=120 m 에서 끝나는데 타워는 186 m 부터라
     #   **건물이 허공에 뜬 채 렌더**됐다(verify10/scene_0). 화면 가장자리 하늘 띠도 같은 원인.
     #   등배 타일로 덮으면 액터가 수백 개가 되므로 10배 스케일 타일 몇 장으로 대신한다.
-    for fx in (1, 2, 3):                       # x 100~700 m 구간
-        for fy in (-2, -1, 0, 1, 2):           # |y| ≤ 300 m
+    # ★ 2026-09-05: fx 를 0 부터 돌린다. 이전에는 x≥100 m 만 덮어서 **x<100 m 의 측방
+    #   |y|>94 m 에 지면이 없었다**(측면 스트립이 |y|≤94 m 까지만 간다). 아래에서 넣는
+    #   원경 스카이라인이 그 구간에 서므로 지면이 없으면 또 허공에 뜬다(scene_0 재발 방지).
+    for fx in (0, 1, 2, 3):                    # x −100~700 m 구간
+        for fy in (-2, -1, 0, 1, 2):           # |y| ≤ 500 m
             a = top0(spawn_sm(road, fx * 20000.0 - rb.origin.x, fy * 20000.0 - rb.origin.y))
             a.set_actor_scale3d(unreal.Vector(10.0, 10.0, 1.0))
             a.add_actor_world_offset(unreal.Vector(0, 0, -6), False, False)  # 근경보다 6cm 아래
@@ -685,6 +688,25 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                     spawn_bldg(q, bx, by, yw)
                     break
         tx += 2 * maxhl_cm + 6000
+
+    # ★ 2026-09-05: **측방 공허.** 소실점(정면)은 위 타워 행렬이 막지만 옆은 아무것도 없다.
+    #   측면 건물 행에 20% 공백이 있고 그 틈으로 **빈 지면과 가짜 지평선**이 그대로 보인다
+    #   (검증 렌더 scene_0·dashprobe_12 좌측에서 확인 — 도심 협곡이 갑자기 개활지로 열린다).
+    #   실제 도심은 앞 건물 틈으로 뒤 건물이 보이므로, 회랑 규칙과 무관한 **원경 배경 열**을
+    #   두 겹 둔다. 측면 건물(중심 ~45~75 m)보다 확실히 바깥인 120 m·200 m 에 두어
+    #   기존 배치와 충돌하지 않게 하고, 충돌 검사는 타워 예약을 그대로 쓴다.
+    for band, step, jit in ((12000.0, 6000.0, 2200.0), (20000.0, 9000.0, 3200.0)):
+        bgx = -10000.0
+        while bgx < ROAD_X_END_CM + 14000.0:
+            for side in (-1, 1):
+                q = random.choice(list(BLDG_POOL))
+                yw = random.uniform(0, 360)
+                cx = bgx + random.uniform(-jit, jit)
+                cy = side * (band + random.uniform(-jit, jit))
+                if reserve_tower(cx, cy, occupancy_half_l_cm(q, yw),
+                                 occupancy_half_w_cm(q, yw)):
+                    spawn_bldg(q, cx, cy, yw)
+            bgx += step
 
     x = 2000.0
     n_bldg = 0
@@ -873,8 +895,15 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         #   안의 도색 패턴까지 함께 줄어드는 것이다(Y 를 0.06 으로 눌렀을 때 도색 폭이
         #   16배 얇아진 것과 같은 현상). 스케일 임계를 코드로 추정할 방법이 없어 환경변수로
         #   열어 두고 **실측으로 고른다**. 기본값은 MUTCD 3 m / 12 m.
-        DASH_PAINT_CM = float(os.environ.get("CS_DASH_PAINT_M", "3.0")) * 100.0
-        DASH_PERIOD_CM = float(os.environ.get("CS_DASH_PERIOD_M", "12.0")) * 100.0
+        #   **스윕 결과(2026-09-05, /c/ue/dash_probe.sh)**: 같은 장면을 도색 3·6·12 m 로
+        #   렌더해 행당 검출 선 개수를 셌더니 3 m 3.25 · 6 m 3.25 · 12 m **4.55** 였다.
+        #   3·6 m 는 실선 4줄만 세어진 것과 같은 값이라 파선이 사실상 안 보인다는 뜻이고,
+        #   12 m 에서 비로소 파선이 화면에 남는다(육안으로도 12 m 렌더에서만 확인된다).
+        #   원인은 도색 데칼의 X 스케일이 텍스처 도색까지 함께 줄이는 것으로 보이나
+        #   임계를 코드로 계산할 방법이 없어 **실측값을 채택**한다. 12 m / 주기 24 m 는
+        #   MUTCD 3/12 보다 굵지만, 이 카메라 높이·도로 길이에서 실제로 보이는 최소값이다.
+        DASH_PAINT_CM = float(os.environ.get("CS_DASH_PAINT_M", "12.0")) * 100.0
+        DASH_PERIOD_CM = float(os.environ.get("CS_DASH_PERIOD_M", "24.0")) * 100.0
         # 실선 판정은 값 자체가 아니라 **크기**로 한다 — 상수를 조정해도 의미가 따라온다.
         is_solid = lambda y: abs(y) < 100.0 or abs(y) > 900.0   # 중앙 이중선 / 가장자리선
         # 파선을 «타일을 건너뛰어» 만들 수는 없다. 이 메시의 한 타일은 원단 5 m 에
