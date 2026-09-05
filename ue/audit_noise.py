@@ -22,7 +22,8 @@ import statistics
 import sys
 
 # 판정 임계 — render_audit 과 같은 값을 쓴다.
-THRESH = {"소실점 공허 최대": 8.0, "최대 과노출": 5.0}
+# 실사 교정 임계 (ue/real_baseline.py) — render_audit 과 같은 값·같은 통계량.
+THRESH = {"소실점 공허 중앙": 6.1, "과노출 중앙": 10.9}
 
 
 def load_audit():
@@ -50,7 +51,7 @@ def main():
             return 2
 
     keys = ["하늘 B−R 맑음", "하늘 B−R 흐림", "노면 대비 맑음", "노면 대비 흐림",
-            "소실점 공허 최대", "소실점 공허 평균", "최대 과노출"]
+            "소실점 공허 중앙", "소실점 공허 최대", "과노출 중앙", "최대 과노출"]
     print("실행 %d회의 판정 지표 변동" % len(roots))
     print("  %-16s %s | %8s %8s %8s" %
           ("지표", " ".join("%9s" % os.path.basename(r)[-5:] for r in roots),
@@ -76,7 +77,14 @@ def main():
     n_fail = sum(g <= 0 for g in gaps)
     print("    평균 %+.3f · 표준편차 %.3f · %d/%d 실행에서 실패" % (mu, sd, n_fail, len(gaps)))
     if n_fail == len(gaps):
-        print("    → **전 실행 실패이므로 잡음이 아니라 실재하는 결함이다.**")
+        # ★ 부호가 전부 같다고 «확립» 은 아니다. n=3 의 부호검정은 p=0.25 이고,
+        #   평균/표준오차로 봐도 t=%.2f 수준이다. 방향은 일관되나 근거는 약하다 —
+        #   더 강하게 말하려면 실행 수를 늘려야 한다.
+        t = mu / (sd / len(gaps) ** 0.5) if sd else float("inf")
+        print("    → 방향은 %d/%d 일관되나 **확립된 것은 아니다** "
+              "(부호검정 p=%.2f, t=%.2f, n=%d)."
+              % (len(gaps), len(gaps), 2.0 ** -(len(gaps) - 1), t, len(gaps)))
+        print("       실행을 더 늘리기 전에는 «일관된 방향» 까지만 말한다.")
     elif n_fail == 0:
         print("    → 전 실행 통과.")
     else:
