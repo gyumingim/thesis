@@ -600,17 +600,62 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     lamps_on = preset["lamps"] if isinstance(preset["lamps"], bool) else random.random() < preset["lamps"]
 
     # 노면 습윤: 재질 파라미터(Puddle/Roughness)는 LAYER_PARAMETER 연관이라 파이썬에서
-    # 못 건드린다(2026-08-24 실측). 대신 **재질 자체를 갈아끼운다** — 마른 계열 프리셋에는
-    # M_Freeway_Asphalt 를, 젖은 계열에는 기본(M_Asphalt_Master_Inst)을 쓴다.
-    if not preset["wet"]:
-        dry = unreal.load_asset("/Game/Road/Material/M_Freeway_Asphalt")
+    # 못 건드린다(2026-08-24 실측). 대신 **재질 자체를 갈아끼운다**.
+    #
+    # ★ 2026-09-06 통제 A/B (같은 장면 gen_4·같은 프리셋에서 재질만 교체, /c/ue/mat_ab.sh):
+    #     기본 M_Asphalt_Master_Inst   노면 밝기 0.281 · B−R +0.094 · 국소대비 0.1234
+    #     M_Freeway_Asphalt(구 «마름»)  0.290 · +0.137 · 0.1012
+    #     MI_FreewayAsphalt_Road        0.320 · +0.102 · 0.1100
+    #     MI_FreewayAsphalt_RoadDark    0.263 · +0.102 · 0.1275
+    #   **구판의 스왑은 사실상 무동작이었다** — 기본 대비 밝기 차이가 3% 로 눈에 띄지 않는다.
+    #   그래서 프리셋이 여섯인데 노면이 전부 같아 보였다. 그리고 **젖은 노면을 만드는 재질은
+    #   이 프로젝트에 없다** — 네 재질 어느 것도 젖음의 지문(어두움 + 강한 정반사 + 높은
+    #   하늘 반사)을 내지 않는다. wet 플래그를 «습윤» 으로 부르는 것은 과장이므로,
+    #   실제로 얻을 수 있는 것만 취해 **노면 밝기 축**으로 정직하게 쓴다:
+    #   가장 밝은 Road(0.320) 대 가장 어두운 RoadDark(0.263) = 22% 차이.
+    #   (이전에 «맑음 장면이 젖어 보인다» 를 재질 탓으로 의심했으나, 통제 A/B 에서 재질은
+    #    거의 무관했다. 저각 시점의 스카이 반사가 원인이며 그것은 물리적으로 정상이다.)
+    # ★ 2026-09-06 진단: 에셋은 정상 로드되는데(경고 0건) 렌더의 맑음 장면 노면이
+    #   여전히 젖어 보인다. 후보가 둘이다 — (a) 도로 메시의 재질 슬롯이 여러 개인데
+    #   슬롯 0 만 갈아끼운다, (b) M_Freeway_Asphalt 자체가 젖은 계열이다. 어느 쪽인지
+    #   추측하지 말고 **첫 장면에서 슬롯 수와 교체 전후 재질 이름을 로그로 남긴다.**
+    # 통제 A/B 용 강제 스위치 — 같은 장면·같은 프리셋에서 재질만 바꿔 비교한다.
+    _MATS = {
+        "freeway": "/Game/Road/Material/M_Freeway_Asphalt",
+        "road": "/Game/Road/Material/MI/MI_FreewayAsphalt_Road",
+        "roaddark": "/Game/Road/Material/MI/MI_FreewayAsphalt_RoadDark",
+        "shoulder": "/Game/Road/Material/MI/MI_FreewayAsphalt_Shoulder",
+    }
+    _force = os.environ.get("CS_FORCE_ROAD_MAT", "")
+    # 항상 갈아끼운다 — 한쪽만 바꾸면 «기본» 쪽이 어떤 값인지 통제되지 않는다.
+    _pick = _force if _force in _MATS else ("roaddark" if preset["wet"] else "road")
+    if True:
+        dry = unreal.load_asset(_MATS[_pick])
         if dry:
+            n_swap, n_slot, before = 0, 0, None
             for a in act.get_all_level_actors():
                 smc = getattr(a, "static_mesh_component", None)
                 if smc and smc.static_mesh == road:
-                    smc.set_material(0, dry)
-        elif i == 0:
-            log("경고: 마른 노면 재질 로드 실패 — 젖은 노면 유지")
+                    try:
+                        n_slot = smc.get_num_materials()
+                    except Exception:
+                        n_slot = 1
+                    if before is None:
+                        try:
+                            m0 = smc.get_material(0)
+                            before = m0.get_name() if m0 else "None"
+                        except Exception:
+                            before = "?"
+                    for si in range(max(1, n_slot)):     # 슬롯 전부 갈아끼운다
+                        smc.set_material(si, dry)
+                    n_swap += 1
+            if not getattr(build_scene, "_dry_logged", False):
+                build_scene._dry_logged = True
+                log("  노면 재질: 액터 %d개 · 슬롯 %d개 · %s → %s (%s)"
+                    % (n_swap, n_slot, before, dry.get_name(), _pick))
+        elif not getattr(build_scene, "_dry_logged", False):
+            build_scene._dry_logged = True
+            log("경고: 노면 재질 로드 실패 (%s) — 기본 재질 유지" % _pick)
 
     # 인도 액터에는 분리 검사가 없어 소품끼리·가로등·가로수와 겹치는 장면이 52.9% 였다.
     # 또 가로등 k*2200, 가로수 k*2200+1100, 인도 6 m, 도로 20 m 주기가 전부 x=0 에
