@@ -734,8 +734,57 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         # 태양 원반각을 키워 그림자 가장자리를 풀어 준다. UI 상한이 5° 근방이므로 3~6 만.
         sun.light_component.set_editor_property("light_source_angle", random.uniform(3.0, 6.0))
         sun.light_component.set_editor_property("contact_shadow_length", 0.02)
-    act.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 1000), unreal.Rotator(0, 0, 0))
-    act.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+    sky_light = act.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 1000),
+                                           unreal.Rotator(0, 0, 0))
+    sky_atm = act.spawn_actor_from_class(unreal.SkyAtmosphere, unreal.Vector(0, 0, 0),
+                                         unreal.Rotator(0, 0, 0))
+
+    # ★ 2026-09-05: 기상 프리셋의 **가장 두드러진 시각 단서가 반대로 나오고 있었다.**
+    #   프리셋이 바꾸는 것은 태양 강도와 안개뿐인데, 하늘은 항상 기본 SkyAtmosphere 의
+    #   맑은 파란 하늘이고 SkyLight 도 그 하늘을 담는다. 게다가 자동노출이 태양 강도를
+    #   상쇄해 버린다 — 검증 10장 실측: 태양 강도가 1.16~8.02 로 7배 차이인데 화면 평균
+    #   밝기는 0.28~0.46 에 머물고 상관은 r=+0.27(n=10, 유의하지 않음)이다. 더 나쁜 것은
+    #   **하늘 색이 뒤집혔다**는 점이다 — 흐림 계열의 하늘 B−R 중앙값이 0.137 로 맑음
+    #   계열 0.043 보다 오히려 **더 파랗다**. 맑은 장면은 태양이 밝아 하늘이 백화되면서
+    #   채널이 함께 포화해 B−R 이 0 으로 눌리기 때문이다. 즉 기상 다양성이 이름뿐이고,
+    #   그나마 있는 축은 실제와 반대 방향이다.
+    #
+    #   물리적으로 흐린 하늘을 만드는 축은 태양 강도가 아니라 **대기 산란**이다. Mie 산란을
+    #   키우면 하늘이 희뿌옇게 되고(=구름 낀 하늘의 색), 태양 원반을 죽이면 그림자원이
+    #   확산광으로 바뀐다. SkyLight 를 올려 확산광이 지배하게 한다.
+    #
+    #   ★ 속성명이 틀리면 set_editor_property 가 예외를 던지고, build_scene 이 main 의
+    #     try/except 안이라 그 예외가 삼켜져 **산출물이 0개**가 된다(visibility 의 numpy
+    #     사례와 같은 함정). 그래서 개별 설정을 전부 guard 로 감싸고 실패를 로그로 남긴다.
+    def _try_set(obj, name, val, where):
+        try:
+            obj.set_editor_property(name, val)
+            return True
+        except Exception as e:
+            if i == 0:
+                log("  경고: %s.%s 설정 실패 (%s) — 이 축은 적용되지 않는다"
+                    % (where, name, type(e).__name__))
+            return False
+
+    atm = getattr(sky_atm, "sky_atmosphere_component", None)
+    if atm is not None:
+        if overcast:
+            # 기본 Mie 산란 계수는 0.003996. 10~25배로 올리면 시야가 희뿌옇게 덮인다.
+            _try_set(atm, "mie_scattering_scale", 0.004 * random.uniform(10.0, 25.0), "SkyAtmosphere")
+            _try_set(atm, "mie_absorption_scale", 0.004 * random.uniform(2.0, 6.0), "SkyAtmosphere")
+            _try_set(atm, "mie_anisotropy", random.uniform(0.55, 0.75), "SkyAtmosphere")
+        else:
+            _try_set(atm, "mie_scattering_scale", 0.004 * random.uniform(0.8, 2.0), "SkyAtmosphere")
+    # 태양 원반: 흐린 날에는 보이지 않아야 한다. 원반 색을 죽여 «해가 어디 있는지 모르는»
+    # 하늘을 만든다. 확산광 자체는 SkyLight 가 담당하므로 조도는 유지된다.
+    if overcast:
+        _try_set(sun.light_component, "atmosphere_sun_disk_color_scale",
+                 unreal.LinearColor(0.05, 0.05, 0.05, 1.0), "DirectionalLight")
+    slc = getattr(sky_light, "light_component", None)
+    if slc is not None:
+        # 확산광 대 직사광의 비. 흐린 날은 확산이 지배하고 맑은 날은 태양이 지배한다.
+        _try_set(slc, "intensity", random.uniform(1.8, 3.0) if overcast
+                 else random.uniform(0.7, 1.2), "SkyLight")
 
     cam_z = random.uniform(130.0, 185.0)          # 승용차~SUV 시점
     cam_yaw = random.uniform(-6.0, 6.0)
@@ -783,14 +832,43 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         log("경고: 차선 도색 메시 로드 실패 — 차선이 그려지지 않는다")
     if buf:
         bb2 = buf.get_bounds()
+        # ★ 2026-09-05: 여덟 줄을 **전부 실선**으로 깔고 있었다. 폭 3.5 m 로 균일하게
+        #   갈라진 연속 흰 실선은 도로가 아니라 **주차장 구획**으로 읽힌다 — 검증 렌더
+        #   10장 전부에서 이 인상이 지배적이었다(장면 3·6 이 특히 명확). 실제 도시부
+        #   노면표시의 의미론은 셋으로 갈린다:
+        #     · 중앙선(±20 cm 두 줄) = 실선. 넘지 말라는 뜻이므로 끊기지 않는다.
+        #     · 차로 구분선(±3.5, ±7.0 m) = **파선**. 진로 변경이 허용되는 경계다.
+        #     · 가장자리선(±10.3 m) = 실선. 차도 끝을 표시한다.
+        #   파선 주기는 미국 MUTCD 기준 도색 3 m + 공백 9 m(10 ft/30 ft)를 쓴다.
+        #   타일 길이(seg)는 메시 바운드에 달려 있어 편집 시점에 모르므로, 주기 안에서의
+        #   위치로 판정해 **타일 길이와 무관하게** 같은 비율이 나오도록 한다.
+        DASH_PERIOD_CM, DASH_PAINT_CM = 1200.0, 300.0
+        # 실선 판정은 값 자체가 아니라 **크기**로 한다 — 상수를 조정해도 의미가 따라온다.
+        is_solid = lambda y: abs(y) < 100.0 or abs(y) > 900.0   # 중앙 이중선 / 가장자리선
+        # 파선을 «타일을 건너뛰어» 만들 수는 없다. 이 메시의 한 타일은 원단 5 m 에
+        # LINE_SX=4 를 곱해 **20 m** 이고(빌드 로그의 차선조각 432 = 8줄 × 9겹 × 6타일,
+        # 120 m / 6 = 20 m), 3 m 도색을 타일 단위로 근사하면 seg 가 주기의 약수가 아닌
+        # 순간 도색이 0 이 되거나 비율이 20~33% 로 요동친다(모사로 확인). 파선은 타일
+        # 길이 자체를 도색 길이로 맞춰 주기마다 한 장씩 놓는다.
+        raw_cm = 2 * bb2.box_extent.x                 # 원단 길이(스케일 1 기준)
+        sx_dash = max(0.05, min(LINE_SX, DASH_PAINT_CM / raw_cm))
+        seg_solid = raw_cm * LINE_SX
+        seg_dash = raw_cm * sx_dash
         for ly in LANE_LINES_CM:
-            lx = 0.0
+            if is_solid(ly):
+                lx, sx, step = 0.0, LINE_SX, seg_solid
+            else:
+                lx, sx, step = 0.0, sx_dash, DASH_PERIOD_CM
             while lx < ROAD_LEN_CM:
                 for off in LINE_OFFS:
                     a = spawn_sm(buf, lx, ly + off, 1.5, 0)
-                    a.set_actor_scale3d(unreal.Vector(LINE_SX, LINE_SY, 1.0))
+                    a.set_actor_scale3d(unreal.Vector(sx, LINE_SY, 1.0))
                     n_line += 1
-                lx += 2 * bb2.box_extent.x * LINE_SX
+                lx += step
+        log("  차선: 실선 %d줄(타일 %.1f m) · 파선 %d줄(도색 %.1f m / 주기 %.1f m)"
+            % (sum(1 for y in LANE_LINES_CM if is_solid(y)), seg_solid / 100.0,
+               sum(1 for y in LANE_LINES_CM if not is_solid(y)),
+               seg_dash / 100.0, DASH_PERIOD_CM / 100.0))
     # 방향성 도색(화살표·주차선)과 낙서를 한 리스트에 합쳐 같은 uniform(0,360) 으로
     # 굴리고 있었다 — 도로축 45° 이상 기운 것이 50.2%, 즉 차로 화살표가 사선으로 눕는다.
     # 낙서는 자유 요각이 정상이므로 풀을 나눈다.
