@@ -876,7 +876,12 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                 #   있어서 90 m 밴드에 놓이면 y=−16.8 까지 뻗어 **도로를 덮는다**.
                 #   실측: 건물 풀 확장 후 12장 중 3장(25%)에서 건물이 도로 위를 지나갔다.
                 #   측면 건물 경로는 이미 하는 검사를 여기서도 한다.
-                if abs(cy) - occupancy_half_w_cm(q, yw) < CORRIDOR_CM:
+                # 여유를 CORRIDOR 보다 20 m 더 준다. 점유 반폭은 액터 **피벗** 기준으로
+                #   계산하는데, 형상 중심이 피벗에서 얼마나 벗어나 있는지는 아직 재지
+                #   못했다(-game 바운드 프로브가 로그 회전 문제로 오프셋 수집에 실패).
+                #   그 미지수를 흡수하는 마진이며, 순수하게 배치를 **거르기만** 하므로
+                #   새로운 침범을 만들 수 없다. 오프셋을 재면 마진을 줄일 수 있다.
+                if abs(cy) - occupancy_half_w_cm(q, yw) < CORRIDOR_CM + 2000.0:
                     continue
                 if reserve_tower(cx, cy, occupancy_half_l_cm(q, yw),
                                  occupancy_half_w_cm(q, yw)):
