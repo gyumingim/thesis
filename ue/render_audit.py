@@ -29,8 +29,20 @@ import sys
 import numpy as np
 from PIL import Image
 
+# 프리셋 3분류. «이른 아침» 을 맑음과 한 묶음에 두면 안 된다 — 여명 하늘은 실제로
+# 붉고, 그걸 «파래야 한다» 로 판정하면 옳게 만든 장면이 실패로 찍힌다(실측 −0.055).
 OVERCAST = ("흐림", "짙은 흐림", "비 온 뒤")
-SKY_ROWS = 100          # 상단 띠 = 하늘 위주. 카메라 pitch 가 ±3° 이내라 안전하다.
+DAWN = ("이른 아침",)
+# ★ 2026-09-05 정정: 처음에는 «상단 100행 = 하늘» 로 뒀는데, 이 장면들은 도심 협곡이라
+#   상단이 대부분 **건물 벽면**이다. 그래서 «하늘 색» 지표가 실제로는 벽면 색을 재고
+#   있었고, 노출을 낮추자 지표가 오히려 나빠지는 착시가 생겼다. 하늘은 협곡 안에서
+#   거의 항상 **가장 밝은 영역**이므로, 상단 영역에서 밝기 상위 분위만 고른다.
+#   ★ 2차 정정: «밝기 상위» 로도 부족했다. 햇빛 받은 흰 타워 벽면이 파란 하늘보다 밝아
+#     그쪽이 뽑힌다(scene_2 는 눈으로 명백히 파란 하늘인데 지표는 B−R −0.086 을 냈다).
+#     하늘의 결정적 성질은 밝기가 아니라 **매끄러움**이다 — 건물 벽면은 창문 격자 때문에
+#     국소 분산이 크고 하늘은 거의 0 이다. 국소 표준편차가 작고 어둡지 않은 화소만 고른다.
+SKY_BAND = 0.42         # 상단 42% 안에서 고른다
+SKY_SMOOTH = 0.02       # 국소 표준편차 상한 (창문 격자를 배제)
 ROAD_ROWS = 500         # 하단 = 노면 위주
 
 
@@ -45,15 +57,29 @@ def measure(root):
         d = json.load(io.open(j, encoding="utf-8"))
         rgb = np.asarray(Image.open(f).convert("RGB"), dtype=np.float32) / 255.0
         lum = rgb.mean(axis=2)
-        sky = rgb[:SKY_ROWS].reshape(-1, 3)
+        band = rgb[:int(rgb.shape[0] * SKY_BAND)]
+        bl = band.mean(axis=2)
+        # 5x5 국소 표준편차 — 적분영상 없이 간단히 shift 로 구한다
+        acc, acc2, n = np.zeros_like(bl), np.zeros_like(bl), 0
+        for dy in (-2, -1, 0, 1, 2):
+            for dx in (-2, -1, 0, 1, 2):
+                sh = np.roll(np.roll(bl, dy, axis=0), dx, axis=1)
+                acc += sh
+                acc2 += sh * sh
+                n += 1
+        loc_sd = np.sqrt(np.maximum(acc2 / n - (acc / n) ** 2, 0.0))
+        m = (loc_sd < SKY_SMOOTH) & (bl > np.median(bl))
+        sky = band[m] if m.sum() > 200 else band.reshape(-1, 3)
         rows.append(dict(
             name=os.path.basename(f)[:-4],
             preset=d["weather"]["preset"],
             overcast=d["weather"]["preset"] in OVERCAST,
+            dawn=d["weather"]["preset"] in DAWN,
             sun=d["weather"]["sun_intensity"],
             mean=float(lum.mean()),
             road_sd=float(lum[ROAD_ROWS:].std()),
             sky_br=float(np.median(sky[:, 2] - sky[:, 0])),
+            sky_lum=float(np.median(sky.mean(axis=1))),
             blown=float((lum > 0.92).mean()),
         ))
     return rows
@@ -65,15 +91,16 @@ def report(root):
         print("렌더 없음:", root)
         return None
     print("== %s (%d장)" % (root, len(rows)))
-    print("  %-9s %-9s %6s %7s %8s %9s %8s" %
-          ("장면", "프리셋", "태양", "평균", "노면 대비", "하늘 B−R", "과노출"))
+    print("  %-9s %-9s %6s %7s %8s %8s %9s %8s" %
+          ("장면", "프리셋", "태양", "평균", "노면 대비", "하늘 밝기", "하늘 B−R", "과노출"))
     for r in rows:
-        print("  %-9s %-9s %6.2f %7.3f %8.3f %9.3f %7.1f%%" %
+        print("  %-9s %-9s %6.2f %7.3f %8.3f %8.3f %9.3f %7.1f%%" %
               (r["name"], r["preset"], r["sun"], r["mean"], r["road_sd"],
-               r["sky_br"], 100 * r["blown"]))
+               r["sky_lum"], r["sky_br"], 100 * r["blown"]))
 
     oc = [r for r in rows if r["overcast"]]
-    cl = [r for r in rows if not r["overcast"]]
+    cl = [r for r in rows if not r["overcast"] and not r["dawn"]]
+    dw = [r for r in rows if r["dawn"]]
     out = {}
     print()
     if oc and cl:
@@ -81,9 +108,12 @@ def report(root):
         out["하늘 B−R 흐림"] = statistics.median(r["sky_br"] for r in oc)
         gap = out["하늘 B−R 맑음"] - out["하늘 B−R 흐림"]
         ok = gap > 0
-        print("  (1) 하늘 색  맑음 %d장 B−R %.3f  vs  흐림 %d장 %.3f  → 차이 %+.3f  %s"
+        print("  (1) 하늘 색  맑음계열 %d장 B−R %.3f  vs  흐림계열 %d장 %.3f  → 차이 %+.3f  %s"
               % (len(cl), out["하늘 B−R 맑음"], len(oc), out["하늘 B−R 흐림"], gap,
                  "통과" if ok else "**실패 — 흐린 하늘이 더 파랗다**"))
+        if dw:
+            print("      여명 %d장 B−R %s — 붉은 것이 정상이므로 위 비교에서 제외"
+                  % (len(dw), ", ".join("%+.3f" % r["sky_br"] for r in dw)))
         out["하늘 색 분리"] = 1.0 if ok else 0.0
 
         out["노면 대비 맑음"] = statistics.median(r["road_sd"] for r in cl)
@@ -94,11 +124,16 @@ def report(root):
                  "통과" if d2 > 0 else "실패 — 흐린 날 그림자가 더 세다"))
         out["대비 분리"] = 1.0 if d2 > 0 else 0.0
 
-    worst = max(rows, key=lambda r: r["blown"])
+    # 백화 판정에서 여명은 뺀다 — 낮은 태양이 화각에 들어오면 실제 사진도 그 부근이 탄다.
+    cand = [r for r in rows if not r["dawn"]] or rows
+    worst = max(cand, key=lambda r: r["blown"])
     out["최대 과노출"] = 100 * worst["blown"]
-    print("  (2) 백화     최대 과노출 %.1f%% (%s, %s)  %s"
+    print("  (2) 백화     여명 제외 최대 과노출 %.1f%% (%s, %s)  %s"
           % (out["최대 과노출"], worst["name"], worst["preset"],
              "통과" if worst["blown"] <= 0.05 else "실패 — 5% 초과"))
+    if dw:
+        print("      여명 %d장: 과노출 %s (태양이 화각에 들어오는 조건이라 판정 제외)"
+              % (len(dw), ", ".join("%.1f%%" % (100 * r["blown"]) for r in dw)))
 
     sun = np.array([r["sun"] for r in rows])
     mean = np.array([r["mean"] for r in rows])
