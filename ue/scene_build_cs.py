@@ -67,18 +67,111 @@ DECAL_DIR = "/Game/Road/Kit_MeshDecals_A"
 # 에디터 세션 실측(v7/v8 로그)의 반폭 테이블로 결정론적으로 한다. z 는 건드리지 않는다 —
 # 히어로 빌딩은 원저작이 지면 정렬돼 있고, 미형성 바운드로 ground() 를 하면 오히려
 # 공중에 뜬다(scene_5 부유 건물의 진짜 원인).
-BLDG_POOL = {
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 23.0,
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
+# ★ 2026-09-06 건물 풀 확장: 2종 → 28종. 라이브러리의 히어로 빌딩 월드 39종을 전수
+#   **1종씩 단독 렌더로 검증**했고(2026-08-24 D3D12 페이탈 전례의 기록된 규약,
+#   /c/ue/bldg_verify.sh), 38종 통과 · 1종 실패(Tower_CHJ_A01 은 빌드는 되나 렌더에서
+#   죽는다 — 전례와 같은 증상이라 영구 제외). 반폭·반장은 **-game 에서 실측**했다:
+#   커맨드릿에서는 LevelInstance 바운드가 미형성이라 잴 수 없고, 이전 두 종의 값도
+#   에디터 세션 수기 기록이었다. 실측하니 폭이 19.6~106.8 m 로 크게 갈린다 —
+#   보수적 상수 하나로 때웠으면 좁은 건물은 회랑에서 멀어지고 넓은 건물은 파고들었다.
+#   제외: 렌더 실패 1 · 세트드레싱/고속도로 클로버/출입구 조각 4 · 반높이 <40 m 6.
+BLDG_HALF_W = {
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_BlockThreeBuilding_A01": 53.3,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_CHG_Long_A01": 106.8,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Modern_A01": 31.9,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Triangle_A01": 36.9,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Triangle_B01": 28.9,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFA_Triangle_A01": 31.8,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 26.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 29.7,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_Triangle_A01": 33.4,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_Triangle_B01": 35.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_A01": 29.7,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_B01": 32.8,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_C01": 35.3,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_SFB_A01": 64.3,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_SFB_B01": 41.2,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_A01": 42.8,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_Block_A01": 56.7,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_CHD_Modern_A01": 54.5,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_A01": 32.3,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_B01": 40.9,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_K01": 36.6,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_Modern_A01": 44.6,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHJ_B01": 38.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_SFD_A01": 41.5,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_SFJ_A01": 41.8,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Okkata_B_bld": 51.3,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/SFB_CapitalBuilding_A1": 67.7,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/SFD_RoundSplitTower_A1": 48.7,
 }
-# x-반장 (도로 진행 방향). 회랑 침범 계산에만 쓴다 — 요각이 0 이 아니면 건물의 y-방향
-# 점유폭이 half_w 가 아니라 half_w*|cos| + half_l*|sin| 이 되기 때문이다. 커맨드릿에서는
-# LevelInstance 바운드가 미형성이라 실측이 불가하므로 에디터 세션 값의 상한을 쓴다.
-# 과대추정은 건물을 도로에서 더 멀리 밀 뿐이라 침범 방향으로는 안전하다.
-BLDG_HALF_L = {   # 에디터 세션 실측 (v7 로그: A01 e(29,23), B01 e(30,30))
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 29.0,
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 30.0,
+
+BLDG_HALF_L = {
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_BlockThreeBuilding_A01": 50.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_CHG_Long_A01": 47.1,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Modern_A01": 32.9,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Triangle_A01": 78.6,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Triangle_B01": 22.3,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFA_Triangle_A01": 73.4,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01": 27.1,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01": 33.9,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_Triangle_A01": 17.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_Triangle_B01": 20.7,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_A01": 34.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_B01": 37.5,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_C01": 44.6,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_SFB_A01": 54.1,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_SFB_B01": 35.2,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_A01": 42.8,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_Block_A01": 57.7,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_CHD_Modern_A01": 71.0,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_A01": 32.3,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_B01": 35.1,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_K01": 33.7,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_Modern_A01": 27.6,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHJ_B01": 41.9,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_SFD_A01": 43.1,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_SFJ_A01": 41.8,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Okkata_B_bld": 51.3,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/SFB_CapitalBuilding_A1": 52.9,
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/SFD_RoundSplitTower_A1": 28.6,
 }
+
+# 측면 벽(협곡)용 — 반폭 ≤45 m. 더 넓으면 후퇴거리만큼 멀어져 «벽» 이 아니라 배경이 된다.
+BLDG_POOL = tuple(sorted([
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Modern_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Triangle_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Triangle_B01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFA_Triangle_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_Triangle_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_Triangle_B01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_B01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_C01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_SFB_B01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_B01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_K01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_Modern_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHJ_B01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_SFD_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_SFJ_A01",
+]))
+
+# 배경·소실점용 — 멀리 서므로 폭 제한이 없다. 측면 풀 전체 + 큰 것들.
+TOWER_POOL = BLDG_POOL + tuple(sorted([
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_BlockThreeBuilding_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_CHG_Long_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_SFB_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_Block_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_CHD_Modern_A01",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Okkata_B_bld",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/SFB_CapitalBuilding_A1",
+    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/SFD_RoundSplitTower_A1",
+]))
 # ★ 2026-09-06: 건물 풀이 2종뿐이라 모든 장면의 모든 건물이 같아 보인다(육안 게이트에서
 #   내가 스스로 지적한 잔여 항목). 라이브러리에는 히어로 빌딩 월드가 39종 있고 전부
 #   로드는 된다(실측). 다만 2026-08-24 에 일부가 -game 로드에서 D3D12 페이탈을 일으킨
@@ -88,8 +181,10 @@ BLDG_HALF_L = {   # 에디터 세션 실측 (v7 로그: A01 e(29,23), B01 e(30,3
 _BLDG_ONLY = os.environ.get("CS_BLDG_ONLY", "")
 if _BLDG_ONLY:
     _p = "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/" + _BLDG_ONLY
-    BLDG_POOL = {_p: 35.0}
+    BLDG_HALF_W = {_p: 35.0}
     BLDG_HALF_L = {_p: 35.0}
+    BLDG_POOL = (_p,)
+    TOWER_POOL = (_p,)
 
 LANE_W_M = 3.5                    # 실제 도시부 차로 폭
 LANE_CTRS = (-8.75, -5.25, -1.75, 1.75, 5.25, 8.75)      # 편도 3차로 × 2
@@ -276,7 +371,7 @@ def occupancy_half_w_cm(path, yaw):
     파고들었다(인도 위로 벽면이 내려앉는 장면의 원인).
     """
     t = math.radians(yaw)
-    hw = BLDG_POOL[path]
+    hw = BLDG_HALF_W[path]
     hl = BLDG_HALF_L.get(path, hw * 1.6)
     return (hw * abs(math.cos(t)) + hl * abs(math.sin(t))) * 100
 
@@ -309,7 +404,7 @@ def obb_hit(a, b, pad=0.2):
 def occupancy_half_l_cm(path, yaw):
     """요각 yaw 로 놓인 건물이 x 축(도로 진행) 방향으로 점유하는 반장(cm)."""
     t = math.radians(yaw)
-    hw = BLDG_POOL[path]
+    hw = BLDG_HALF_W[path]
     hl = BLDG_HALF_L.get(path, hw * 1.6)
     return (hl * abs(math.cos(t)) + hw * abs(math.sin(t))) * 100
 
@@ -741,7 +836,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
 
     # 소실점 폐쇄 타워: 도로가 끝난 뒤라 회랑 규칙이 아니라 y 를 직접 준다. 다만 회전
     # 후 x-반extent 상한(=hypot(30,30)≈42.4 m)만큼 뒤로 물려야 본도로를 침범하지 않는다.
-    maxhl_cm = max(math.hypot(BLDG_POOL[q], BLDG_HALF_L[q]) for q in BLDG_POOL) * 100
+    maxhl_cm = max(math.hypot(BLDG_HALF_W[q], BLDG_HALF_L[q]) for q in TOWER_POOL) * 100
     tx = ROAD_X_END_CM + maxhl_cm + 1500
     # ★ 2026-09-05: 두 행(|y|≤9 m, ≤34 m)으로는 정면이 안 닫힌다. render_audit 판정 (4)
     #   «중앙대의 매끄럽고 밝은 화소» 가 최대 12.5% 로 임계 8% 를 넘는다(측방 배경 열을
@@ -749,7 +844,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     for n_row, yspan in ((3, 900.0), (3, 3400.0), (4, 7000.0), (4, 12000.0)):
         for k in range(n_row):
             for _try in range(8):
-                q = random.choice(list(BLDG_POOL))
+                q = random.choice(TOWER_POOL)
                 yw = random.uniform(0, 360)
                 bx = tx + k * (2 * maxhl_cm + 1000) + random.uniform(-1000, 1000)
                 by = random.choice((-1, 1)) * random.uniform(0, yspan)
@@ -771,7 +866,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         bgx = -10000.0
         while bgx < ROAD_X_END_CM + 14000.0:
             for side in (-1, 1):
-                q = random.choice(list(BLDG_POOL))
+                q = random.choice(TOWER_POOL)
                 yw = random.uniform(0, 360)
                 cx = bgx + random.uniform(-jit, jit)
                 cy = side * (band + random.uniform(-jit, jit))
@@ -788,7 +883,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
             #   render_audit 판정 (4) 가 잡은 scene_6 의 좌측 공허가 정확히 그 틈이었다.
             #   예약 실패로도 빠지므로 실제 충전율은 이보다 낮다.
             if random.random() < 0.95:
-                bpath = random.choice(list(BLDG_POOL))
+                bpath = random.choice(BLDG_POOL)
                 jit = random.uniform(-FLANK_YAW_JITTER, FLANK_YAW_JITTER)
                 byaw = jit + (0 if side < 0 else 180)
                 bx = x + random.uniform(-500, 500)
