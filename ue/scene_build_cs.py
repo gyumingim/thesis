@@ -786,6 +786,15 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
         _try_set(slc, "intensity", random.uniform(1.8, 3.0) if overcast
                  else random.uniform(0.7, 1.2), "SkyLight")
 
+    # ★ 2026-09-05: **외형 층과 기하 층의 난수 흐름을 끊는다.** 여기까지가 조명·기상·
+    #   후처리(외형)이고 아래부터가 카메라·차량(기하)인데, 둘이 하나의 난수 스트림을
+    #   공유하고 있었다. 그래서 하늘 속성 몇 개를 추가했더니 뒤따르는 모든 추첨이 밀려
+    #   같은 시드(90000)인데도 장면 배치가 통째로 바뀌었다(검증 세트 라벨 196 → 187).
+    #   그러면 «수정 전후 같은 장면» 대조가 불가능해 외형 변경의 효과를 눈으로 가릴 수 없다.
+    #   기하 층을 장면 인덱스에서 직접 파생한 시드로 재파종해 외형 코드 변경과 독립시킨다.
+    #   (이번 한 번은 배치가 또 바뀌고, 이후로는 고정된다.)
+    random.seed((seed_base + i) * 7919 + 13)
+
     cam_z = random.uniform(130.0, 185.0)          # 승용차~SUV 시점
     cam_yaw = random.uniform(-6.0, 6.0)
     # ★ 2026-08-29: 이전 판은 pitch=roll=0, x=y=0 고정이라 (a) 자차가 21 m 도로의 정중앙
