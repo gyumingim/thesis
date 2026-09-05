@@ -734,6 +734,15 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     fog.component.set_editor_property("fog_height_falloff", 0.2)
 
     # 카메라/센서 층 (크롭 판정 2026-08-24 밤: 게임 티 1순위 = 노이즈·광학결함·롤오프 부재)
+    # ★ 2026-09-05 3차: **난수 분리가 반쪽이었다.** 아래 기하 층 재파종(837행)은 차량·카메라를
+    #   조명 변경으로부터 지켰지만, 그 반대 방향은 열려 있었다 — 건물·타워 배치가 프리셋
+    #   선택(587행)과 조명 파라미터(아래) **사이**에서 난수를 쓰기 때문이다. 실제로 소실점
+    #   타워를 2행 → 4행으로 늘렸더니 노출·태양 고도·색온도 추첨이 전부 밀려, 손대지 않은
+    #   맑음 장면이 주황색으로 물들고(하늘 B−R 0.098 → 0.065) 판정 (1)이 통과에서 실패로
+    #   뒤집혔다. 건물을 늘린 것이 하늘 색을 바꾼 것처럼 보이는 가짜 인과다.
+    #   조명 층 진입 직전에도 재파종해 세 층(프리셋 → 기하 → 조명 → 배치)을 서로 독립시킨다.
+    random.seed((seed_base + i) * 104729 + 7)
+
     ppv = act.spawn_actor_from_class(unreal.PostProcessVolume,
                                      unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
     ppv.set_editor_property("unbound", True)
