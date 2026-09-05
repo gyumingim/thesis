@@ -823,7 +823,13 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     #   0 으로 눌린다 — 그래서 흐린 하늘이 맑은 하늘보다 파랗게 측정됐다(render_audit
     #   판정 1). 노출을 조도에 따라 낮추면 하이라이트가 살아 하늘색이 돌아온다.
     #   dim 은 0=맑음 1=어두움이므로 (1-dim) 만큼만 더 내린다 — 흐린 장면은 건드리지 않는다.
-    ov("auto_exposure_bias", random.gauss(-0.25, 0.30) - 0.55 * (1.0 - dim))
+    # ★ 2026-09-06 재조정: -0.55 는 «과노출 최대 5%» 라는 **내가 만든 임계**를 맞추려고
+    #   넣은 값이었다. 실사 150장을 재 보니 실사의 과노출 중앙이 7.5% 인데 우리 렌더는
+    #   0.68% — **실사보다 11배 덜 탄다**. 하이라이트가 한 번도 날아가지 않는 것은
+    #   그 자체로 분포 수준의 합성 지문이다. 절반 이하로 줄여 실사 쪽으로 되돌린다.
+    #   (원래 의도인 «맑은 하늘 백화로 B−R 이 0 으로 눌리는 것» 방지는 일부 포기한다 —
+    #    실사의 하늘 B−R 중앙도 +0.008 로 중성이라 파란 하늘이 필수 조건은 아니다.)
+    ov("auto_exposure_bias", random.gauss(-0.25, 0.30) - 0.20 * (1.0 - dim))
     ppv.set_editor_property("settings", st)
 
     sun_pitch = random.uniform(*preset["pitch"])
