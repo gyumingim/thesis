@@ -70,6 +70,17 @@ def measure(root):
         loc_sd = np.sqrt(np.maximum(acc2 / n - (acc / n) ** 2, 0.0))
         m = (loc_sd < SKY_SMOOTH) & (bl > np.median(bl))
         sky = band[m] if m.sum() > 200 else band.reshape(-1, 3)
+        # 중앙대(세로 42~62%) 에서 같은 매끄러움 판정을 다시 한다
+        h0, h1 = int(rgb.shape[0] * 0.42), int(rgb.shape[0] * 0.62)
+        mid_l = rgb[h0:h1].mean(axis=2)
+        a1, a2, nn = np.zeros_like(mid_l), np.zeros_like(mid_l), 0
+        for dy in (-2, -1, 0, 1, 2):
+            for dx in (-2, -1, 0, 1, 2):
+                sh = np.roll(np.roll(mid_l, dy, axis=0), dx, axis=1)
+                a1 += sh
+                a2 += sh * sh
+                nn += 1
+        loc_sd_mid = np.sqrt(np.maximum(a2 / nn - (a1 / nn) ** 2, 0.0))
         rows.append(dict(
             name=os.path.basename(f)[:-4],
             preset=d["weather"]["preset"],
@@ -80,6 +91,10 @@ def measure(root):
             road_sd=float(lum[ROAD_ROWS:].std()),
             sky_br=float(np.median(sky[:, 2] - sky[:, 0])),
             sky_lum=float(np.median(sky.mean(axis=1))),
+            # 소실점 공허 — 화면 중앙대(수평선 부근)에 «매끄럽고 밝은» 화소가 많으면
+            # 도심 협곡이 개활지로 열려 하늘/빈 지면이 보인다는 뜻이다. 닫힌 협곡이면
+            # 그 대역은 건물 벽면·도로·차량이라 국소 분산이 크다.
+            void=float(((loc_sd_mid < SKY_SMOOTH) & (mid_l > 0.55)).mean()),
             blown=float((lum > 0.92).mean()),
         ))
     return rows
@@ -126,6 +141,12 @@ def report(root):
 
     # 백화 판정에서 여명은 뺀다 — 낮은 태양이 화각에 들어오면 실제 사진도 그 부근이 탄다.
     cand = [r for r in rows if not r["dawn"]] or rows
+    vw = max(rows, key=lambda r: r["void"])
+    out["소실점 공허 최대"] = 100 * vw["void"]
+    out["소실점 공허 평균"] = 100 * float(np.mean([r["void"] for r in rows]))
+    print("  (4) 소실점   중앙대 «매끄럽고 밝은» 화소 평균 %.1f%% · 최대 %.1f%% (%s, %s)  %s"
+          % (out["소실점 공허 평균"], out["소실점 공허 최대"], vw["name"], vw["preset"],
+             "통과" if vw["void"] <= 0.08 else "실패 — 개활지로 열린다(8% 초과)"))
     worst = max(cand, key=lambda r: r["blown"])
     out["최대 과노출"] = 100 * worst["blown"]
     print("  (2) 백화     여명 제외 최대 과노출 %.1f%% (%s, %s)  %s"

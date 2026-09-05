@@ -677,7 +677,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     # 후 x-반extent 상한(=hypot(30,30)≈42.4 m)만큼 뒤로 물려야 본도로를 침범하지 않는다.
     maxhl_cm = max(math.hypot(BLDG_POOL[q], BLDG_HALF_L[q]) for q in BLDG_POOL) * 100
     tx = ROAD_X_END_CM + maxhl_cm + 1500
-    for n_row, yspan in ((3, 900.0), (3, 3400.0)):
+    # ★ 2026-09-05: 두 행(|y|≤9 m, ≤34 m)으로는 정면이 안 닫힌다. render_audit 판정 (4)
+    #   «중앙대의 매끄럽고 밝은 화소» 가 최대 12.5% 로 임계 8% 를 넘는다(측방 배경 열을
+    #   넣어 17.8% → 12.5% 로 줄었지만 남는다). 더 멀리·더 넓게 두 행을 보태 지평선을 덮는다.
+    for n_row, yspan in ((3, 900.0), (3, 3400.0), (4, 7000.0), (4, 12000.0)):
         for k in range(n_row):
             for _try in range(8):
                 q = random.choice(list(BLDG_POOL))
