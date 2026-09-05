@@ -698,7 +698,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     #   실제 도심은 앞 건물 틈으로 뒤 건물이 보이므로, 회랑 규칙과 무관한 **원경 배경 열**을
     #   두 겹 둔다. 측면 건물(중심 ~45~75 m)보다 확실히 바깥인 120 m·200 m 에 두어
     #   기존 배치와 충돌하지 않게 하고, 충돌 검사는 타워 예약을 그대로 쓴다.
-    for band, step, jit in ((12000.0, 6000.0, 2200.0), (20000.0, 9000.0, 3200.0)):
+    # 배경 열 위치를 120·200 m → **90·150 m** 로 당긴다. 측면 건물 중심이 45~48 m
+    # (회랑 14 m + 후퇴 1.5~4.5 m + 반폭 ~30 m)이므로 90 m 는 충분히 바깥이면서,
+    # 120 m 보다 훨씬 효과적으로 측면 행의 틈을 뒤에서 메운다.
+    for band, step, jit in ((9000.0, 5500.0, 1800.0), (15000.0, 8000.0, 2800.0)):
         bgx = -10000.0
         while bgx < ROAD_X_END_CM + 14000.0:
             for side in (-1, 1):
@@ -715,7 +718,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     n_bldg = 0
     while x < ROAD_X_END_CM + 4000:
         for side in (-1, 1):
-            if random.random() < 0.8:
+            # ★ 2026-09-05: 0.8 → 0.95. 측면 행의 20% 공백이 그대로 **개활지 창**이 된다 —
+            #   render_audit 판정 (4) 가 잡은 scene_6 의 좌측 공허가 정확히 그 틈이었다.
+            #   예약 실패로도 빠지므로 실제 충전율은 이보다 낮다.
+            if random.random() < 0.95:
                 bpath = random.choice(list(BLDG_POOL))
                 jit = random.uniform(-FLANK_YAW_JITTER, FLANK_YAW_JITTER)
                 byaw = jit + (0 if side < 0 else 180)
