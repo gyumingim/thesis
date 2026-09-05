@@ -725,7 +725,11 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     ov("bloom_intensity", 0.24 - 0.12 * dim + random.uniform(-0.03, 0.03))   # 0.4~0.7 은 소실점 백화
     # 100% 음수(U(-1.1,-0.5))라 화면이 평균 42% 어둡게 고정돼 있었다. 백화 억제라는
     # 원래 의도는 유지하되 평균을 -0.25 로 올리고 양쪽으로 연다.
-    ov("auto_exposure_bias", random.gauss(-0.25, 0.30))
+    # ★ 2026-09-05 2차: 맑은 장면의 하늘이 **백화**돼 세 채널이 함께 포화하면서 B−R 이
+    #   0 으로 눌린다 — 그래서 흐린 하늘이 맑은 하늘보다 파랗게 측정됐다(render_audit
+    #   판정 1). 노출을 조도에 따라 낮추면 하이라이트가 살아 하늘색이 돌아온다.
+    #   dim 은 0=맑음 1=어두움이므로 (1-dim) 만큼만 더 내린다 — 흐린 장면은 건드리지 않는다.
+    ov("auto_exposure_bias", random.gauss(-0.25, 0.30) - 0.55 * (1.0 - dim))
     ppv.set_editor_property("settings", st)
 
     sun_pitch = random.uniform(*preset["pitch"])
@@ -779,8 +783,10 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     atm = getattr(sky_atm, "sky_atmosphere_component", None)
     if atm is not None:
         if overcast:
-            # 기본 Mie 산란 계수는 0.003996. 10~25배로 올리면 시야가 희뿌옇게 덮인다.
-            _try_set(atm, "mie_scattering_scale", 0.004 * random.uniform(10.0, 25.0), "SkyAtmosphere")
+            # 기본 Mie 산란 계수는 0.003996. 크게 올리면 시야가 희뿌옇게 덮인다.
+            # 1차(10~25배)에서 흐림 하늘 B−R 이 0.137 → 0.080 으로 내려왔으나 아직 맑음보다
+            # 파랗다. 15~35배로 더 올린다.
+            _try_set(atm, "mie_scattering_scale", 0.004 * random.uniform(15.0, 35.0), "SkyAtmosphere")
             _try_set(atm, "mie_absorption_scale", 0.004 * random.uniform(2.0, 6.0), "SkyAtmosphere")
             _try_set(atm, "mie_anisotropy", random.uniform(0.55, 0.75), "SkyAtmosphere")
         else:
