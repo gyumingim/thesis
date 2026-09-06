@@ -140,25 +140,13 @@ BLDG_HALF_L = {
 # 측면 벽(협곡)용 — 반폭 ≤45 m. 더 넓으면 후퇴거리만큼 멀어져 «벽» 이 아니라 배경이 된다.
 BLDG_POOL = tuple(sorted([
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Modern_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Triangle_A01",
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_NYG_Triangle_B01",
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFA_Triangle_A01",
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_A01",
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_B01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_Triangle_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFC_Triangle_B01",
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_A01",
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_B01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_SFE_C01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_SFB_B01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_A01",
     "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_B01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_K01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHE_Modern_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHJ_B01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_SFD_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_SFJ_A01",
 ]))
 
 # 배경·소실점용 — 멀리 서므로 폭 제한이 없다. 측면 풀 전체 + 큰 것들.
@@ -382,9 +370,13 @@ def spawn_bldg(path, x, y_cm, yaw):
 #   도로 위를 지나가던 것(12장 중 3장)의 정확한 크기다.
 #   차량은 이미 mesh.get_bounds().origin 으로 이 보정을 하는데(생성기 _bo) 건물만
 #   안 하고 있었다 — 커맨드릿에서 LevelInstance 바운드를 못 재기 때문이다.
-#   **한계**: 28종 중 1종만 쟀다. 나머지가 더 클 수 있어 여유를 조금 얹은 8 m 를 쓴다.
-#   전 종을 재면(-game, SHOT_DELAY≥55) 종별 오프셋으로 대체해 이 마진을 없앨 수 있다.
-BLDG_PIVOT_MARGIN_CM = 800.0
+#   ★ 8 m 로 뒀다가 **3 m 로 내렸다.** 3시드 실측에서 8 m 마진이 소실점 공허 중앙을
+#     5.05 → 7.11%% 로 악화시켜(임계 6.1) 판정을 뒤집었다 — 건물을 도로에서 밀어내면
+#     협곡이 열린다. 안전과 공허를 맞바꾼 셈이고, 그러고도 넘침이 남았다(scene_7).
+#     대신 **측면 풀을 원래 두 종과 비슷한 크기(반폭 ≤33 m)로 좁혀** 검증된 기하 영역으로
+#     되돌리고, 마진은 보조적으로만 둔다. 큰 건물은 배경 풀에만 남는다(멀어서 무해).
+#   **한계**: 28종 중 1종만 쟀다(off 6.4 m). 전 종을 재면 종별 보정으로 대체할 수 있다.
+BLDG_PIVOT_MARGIN_CM = 300.0
 
 
 def occupancy_half_w_cm(path, yaw):
