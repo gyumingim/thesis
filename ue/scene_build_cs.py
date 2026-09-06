@@ -351,12 +351,24 @@ def top0(a):
     return a
 
 
+# ★ 2026-09-06: 렌더에서 «건물이 도로 위를 지나간다» 를 보고도 **어느 건물인지 알 수
+#   없었다**. 라벨 JSON 에 차량만 있고 건물은 없어서, 화면을 보고 자산을 역추적할 방법이
+#   없었기 때문이다. 피벗 오프셋 8 m 마진을 넣고도 재발했는데 원인 자산을 특정하지 못해
+#   추측으로 대응할 뻔했다. 놓은 건물을 전부 기록해 «이 장면의 이 위치» 를 자산으로
+#   바로 되짚을 수 있게 한다.
+BLDG_PLACED = []
+
+
 def spawn_bldg(path, x, y_cm, yaw):
     """저수준 배치 — y 를 그대로 쓴다. 회랑 계산은 호출자 몫."""
     w = unreal.load_asset(path)
     if w is None:
         log("BLDG 로드 실패 " + path)
         return None
+    BLDG_PLACED.append(dict(asset=path.rsplit("/", 1)[-1],
+                            x_m=round(x / 100.0, 1), y_m=round(y_cm / 100.0, 1),
+                            yaw_deg=round(yaw, 1),
+                            half_w_m=BLDG_HALF_W.get(path), half_l_m=BLDG_HALF_L.get(path)))
     bl = act.spawn_actor_from_class(unreal.LevelInstance, unreal.Vector(x, y_cm, 0),
                                     unreal.Rotator(0, 0, yaw))
     bl.set_editor_property("world_asset", w)
@@ -647,6 +659,7 @@ def bbox2d(lb):
 
 def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, trees=(), props=()):
     random.seed(seed_base + i)
+    del BLDG_PLACED[:]                     # 장면마다 초기화
     level_path = "%s/gen_%d" % (LEVEL_DIR, i)
     open_clean_level(level_path)
 
@@ -1305,6 +1318,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                        sun=dict(pitch=round(sun_pitch, 1), yaw=round(sun_yaw, 1)),
                        weather=dict(preset=preset["name"], sun_intensity=round(sun_int, 2),
                                     fog_density=round(fog_d, 5), lamps=bool(lamps_on)),
+                       buildings=list(BLDG_PLACED),
                        vehicles=labels), f, indent=2)
     log("scene_%d OK (차량 %d, 건물 %d, 차선조각 %d)" % (i, len(labels), n_bldg, n_line))
 
