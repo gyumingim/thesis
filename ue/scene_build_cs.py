@@ -363,6 +363,18 @@ def spawn_bldg(path, x, y_cm, yaw):
     return bl
 
 
+# ★ 2026-09-06 실측: 액터 **피벗과 형상 중심이 어긋난다.** -game 에서 잰
+#   Bldg_Hero_Mid_NYG_Modern_A01 은 off_x=−3.3 m · off_y=+5.5 m — 요각이 무작위이므로
+#   유효 횡오프셋은 반경 6.4 m 안에서 **어느 방향으로도** 나타난다. 현행 측면 후퇴거리가
+#   1.5~4.5 m 이므로 최악의 경우 형상이 회랑 안으로 1.9~4.9 m 들어온다. 렌더에서 건물이
+#   도로 위를 지나가던 것(12장 중 3장)의 정확한 크기다.
+#   차량은 이미 mesh.get_bounds().origin 으로 이 보정을 하는데(생성기 _bo) 건물만
+#   안 하고 있었다 — 커맨드릿에서 LevelInstance 바운드를 못 재기 때문이다.
+#   **한계**: 28종 중 1종만 쟀다. 나머지가 더 클 수 있어 여유를 조금 얹은 8 m 를 쓴다.
+#   전 종을 재면(-game, SHOT_DELAY≥55) 종별 오프셋으로 대체해 이 마진을 없앨 수 있다.
+BLDG_PIVOT_MARGIN_CM = 800.0
+
+
 def occupancy_half_w_cm(path, yaw):
     """요각 yaw 로 놓인 건물이 y 축 방향으로 점유하는 반폭(cm).
 
@@ -373,7 +385,7 @@ def occupancy_half_w_cm(path, yaw):
     t = math.radians(yaw)
     hw = BLDG_HALF_W[path]
     hl = BLDG_HALF_L.get(path, hw * 1.6)
-    return (hw * abs(math.cos(t)) + hl * abs(math.sin(t))) * 100
+    return (hw * abs(math.cos(t)) + hl * abs(math.sin(t))) * 100 + BLDG_PIVOT_MARGIN_CM
 
 
 def _halfproj(ux, uy, c, s, ex, ey):
@@ -881,7 +893,7 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
                 #   못했다(-game 바운드 프로브가 로그 회전 문제로 오프셋 수집에 실패).
                 #   그 미지수를 흡수하는 마진이며, 순수하게 배치를 **거르기만** 하므로
                 #   새로운 침범을 만들 수 없다. 오프셋을 재면 마진을 줄일 수 있다.
-                if abs(cy) - occupancy_half_w_cm(q, yw) < CORRIDOR_CM + 2000.0:
+                if abs(cy) - occupancy_half_w_cm(q, yw) < CORRIDOR_CM:
                     continue
                 if reserve_tower(cx, cy, occupancy_half_l_cm(q, yw),
                                  occupancy_half_w_cm(q, yw)):
