@@ -150,16 +150,10 @@ BLDG_POOL = tuple(sorted([
 ]))
 
 # 배경·소실점용 — 멀리 서므로 폭 제한이 없다. 측면 풀 전체 + 큰 것들.
-TOWER_POOL = BLDG_POOL + tuple(sorted([
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_BlockThreeBuilding_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Mid_CHG_Long_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_SFB_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_Block_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Bldg_Hero_Tower_CHC_CHD_Modern_A01",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/Okkata_B_bld",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/SFB_CapitalBuilding_A1",
-    "/Game/Building/Library/Kit_Hero_Bldg/LevelInstance/SFD_RoundSplitTower_A1",
-]))
+# 배경·소실점용 — 멀리 서고 회랑 검사도 받으므로 **크기 제한 없이 전 종**을 쓴다.
+# (측면 풀에서 파생시켰더니 측면을 좁힐 때 배경까지 28 → 16 종으로 같이 줄었다.
+#  스카이라인 다양성은 측면 제한과 무관해야 하므로 치수표에서 직접 만든다.)
+TOWER_POOL = tuple(sorted(BLDG_HALF_W))
 # ★ 2026-09-06: 건물 풀이 2종뿐이라 모든 장면의 모든 건물이 같아 보인다(육안 게이트에서
 #   내가 스스로 지적한 잔여 항목). 라이브러리에는 히어로 빌딩 월드가 39종 있고 전부
 #   로드는 된다(실측). 다만 2026-08-24 에 일부가 -game 로드에서 D3D12 페이탈을 일으킨
