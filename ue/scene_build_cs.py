@@ -873,30 +873,33 @@ def build_scene(i, road, sw, pole, vehicles, crosswalk=None, seed_base=3000, tre
     # 배경 열 위치를 120·200 m → **90·150 m** 로 당긴다. 측면 건물 중심이 45~48 m
     # (회랑 14 m + 후퇴 1.5~4.5 m + 반폭 ~30 m)이므로 90 m 는 충분히 바깥이면서,
     # 120 m 보다 훨씬 효과적으로 측면 행의 틈을 뒤에서 메운다.
-    for band, step, jit in ((9000.0, 5500.0, 1800.0), (15000.0, 8000.0, 2800.0)):
+    # 배경 열. 회랑 검사는 필수다 — 소실점 타워는 도로 끝 너머(x>177 m)라 침범할 수
+    # 없지만 이 열은 도로 **옆구리**(x −100~260 m)를 따라가고, TOWER_POOL 에는 반폭
+    # 106.8 m 짜리도 있어 90 m 밴드에서 도로를 덮은 적이 있다(12장 중 3장, 2026-09-06).
+    #
+    # ★ 2026-09-11: **재시도가 없어 150 m 밴드가 굶고 있었다.** 슬롯마다 한 번만 뽑고
+    #   기각되면 그냥 버렸는데, 기각 요인이 둘(회랑 검사·타워 AABB 예약)이고 이웃 간격이
+    #   건물 길이와 비슷해 충돌이 잦다. 실측: 90 m 밴드 장면당 4.5동, **150 m 밴드 0.3동**.
+    #   배경이 비면 측면 행의 틈으로 빈 지면이 보여 소실점 공허가 커진다(현재 7.1% > 6.1%).
+    #   슬롯마다 자산·요각·지터를 새로 굴려 최대 6회 시도한다.
+    #   재시도만으로는 150 m 밴드가 살아나지 않았다(0.3 → 0.5동). 그 밴드의 슬롯 간격
+    #   80 m 가 건물 길이(반장 최대 71 m → AABB 142 m)보다 짧아 이웃끼리 구조적으로
+    #   겹치기 때문이다. 간격을 건물 길이 위로 올리고, 대신 90 m 밴드는 촘촘하게 한다.
+    for band, step, jit in ((9000.0, 4500.0, 1500.0), (15000.0, 12000.0, 2000.0)):
         bgx = -10000.0
         while bgx < ROAD_X_END_CM + 14000.0:
             for side in (-1, 1):
-                q = random.choice(TOWER_POOL)
-                yw = random.uniform(0, 360)
-                cx = bgx + random.uniform(-jit, jit)
-                cy = side * (band + random.uniform(-jit, jit))
-                # ★ 2026-09-06: **회랑 검사가 빠져 있었다.** 소실점 타워는 도로 끝 너머
-                #   (x>177 m)에 서므로 침범할 수 없지만, 이 배경 열은 x −100~260 m 로
-                #   도로 **옆구리**를 따라간다. 그런데 TOWER_POOL 에는 반폭 106.8 m 짜리도
-                #   있어서 90 m 밴드에 놓이면 y=−16.8 까지 뻗어 **도로를 덮는다**.
-                #   실측: 건물 풀 확장 후 12장 중 3장(25%)에서 건물이 도로 위를 지나갔다.
-                #   측면 건물 경로는 이미 하는 검사를 여기서도 한다.
-                # 여유를 CORRIDOR 보다 20 m 더 준다. 점유 반폭은 액터 **피벗** 기준으로
-                #   계산하는데, 형상 중심이 피벗에서 얼마나 벗어나 있는지는 아직 재지
-                #   못했다(-game 바운드 프로브가 로그 회전 문제로 오프셋 수집에 실패).
-                #   그 미지수를 흡수하는 마진이며, 순수하게 배치를 **거르기만** 하므로
-                #   새로운 침범을 만들 수 없다. 오프셋을 재면 마진을 줄일 수 있다.
-                if abs(cy) - occupancy_half_w_cm(q, yw) < CORRIDOR_CM:
-                    continue
-                if reserve_tower(cx, cy, occupancy_half_l_cm(q, yw),
-                                 occupancy_half_w_cm(q, yw)):
-                    spawn_bldg(q, cx, cy, yw)
+                for _try in range(6):
+                    q = random.choice(TOWER_POOL)
+                    yw = random.uniform(0, 360)
+                    cx = bgx + random.uniform(-jit, jit)
+                    cy = side * (band + random.uniform(-jit, jit))
+                    if abs(cy) - occupancy_half_w_cm(q, yw) < CORRIDOR_CM:
+                        continue
+                    if reserve_tower(cx, cy, occupancy_half_l_cm(q, yw),
+                                     occupancy_half_w_cm(q, yw)):
+                        spawn_bldg(q, cx, cy, yw)
+                        break
             bgx += step
 
     x = 2000.0
