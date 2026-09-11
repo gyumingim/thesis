@@ -206,6 +206,25 @@ def main():
     # 본문에 인용되지 **않는 것이 맞는** 항목 — 값은 지키되 누락 경고를 내지 않는다.
     # 이탈/충돌 종점은 "실패가 충돌에서 이탈로 옮겨간다" 주장이 n=5 에서 철회되면서
     # 본문에서 빠졌다(§6.2). 값 자체는 회귀 감시를 위해 계속 대조한다.
+    # 시나리오 블록 측정 (§7 표 6) — 원자료에서 재계산해 대조한다
+    try:
+        import statistics as _sb
+        _R = "bench_results/scenario_blocks"
+        _B = (500000, 510000, 520000, 530000)
+
+        def _rt(t, b):
+            rows = json.load(open("%s/eval_md__%s__b%d.json" % (_R, t, b), encoding="utf-8"))
+            return 100.0 * [x for x in rows if x["ckpt"] == "final.pt"][0]["success_rate"]
+        _L = ["clean_s%d" % i for i in (1, 2, 3, 4, 5)]
+        _N = ["nd_s%d" % i for i in (2, 3, 4, 5, 6)]
+        _g = [_sb.mean(_rt(t, b) for t in _L) - _sb.mean(_rt(t, b) for t in _N) for b in _B]
+        checks += [("블록 평균 격차", "-18.0", "%.1f" % _sb.mean(_g)),
+                   ("블록 최소 격차(논문)", "-12.7", "%.1f" % max(_g)),
+                   ("블록 최대 격차", "-22.0", "%.1f" % min(_g)),
+                   ("블록 4/4 음수", "예", "예" if all(x < 0 for x in _g) else "아니오")]
+    except Exception:
+        pass
+
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
@@ -213,7 +232,10 @@ def main():
         ok = expected == actual
         bad += not ok
         print("  %-26s 논문 %-12s 원자료 %-12s %s" % (name, expected, actual, "OK" if ok else "불일치"))
-        if ok and expected not in text and name not in NOT_CITED:
+        # 본문은 유니코드 마이너스(U+2212)를 쓰고 계산값은 ASCII 하이픈이라 그대로
+        # 비교하면 멀쩡한 값이 «누락» 으로 찍힌다. 부호만 정규화해서 찾는다.
+        _alt = expected.replace("-", "−")
+        if ok and expected not in text and _alt not in text and name not in NOT_CITED:
             print("      ! 이 값이 PAPER.md 본문에서 발견되지 않는다 — 반영 누락 가능")
 
     # 본문에 남아 있으면 안 되는 표현
