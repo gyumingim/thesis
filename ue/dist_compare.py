@@ -24,8 +24,13 @@ import sys
 import numpy as np
 from PIL import Image
 
-REAL_DIR = "C:/ue/real_labeled"
-REAL_N = 150
+# 참조 집합은 **도메인이 결과를 지배**한다. 둘을 다 볼 수 있게 인자로 받는다.
+#   real_labeled (Udacity CrowdAI) — 캘리포니아 간선도로/고속도로. 하늘이 넓게 열린다.
+#   ref_all — sKVD 작업용 혼합 도시 참조 170장. 도심 거리가 많아 우리 장면(협곡)에
+#             더 가깝지만 스튜디오 차량 사진 같은 비거리 이미지도 섞여 있다.
+# 어느 쪽도 «정답» 이 아니므로 두 값을 괄호로 읽는다.
+REAL_DIR = os.environ.get("REF_DIR", "C:/ue/real_labeled")
+REAL_N = int(os.environ.get("REF_N", "150"))
 W, H = 1280, 720
 
 
