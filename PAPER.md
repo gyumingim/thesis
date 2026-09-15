@@ -1637,20 +1637,32 @@ lightweight curve falling: the lightweight curve is flat from its first checkpoi
 7.3pp, per-seed Kendall tau disagreeing in sign). The price of abstraction is therefore not
 early learning speed but the final performance ceiling.
 
-Three caveats are stated up front. (i) The one-hour gap is not statistically significant
-(Welch t = -1.31, df = 7.9, p = 0.227, 95% CI on the difference [-35.0, +9.7]pp). (ii) The
+Four caveats are stated up front. (i) The one-hour gap is not statistically significant
+(Welch t = -1.31, df = 7.9, p = 0.227, 95% CI on the difference [-35.0, +9.7]pp). This is a
+statement about resolution, not equivalence: the design's a priori power at the observed
+effect size (d = 0.83) is only 0.19, and the TOST equivalence bound is 30.7pp -- wider than
+the gap itself -- so neither "different" nor "the same" can be asserted. (ii) The
 five-minute advantage has an uncorrected p of 0.039, but it is the smallest p among twelve
 checkpoints and does not survive multiple-comparison correction (Bonferroni p = 0.47;
-permutation max-T adjusted p = 0.26) -- what the twelve checkpoints do show consistently is
-the sign pattern: positive at 5 and 10 minutes, negative from 15 minutes onward. (iii) An
+permutation max-T adjusted p = 0.26). However, the claim the crossing actually makes is that
+the two arms differ in SLOPE, and that is testable without selecting a timepoint: per-seed
+deltas (final minus the five-minute anchor) differ by +30.7pp between arms (exact
+permutation over all 252 splits, two-sided p = 0.0079; +21.3pp and p = 0.0238 with the
+ten-minute anchor). So the budget-dependence itself is significant even though no single
+checkpoint gap is. (iii) Every MetaDrive transfer number was measured on one fixed
+30-scenario sample (500000-500029). Re-evaluating the stored checkpoints on three further
+blocks shows the reported block is the one most favorable to the lightweight arm: per-block
+gaps are -12.7 / -18.7 / -22.0 / -18.7pp, mean -18.0pp (Welch p = 0.094). Scenario-axis
+variance is narrower than seed-axis variance (ratio 0.36-0.80), so the direction is stable.
+(iv) An
 earlier version of this comparison was cross-machine -- the 68%+/-9% baseline was measured
 on a laptop (RTX 4060) while the then-current desktop figure was 48.9% (n=3, RTX 5080); the
 matched-hardware baseline reported here replaces it (Section 7).
 
 The path to that result is the paper's substantive contribution. Calibration required
 seven rounds of failure-diagnosis-repair, and the final round uncovered a single
-coordinate sign-convention error that drove transfer success to 0% while perfectly
-masquerading as a different pathology: over-optimization exploiting the source simulator.
+coordinate sign-convention error that drove transfer success to 0% (out-of-road 88-97%)
+while perfectly masquerading as a different pathology: over-optimization exploiting the source simulator.
 Beneath that disguise we had built a mutually consistent account -- collapse curves,
 behavioral fingerprints, a time-resolved diagnostic metric, and the rejection of two of
 three remedies -- all of which dissolved once the sign was corrected. Because the mirror
