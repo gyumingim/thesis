@@ -132,6 +132,64 @@ def _selftest():
     return 0 if okall else 1
 
 
+def _realtest(steps=300, envs=64, n_vehicles=3, seed=7):
+    """**실제 환경 관측**에 대고 확인한다 — 합성 관측만으로는 두 가정이 검증되지 않는다:
+    (a) «빈 슬롯은 전 차원 0» 이라는 점유 판정이 실제로 맞는가,
+    (b) 포화되어 되돌릴 수 없는 슬롯이 실제로 얼마나 되는가.
+    """
+    import os
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from env_numba import IntersectionEnv
+
+    env = IntersectionEnv(envs, n_vehicles, seed=seed)
+    rng = np.random.default_rng(0)
+    occ = sat = tot = 0
+    errs, dists = [], []
+    obs = env.obs.copy()
+    for _ in range(steps):
+        for s in range(N_OTHERS):
+            b = OTHER_BASE + s * OTHER_DIM
+            o = np.any(obs[:, b:b + OTHER_DIM] != 0.0, axis=1)
+            f = obs[:, b + 0]
+            tot += envs
+            occ += int(o.sum())
+            sat += int((o & ((f <= EPS) | (f >= 1.0 - EPS))).sum())
+        out = inject(obs, rng, 50.0)
+        for s in range(N_OTHERS):
+            b = OTHER_BASE + s * OTHER_DIM
+            m = obs[:, b + 0] != out[:, b + 0]
+            if m.any():
+                d0 = (2 * obs[m, b + 0] - 1) * 50.0
+                d1 = (2 * out[m, b + 0] - 1) * 50.0
+                errs.append(d1 - d0)
+                dists.append(np.hypot(d0, (2 * obs[m, b + 1] - 1) * 50.0))
+        obs = env.step(rng.uniform(-1, 1, (envs, 2)).astype(np.float32))[0].copy()
+    errs = np.concatenate(errs)
+    dists = np.concatenate(dists)
+    print("실제 관측 %d스텝 × %d환경 × %d슬롯 (V=%d)" % (steps, envs, N_OTHERS, n_vehicles))
+    print("  슬롯 점유율 %.1f%% | 그중 포화(주입 불가) %.2f%%"
+          % (100 * occ / tot, 100 * sat / max(occ, 1)))
+    print("  → 점유율이 낮다는 것은 **주입이 관측의 작은 부분에만 닿는다**는 뜻이다.")
+    print("    V=%d 에 슬롯 8개이므로 상한이 %.0f%% 이고, 검출 반경 밖이 대부분이다."
+          % (n_vehicles, 100.0 * n_vehicles / N_OTHERS))
+    print("    실험을 설계할 때 개입의 세기를 이 비율과 함께 읽어야 한다.")
+    print("  실제로 주입된 표본 %d건" % len(errs))
+    for lo, hi in ((0, 15), (15, 30), (30, 50)):
+        m = (dists >= lo) & (dists < hi)
+        if m.sum() > 50:
+            print("    %2d~%2d m: 평균 %+.2f σ %.2f (n=%d)"
+                  % (lo, hi, errs[m].mean(), errs[m].std(), m.sum()))
+    print("  (원거리 σ 가 목표보다 조금 작은 것은 검출 반경에서의 클리핑 때문이다.)")
+    return 0
+
+
 if __name__ == "__main__":
     import sys
-    sys.exit(_selftest())
+    rc = _selftest()
+    print()
+    if "--real" in sys.argv:
+        rc |= _realtest()
+    else:
+        print("실제 환경 검증은 --real 로 함께 돌린다.")
+    sys.exit(rc)
