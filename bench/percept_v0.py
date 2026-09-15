@@ -71,9 +71,20 @@ def main(pattern):
             d_sz = FX * w_eff / max(u1 - u0, 1e-6)
             # 횡방향: 박스 중심 u → y = (u-cx)·d/fx
             y_gp = (0.5 * (u0 + u1) - CX) * d_gp / FX
-            rows.append((gt_x, gt_y, d_gp, d_sz, y_gp))
+            # ★ 2026-09-15 추가: 위 d_gp 는 **쓸 수 없는 추정치**다(§6.4 정정). h_cam 을
+            #   라벨에서 차량마다 역산하므로 지면평면 수식과 대수적으로 소거돼
+            #   d_gp ≡ x_min(최근접 바닥 모서리의 종방향 거리)이 된다 — 잔차가 0 이고,
+            #   gt_x(박스 **중심**)와의 차이는 오차가 아니라 «중심 대 모서리» 정의 차이다.
+            #   그 산포를 노이즈 σ 로 쓰면 결정론적 기하 오프셋을 노이즈로 주입하게 된다.
+            #
+            #   고칠 점 둘: (1) 실계는 카메라 높이를 **한 번 캘리브레이션**하고 고정한다 —
+            #   차량마다 역산하지 않는다. (2) 지면평면이 추정하는 것은 중심이 아니라
+            #   **접지선까지의 거리**이므로 비교 대상도 x_min 이어야 한다.
+            #   둘을 고치면 잔차가 비로소 «평면 가정 + 캘리브레이션 오차» 가 된다.
+            x_min = float(c[:, 0].min())
+            rows.append((gt_x, gt_y, d_gp, d_sz, y_gp, h_cam, v1, x_min))
     r = np.array(rows)
-    gt_x, gt_y, d_gp, d_sz, y_gp = r.T
+    gt_x, gt_y, d_gp, d_sz, y_gp, h_cams, v1s, x_mins = r.T
     print(f"평가 대상 차량: {len(r)}건 (거리 {gt_x.min():.0f}~{gt_x.max():.0f}m)")
     for name, est in (("지면평면", d_gp), ("크기사전", d_sz)):
         err = est - gt_x
@@ -82,13 +93,34 @@ def main(pattern):
               f"| p90 {np.percentile(rel,90)*100:5.1f}%")
     lat_err = np.abs(y_gp - gt_y)
     print(f"  횡방향(지면평면 거리 사용): MAE {lat_err.mean():.2f}m")
-    # 거리 구간별 (노이즈 주입 실험용 통계)
-    print("  거리별 지면평면 σ:", end=" ")
+    # 거리 구간별 (구판 — 참고용으로만 남긴다)
+    print("  [구판] 거리별 지면평면 σ:", end=" ")
     for lo, hi in ((4, 15), (15, 30), (30, 50)):
         m = (gt_x >= lo) & (gt_x < hi)
         if m.sum() > 2:
             print(f"{lo}-{hi}m: {np.std(d_gp[m]-gt_x[m]):.2f}m(n={m.sum()})", end="  ")
     print()
+    print("  ↑ 이 σ 는 노이즈가 아니다 — 차량마다 h_cam 을 역산해 d_gp ≡ x_min 이 되므로")
+    print("    gt_x 와의 차이는 «박스 중심 대 최근접 모서리» 라는 결정론적 정의 차이다.")
+
+    # ── 정정판: 고정 캘리브레이션 + 올바른 비교 대상 ──────────────────────────
+    h_fix = float(np.median(h_cams))          # 한 번 캘리브레이션한 값에 해당
+    d_fix = FX * h_fix / np.maximum(v1s - CY, 1e-6)
+    res = d_fix - x_mins                      # 접지선 추정의 진짜 잔차
+    print()
+    print(f"  [정정판] 고정 카메라높이 {h_fix:.3f} m (역산값의 중앙값 = 1회 캘리브레이션 상당)")
+    print(f"           비교 대상 = x_min(접지선), 지면평면이 실제로 추정하는 양")
+    print(f"           전체 잔차: 평균 {res.mean():+.3f} m · σ {res.std():.3f} m · "
+          f"MAE {np.abs(res).mean():.3f} m (n={len(res)})")
+    print("           거리별 σ:", end=" ")
+    for lo, hi in ((4, 15), (15, 30), (30, 50)):
+        m = (gt_x >= lo) & (gt_x < hi)
+        if m.sum() > 2:
+            print(f"{lo}-{hi}m: 평균{res[m].mean():+.2f} σ{res[m].std():.2f}m(n={m.sum()})",
+                  end="  ")
+    print()
+    print("           ↑ **이 σ 가 노이즈 주입에 쓸 수 있는 값**이다. 평면 가정과 고정")
+    print("             캘리브레이션에서 오는 잔차이며, 정의 차이가 섞여 있지 않다.")
 
 
 if __name__ == "__main__":
