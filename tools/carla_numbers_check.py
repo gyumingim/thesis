@@ -61,6 +61,13 @@ def pct(cell):
     return "%.1f" % (100 * ok / n) if n else "—"
 
 
+# ★ 선택 검사가 실패해도 전체를 막지 않지만 **조용히 사라지면 안 된다**.
+# 실제로 os 미import 로 블록 하나가 통째로 죽어 있었는데 출력은 «전 항목 일치»
+# 였다(2026-09-15). 건너뛴 사실과 이유를 반드시 남긴다.
+def _skip(tag, e):
+    print("  (검사 건너뜀 [%s]: %s: %s)" % (tag, type(e).__name__, e))
+
+
 def main():
     if not os.path.isdir(ROOT):
         print("원자료 없음:", ROOT)
@@ -107,8 +114,8 @@ def main():
             r, _ = _st.pearsonr([md[k] for k in ks], [carla[k] for k in ks])
             checks.append(("두 시험장 상관 |r|<0.1", "예", "예" if abs(r) < 0.1 else "아니오"))
             checks.append(("스윕 정책 수", str(len(ks)), str(len(ks))))
-    except Exception:
-        pass
+    except Exception as _e:
+        _skip("시험장 상관", _e)
 
     # 라운드가 독립 반복인지 — 결정론이면 n 을 부풀리게 된다
     try:
@@ -121,8 +128,8 @@ def main():
         if per:
             det = all(len(v) == 1 for v in per.values())
             checks.append(("스윕 라운드 = 결정론 반복", "예", "예" if det else "아니오"))
-    except Exception:
-        pass
+    except Exception as _e:
+        _skip("스윕 결정론", _e)
 
     # 표 2·3·4 의 반복도 같은 20 앵커의 재측정이다 — 유효 표본이 n 이 아니다
     try:
@@ -170,8 +177,8 @@ def main():
         if tot:
             checks.append(("표2·3 경로 라운드 간 동일", "%d/%d" % (tot, tot),
                            "%d/%d" % (same, tot)))
-    except Exception:
-        pass
+    except Exception as _e:
+        _skip("표2·3 군집", _e)
 
     # 표 5 (시드 스윕) — 구판이 철회한 설명 대신 남긴 수치들
     try:
@@ -216,8 +223,8 @@ def main():
                            str(sum(r["min_R"] >= 999 for r in st))))
             checks.append(("표5 우회전 entry=0", "50",
                            str(sum(r["entry_kmh"] == 0 for r in rt2))))
-    except Exception:
-        pass
+    except Exception as _e:
+        _skip("표5 필터", _e)
 
     bad = 0
     for name, expected, actual in checks:

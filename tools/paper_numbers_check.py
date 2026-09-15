@@ -35,6 +35,16 @@ def finals(pattern, key="success_rate"):
     return out
 
 
+# ★ 선택 검사가 실패해도 전체를 막지 않지만 **조용히 사라지면 안 된다**.
+# 실제로 os 미import 로 블록 하나가 통째로 죽어 있었는데 출력은 «전 항목 일치»
+# 였다(2026-09-15). 건너뛴 사실과 이유를 반드시 남긴다.
+def _skip(tag, e):
+    print("  (검사 건너뜀 [%s]: %s: %s)" % (tag, type(e).__name__, e))
+    if isinstance(e, ImportError):
+        print("     → 의존 모듈이 없다. **.venv/Scripts/python.exe 로 실행하라** —")
+        print("       시스템 파이썬으로 돌리면 이 검사가 조용히 빠진다.")
+
+
 def main():
     text = open(PAPER, encoding="utf-8").read()
     clean = curve("bench_results/clean/eval_md__clean_s*.json")
@@ -102,8 +112,8 @@ def main():
                                   [r["success_rate"] for r in rows])
             signs.add(int(np.sign(t)))
         checks.append(("성공률 추세 부호", "불일치", "불일치" if len(signs) > 1 else "일치"))
-    except Exception:
-        pass
+    except Exception as _e:
+        _skip("성공률 추세 부호", _e)
 
     # 동일 장비 대조 (데스크톱 정숙 네이티브 3시드) — 헤드라인 판정의 근거
     def curve_mean(pattern, ckpt, field="success_rate"):
@@ -160,8 +170,8 @@ def main():
                 hit += abs(allv[~m].mean() - allv[m].mean()) >= abs(obs) - 1e-9
             checks += [("교차 기울기 차이", "30.7", "%.1f" % obs),
                        ("교차 순열 p", "0.0079", "%.4f" % (hit / tot))]
-    except Exception:
-        pass
+    except Exception as _e:
+        _skip("교차 구조 검정", _e)
 
     # 오라클 이득이 선택 편향인지 (§6.2·§7 (5)) — 널 분포 안이면 신호가 아니다
     try:
@@ -179,8 +189,8 @@ def main():
         lo, hi = _np.percentile(null, [2.5, 97.5])
         inside = lo <= _np.mean(ors) <= hi
         checks.append(("오라클 이득 = 선택 편향", "예", "예" if inside else "아니오"))
-    except Exception:
-        pass
+    except Exception as _e:
+        _skip("오라클 편향", _e)
 
     # DPC 재산출 (§6.3) — tools/dpc_recompute.py 와 같은 정의로 다시 계산
     try:
@@ -200,8 +210,8 @@ def main():
             l = [(L[T > 1800], M[T > 1800]) for L, M, T in pr]
             checks += [("DPC 전반 τ", "0.190", "%.3f" % stratified_tau(e)),
                        ("DPC 후반 τ", "0.039", "%.3f" % stratified_tau(l))]
-    except Exception:
-        pass
+    except Exception as _e:
+        _skip("DPC τ 재산출", _e)
 
     # 본문에 인용되지 **않는 것이 맞는** 항목 — 값은 지키되 누락 경고를 내지 않는다.
     # 이탈/충돌 종점은 "실패가 충돌에서 이탈로 옮겨간다" 주장이 n=5 에서 철회되면서
@@ -222,8 +232,8 @@ def main():
                    ("블록 최소 격차(논문)", "-12.7", "%.1f" % max(_g)),
                    ("블록 최대 격차", "-22.0", "%.1f" % min(_g)),
                    ("블록 4/4 음수", "예", "예" if all(x < 0 for x in _g) else "아니오")]
-    except Exception:
-        pass
+    except Exception as _e:
+        _skip("시나리오 블록", _e)
 
     # §6.4 지면평면 σ 재측정 (2026-09-15) — 원자료에서 재계산
     try:

@@ -11,8 +11,12 @@
 - **UE 렌더는 단일 인스턴스.** `ue/verify10.sh` 의 lockdir 을 우회하지 않는다.
 
 **재개 절차**
-1. `git pull` → `python tools/paper_numbers_check.py` 와 `python tools/carla_numbers_check.py`
-   가 **둘 다 «전 항목 일치»** 인지 확인한다. 불일치면 그것부터 고친다.
+1. `git pull` → **`.venv/Scripts/python.exe`** 로 `tools/paper_numbers_check.py` 와
+   `tools/carla_numbers_check.py` 를 돌려 **둘 다 «전 항목 일치»** 인지 확인한다.
+   ★ 시스템 파이썬으로 돌리지 마라 — 의존 모듈이 없는 블록이 조용히 빠진다. 실제로
+   DPC τ 재산출 검사가 그렇게 죽어 있었는데 출력은 «전 항목 일치» 였다(2026-09-15).
+   지금은 건너뛴 블록을 이름과 이유까지 출력하므로, **«검사 건너뜀» 이 한 줄이라도 있으면
+   그 실행의 «전 항목 일치» 는 믿지 마라.**
 2. UE 작업이 걸려 있었다면 `cat /c/ue/verify10/log` 로 `VERIFY10_DONE` 여부를 본다.
    미완이면 UE 프로세스 수를 확인하고(0 이어야 재실행 가능) lockdir 을 지운 뒤 재실행한다.
 3. 검증 렌더가 끝났으면 **두 감사를 돌린다**:
