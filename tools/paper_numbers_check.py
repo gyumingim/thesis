@@ -271,6 +271,28 @@ def main():
     except Exception as _e:
         _skip("절 상호참조", _e)
 
+    # 인용 경로·그림·표의 실재 확인 — 재현 지시가 낡으면 독자가 막힌다.
+    try:
+        import os as _os2
+        _paths = sorted(set(re.findall(
+            r"((?:tools|bench|ue|docs|figs|bench_results)/[A-Za-z0-9_./*-]+)", text)))
+        # 본문이 «노트북» 자료라고 밝힌 경로는 이 장비에 없는 것이 정상이다.
+        _laptop = {"bench_results/exp_boundary", "bench_results/exp_cascade"}
+        _miss = [q for q in _paths if q not in _laptop
+                 and not (glob.glob(q) if "*" in q else _os2.path.exists(q))]
+        checks.append(("인용 경로 실재", "없음", ", ".join(_miss) if _miss else "없음"))
+
+        _figs = sorted(set(re.findall(r"figs/([A-Za-z0-9_.-]+\.png)", text)))
+        _fm = [f for f in _figs if not _os2.path.exists("figs/" + f)]
+        checks.append(("그림 파일 실재", "없음", ", ".join(_fm) if _fm else "없음"))
+
+        _def = set(re.findall(r"\*\*표 ([0-9]+)\.", text))
+        _ref = set(re.findall(r"표 ([0-9]+)", text))
+        _tm = sorted(_ref - _def)
+        checks.append(("표 참조 무결", "없음", ", ".join(_tm) if _tm else "없음"))
+    except Exception as _e:
+        _skip("인용 실재", _e)
+
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
