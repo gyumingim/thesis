@@ -258,6 +258,19 @@ def main():
         #   알아채지 못했다. 건너뛴 사실과 이유를 반드시 찍는다.
         print("  (지면평면 σ 검사 건너뜀: %s: %s)" % (type(_e).__name__, _e))
 
+    # 절 상호참조 무결성 — «§N 의 무엇무엇» 이 존재하지 않는 절을 가리키는 일이 있었다
+    # (§6.4 가 «§7 의 관측 노이즈 주입 실험» 을 가리켰는데 §7 에 그런 내용이 없었다).
+    # 참조가 실제 제목 번호로 풀리는지 기계적으로 확인한다.
+    try:
+        _have = set(re.findall(r"^#{2,3}\s+([0-9]+(?:\.[0-9]+)*)[.\s]", text, re.M))
+        # 본문이 «별도 절을 두지 않았다» 고 명시한 번호는 예외로 둔다.
+        _ok_missing = {"4.2", "4.6"}
+        _bad = sorted({r for r in re.findall(r"§\s?([0-9]+(?:\.[0-9]+)?)", text)
+                       if r not in _have and r not in _ok_missing})
+        checks.append(("절 상호참조 무결", "없음", ", ".join(_bad) if _bad else "없음"))
+    except Exception as _e:
+        _skip("절 상호참조", _e)
+
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
