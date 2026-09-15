@@ -225,6 +225,29 @@ def main():
     except Exception:
         pass
 
+    # §6.4 지면평면 σ 재측정 (2026-09-15) — 원자료에서 재계산
+    try:
+        import os                      # ★ 이 모듈은 os 를 import 하지 않는다 — 없으면
+        import subprocess as _sp       #   NameError 가 except 에 먹혀 검사가 조용히 죽는다
+        import re as _re2
+        # ★ 상대 경로 + 슬래시를 그대로 주면 os.path.exists 는 True 인데
+        #   CreateProcess 가 WinError 2 로 죽는다. 절대 경로로 정규화한다.
+        _py = os.path.abspath(".venv/Scripts/python.exe")
+        if not os.path.exists(_py):
+            _py = os.path.abspath(".venv/bin/python")
+        if os.path.exists(_py) and glob.glob("C:/carla/out/frame_*.json"):
+            _o = _sp.run([_py, "bench/percept_v0.py", "C:/carla/out/frame_*.json"],
+                         capture_output=True, text=True, encoding="utf-8", timeout=300).stdout
+            _m = _re2.findall(r"(\d+)-(\d+)m: 평균([-+][\d.]+) σ([\d.]+)m", _o)
+            if len(_m) == 3:
+                for (lo, hi, mu, sd), exp_sd in zip(_m, ("1.10", "2.82", "5.10")):
+                    checks.append(("지면평면 σ %s-%sm" % (lo, hi), exp_sd, "%.2f" % float(sd)))
+    except Exception as _e:
+        # ★ 선택 검사는 실패해도 전체를 막지 않지만, **조용히 사라지면 안 된다.**
+        #   실제로 os 미import 로 이 블록이 통째로 죽어 있었는데 출력이 «전 항목 일치» 라
+        #   알아채지 못했다. 건너뛴 사실과 이유를 반드시 찍는다.
+        print("  (지면평면 σ 검사 건너뜀: %s: %s)" % (type(_e).__name__, _e))
+
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
