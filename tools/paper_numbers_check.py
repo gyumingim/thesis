@@ -336,6 +336,43 @@ def main():
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
+    # §8 (9) 인지 노이즈 사전 감도 (2026-09-16) — 원자료에서 재추출해 논문 서술과 대조.
+    # 이 항목은 «실험을 안 했다» 가 아니라 «재학습 전에 재어 보니 설계가 성립하지 않는다»
+    # 라는 주장이므로, 근거 수치가 논문과 어긋나면 주장 자체가 무너진다.
+    try:
+        import os as _os3
+        _rp = _os3.path.join(_os3.path.dirname(_os3.path.dirname(_os3.path.abspath(__file__))),
+                             "bench_results", "noise_sensitivity", "result.txt")
+        _rt = open(_rp, encoding="utf-8").read()
+        _occ = re.search(r"비율 평균 ([0-9.]+)%", _rt).group(1)
+        _y1 = re.search(r"잣대 1.*?조향 ([0-9.]+)", _rt).group(1)
+        _y2 = re.search(r"잣대 2.*?조향 ([0-9.]+)", _rt).group(1)
+        _s1 = re.search(r"^  1\.0\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+) \|", _rt, re.M)
+        _z0 = re.search(r"0 \(무주입\)\s+([0-9.]+)%", _rt).group(1)
+        _z1 = re.search(r"^  1\.0\s+([0-9.]+)%\s+([-+0-9.]+)\s+([0-9.]+)\s*$", _rt, re.M)
+        _sw = re.search(r"^  t000300\s+[0-9.]+\s+([0-9.]+)\s+([0-9.]+)", _rt, re.M)
+        # ★ 하드코딩 상수와 비교하면 원자료 변화만 잡고 **논문 표류는 못 잡는다.**
+        #   원자료에서 뽑은 값이 PAPER 본문에 실제로 적혀 있는지를 본다 — 어느 쪽이
+        #   움직여도 걸린다.
+        def _inpaper(tag, s):
+            checks.append(("노이즈 " + tag, s, s if s in text else "논문에 없음"))
+        _inpaper("|Δ조향|(배율1)", _s1.group(1))
+        _inpaper("÷탐색σ(배율1)", "**%s배**" % _s1.group(2))
+        _inpaper("탐색σ final", "exp(actor_logstd)=%.3f" % float(_y1))
+        _inpaper("스텝간 조향", "(%.3f)" % float(_y2))
+        _inpaper("학습초 비율·σ", "%s(t=300s, 탐색 σ=%.3f)" % (_sw.group(2), float(_sw.group(1))))
+        _inpaper("성공률 무주입→배율1", "%s%% → %s%%" % (_z0, _z1.group(1)))
+        _inpaper("Δ성공률 배율1", "Δ %s%%p" % _z1.group(2).replace("-", chr(8722)))
+        _inpaper("순열 p 배율1", "p=%.2f" % float(_z1.group(3)))
+        _inpaper("점유율(학습정책)", "슬롯은 %s%%" % _occ)   # 맨숫자는 표와 충돌해 무효였다
+        # «경로를 바꿀 힘이 없었다» 가 성립한다.
+        _ratios = [float(m) for m in re.findall(r"^  (?:t[0-9]+|final)\s+[0-9.]+\s+[0-9.]+\s+([0-9.]+)",
+                                                _rt, re.M)]
+        checks.append(("노이즈 비율 최대<1", "예",
+                       "예" if _ratios and max(_ratios) < 1.0 else "아니오(%r)" % _ratios))
+    except Exception as _e:
+        _skip("노이즈 사전 감도", _e)
+
     for name, expected, actual in checks:
         ok = expected == actual
         bad += not ok
@@ -392,6 +429,7 @@ def main():
             line = text[:m.start()].count(chr(10)) + 1
             print("  라벨 없는 62.6배 (L%d) — 경합 분모의 과대치다" % line)
             bad += 1
+
 
     print(("불일치 %d 건" % bad) if bad else "전 항목 일치")
     return 1 if bad else 0

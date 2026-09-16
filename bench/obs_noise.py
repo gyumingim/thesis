@@ -173,6 +173,9 @@ def _realtest(steps=300, envs=64, n_vehicles=3, seed=7):
     print("  → 점유율이 낮다는 것은 **주입이 관측의 작은 부분에만 닿는다**는 뜻이다.")
     print("    V=%d 에 슬롯 8개이므로 상한이 %.0f%% 이고, 검출 반경 밖이 대부분이다."
           % (n_vehicles, 100.0 * n_vehicles / N_OTHERS))
+    print("    ★ 이 점유율은 **무작위 행동**으로 굴린 값이다. 학습된 정책으로 굴리면")
+    print("      20.4%가 된다(bench/noise_sensitivity.py) — 정책은 도로를 따라 달려")
+    print("      이웃 차량 곁에 머무르기 때문이다. 설계에 쓸 값은 후자다.")
     print("    실험을 설계할 때 개입의 세기를 이 비율과 함께 읽어야 한다.")
     print("  실제로 주입된 표본 %d건" % len(errs))
     for lo, hi in ((0, 15), (15, 30), (30, 50)):
