@@ -220,7 +220,10 @@ def main():
     try:
         import statistics as _sb
         _R = "bench_results/scenario_blocks"
-        _B = (500000, 510000, 520000, 530000)
+        # ★ 블록 목록을 하드코딩하지 않는다 — 2026-09-16 에 넷에서 여덟으로
+        #   늘렸는데 상수를 고치지 않으면 검사가 옛 표본을 계속 본다.
+        _B = sorted({int(_f.split('__b')[1][:-5])
+                     for _f in glob.glob('%s/eval_md__clean_s1__b*.json' % _R)})
 
         def _rt(t, b):
             rows = json.load(open("%s/eval_md__%s__b%d.json" % (_R, t, b), encoding="utf-8"))
@@ -228,10 +231,21 @@ def main():
         _L = ["clean_s%d" % i for i in (1, 2, 3, 4, 5)]
         _N = ["nd_s%d" % i for i in (2, 3, 4, 5, 6)]
         _g = [_sb.mean(_rt(t, b) for t in _L) - _sb.mean(_rt(t, b) for t in _N) for b in _B]
-        checks += [("블록 평균 격차", "-18.0", "%.1f" % _sb.mean(_g)),
-                   ("블록 최소 격차(논문)", "-12.7", "%.1f" % max(_g)),
-                   ("블록 최대 격차", "-22.0", "%.1f" % min(_g)),
-                   ("블록 4/4 음수", "예", "예" if all(x < 0 for x in _g) else "아니오")]
+        _mk = lambda tag, v: checks.append(("블록 " + tag, v,
+                                            v if v in text else "논문에 없음"))
+        _mk("수", "**여덟 블록**" if len(_B) == 8 else "블록 %d개" % len(_B))
+        _mk("평균 격차", "**−%.1f%%p**" % -_sb.mean(_g))
+        _mk("최소 격차(논문)", "**−%.1f%%p**" % -max(_g))
+        _mk("최대 격차", "−%.1f%%p" % -min(_g))
+        checks.append(("블록 전부 음수", "%d/%d" % (len(_B), len(_B)),
+                       "%d/%d" % (sum(x < 0 for x in _g), len(_B))))
+        # 표 6 의 각 칸이 원자료와 맞는지 — 행을 통째로 만들어 본문에서 찾는다
+        for _nm, _arm in (("경량", _L), ("네이티브", _N)):
+            _v = [_sb.mean(_rt(t, b) for t in _arm) for b in _B]
+            _row = "| %s | %s | %.1f%% |" % (
+                _nm, " | ".join("%.1f%%" % x for x in _v), _sb.mean(_v))
+            checks.append(("표6 %s 행" % _nm, _row,
+                           _row if _row in text else "논문과 불일치"))
     except Exception as _e:
         _skip("시나리오 블록", _e)
 
@@ -336,6 +350,37 @@ def main():
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
+    # §7 장면 난이도 (2026-09-16) — 원자료에서 재계산해 본문과 대조.
+    # 주장이 «격차는 소수 장면이 아니라 분포 전체의 이동» 이므로 전멸 수와 상관이 근거다.
+    try:
+        import sys as _sys5
+        _sys5.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from scenario_difficulty import load as _sd_load, kendall_tau_b as _sd_tau
+        _dat = _sd_load()
+        _sc = sorted({s for (_, s) in _dat})
+        _su = {a: {s: sum(f == 3 for f in _dat.get((a, s), [])) for s in _sc}
+               for a in ("경량", "네이티브")}
+        _mk2 = lambda tag, v: checks.append(("난이도 " + tag, v,
+                                             v if v in text else "논문에 없음"))
+        _mk2("장면 수", "n=%d" % len(_sc))
+        _mk2("양팔 전멸", "양 팔 전멸 %d장면"
+             % sum(1 for s in _sc if _su["경량"][s] == 0 and _su["네이티브"][s] == 0))
+        _mk2("경량 전멸", "경량만 전멸 %d장면(%.0f%%)"
+             % (sum(1 for s in _sc if _su["경량"][s] == 0),
+                100.0 * sum(1 for s in _sc if _su["경량"][s] == 0) / len(_sc)))
+        _mk2("네이티브 전멸", "네이티브만 전멸 %d장면(%.0f%%)"
+             % (sum(1 for s in _sc if _su["네이티브"][s] == 0),
+                100.0 * sum(1 for s in _sc if _su["네이티브"][s] == 0) / len(_sc)))
+        _tau = _sd_tau([_su["경량"][s] for s in _sc], [_su["네이티브"][s] for s in _sc])
+        _mk2("팔 간 상관", "**+%.3f**" % _tau)
+        for _nm in ("경량", "네이티브"):
+            _fl = [f for (a, _), v in _dat.items() if a == _nm for f in v]
+            _mk2("%s 실패구성" % _nm, "%.1f%%·이탈 %.1f%%"
+                 % (100.0 * sum(f == 1 for f in _fl) / len(_fl),
+                    100.0 * sum(f == 2 for f in _fl) / len(_fl)))
+    except Exception as _e:
+        _skip("장면 난이도", _e)
+
     # §5.2 마스킹 기제 분해 (2026-09-16) — 원자료에서 재계산해 논문 서술과 대조.
     # 이 항목의 주장은 «구제가 이탈에만 듣는다» 이므로, 세 비율과 전이표가 근거 전부다.
     try:

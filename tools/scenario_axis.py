@@ -19,6 +19,7 @@ import glob
 import io
 import itertools
 import json
+import math
 import os
 import statistics as st
 import sys
@@ -35,6 +36,16 @@ def rate(tag, blk):
     rows = json.load(io.open(f, encoding="utf-8"))
     r = [x for x in rows if x["ckpt"] == "final.pt"]
     return 100.0 * r[0]["success_rate"] if r else None
+
+
+def sign_test(neg, n):
+    """부호검정의 **정확** 양측 p. 이전 판은 2^-(n-1) 을 썼는데 그것은 «전부 같은 부호»
+    일 때만 맞다 — 블록을 넷에서 여덟으로 늘리면 7/8 같은 경우가 생기고, 그때 옛 식은
+    실제보다 훨씬 작은 p 를 찍는다(2^-7=0.008 대 실제 0.070)."""
+    c = [math.comb(n, i) for i in range(n + 1)]
+    tot = float(sum(c))
+    obs = c[neg]
+    return min(1.0, sum(x for x in c if x <= obs + 1e-12) / tot)
 
 
 def sign_perm(d):
@@ -117,13 +128,19 @@ def main():
     df = (va / n + vb / n) ** 2 / ((va / n) ** 2 / (n - 1) + (vb / n) ** 2 / (n - 1))
     print("  경량 %.1f ± %.1f  대  네이티브 %.1f ± %.1f  (각 n=%d)"
           % (st.mean(lm5), st.stdev(lm5), st.mean(nm5), st.stdev(nm5), n))
-    print("  격차 %+.1f%%p  Welch t=%.2f df=%.1f" % (-d, tt, df))
+    from scipy import stats as _sp                      # 논문이 p·CI 를 함께 싣는다
+    _p = 2 * _sp.t.sf(abs(tt), df)
+    _cr = _sp.t.ppf(0.975, df) * se
+    print("  격차 %+.1f%%p  Welch t=%.2f df=%.1f p=%.3f  95%% CI [%+.1f, %+.1f]"
+          % (-d, tt, df, _p, -d - _cr, -d + _cr))
     print()
-    print("  블록을 단위로 본 격차 %s — %d/%d 이 음수(부호검정 p=%.3f)"
-          % ([round(g, 1) for g in gaps], sum(g < 0 for g in gaps), len(gaps),
-             2.0 ** -(len(gaps) - 1)))
-    print("  ※ 논문이 쓴 블록(%d)의 격차 %+.1f%%p 는 네 블록 중 **가장 작다**(평균 %+.1f)."
-          % (blocks[0], gaps[0], st.mean(gaps)))
+    neg = sum(g < 0 for g in gaps)
+    print("  블록을 단위로 본 격차 %s — %d/%d 이 음수(부호검정 정확 양측 p=%.4f)"
+          % ([round(g, 1) for g in gaps], neg, len(gaps), sign_test(neg, len(gaps))))
+    rank = sorted(gaps, reverse=True).index(gaps[0]) + 1
+    print("  ※ 논문이 쓴 블록(%d)의 격차 %+.1f%%p 는 %d블록 중 **%d번째로 큰**(=경량에"
+          % (blocks[0], gaps[0], len(gaps), rank))
+    print("    유리한) 값이다. 블록 평균은 %+.1f%%p." % st.mean(gaps))
     return 0
 
 
