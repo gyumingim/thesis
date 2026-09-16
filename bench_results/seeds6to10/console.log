@@ -22,3 +22,12 @@
 04:53:29 eval clean s8 b500000 완료
 04:54:54 eval clean s8 블록 완료
 04:54:54 train nd_md s9 시작
+05:55:07 train nd_md s9 끝 (rc=0)
+05:56:33 eval nd s9 b500000 완료
+05:57:59 eval nd s9 블록 완료
+05:57:59 === 쌍 완료: 경량 s8 / 네이티브 s9 ===
+05:57:59 train clean_custom s9 시작
+06:58:02 train clean_custom s9 끝 (rc=0)
+06:59:42 eval clean s9 b500000 완료
+07:01:09 eval clean s9 블록 완료
+07:01:09 train nd_md s10 시작
