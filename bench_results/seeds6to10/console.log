@@ -1,0 +1,6 @@
+23:39:26 SEEDS6TO10 시작 (장비 rtx5080)
+23:39:26 train clean_custom s6 시작
+00:39:34 train clean_custom s6 끝 (rc=0)
+00:41:11 eval clean s6 b500000 완료
+00:42:35 eval clean s6 블록 완료
+00:42:35 train nd_md s7 시작
