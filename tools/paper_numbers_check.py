@@ -336,6 +336,63 @@ def main():
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
+    # §5.2 마스킹 기제 분해 (2026-09-16) — 원자료에서 재계산해 논문 서술과 대조.
+    # 이 항목의 주장은 «구제가 이탈에만 듣는다» 이므로, 세 비율과 전이표가 근거 전부다.
+    try:
+        import os as _os4
+        _md = _os4.path.join(_os4.path.dirname(_os4.path.dirname(_os4.path.abspath(__file__))),
+                             "bench_results", "mask_paired")
+        _r = {}
+        for _m in ("plain", "mask"):
+            for _s in (1, 2):
+                with open(_os4.path.join(_md, "eval_md__sup2%s_s%d.json" % (_m, _s)),
+                          encoding="utf-8") as _f:
+                    _r[(_m, _s)] = json.load(_f)[0]
+        _avg = {m: [sum(_r[(m, s)][k] for s in (1, 2)) / 2.0
+                    for k in ("success_rate", "crash_rate", "out_of_road_rate")]
+                for m in ("plain", "mask")}
+
+        def _pp(x):
+            return "%.1f%%" % (100 * x)
+        _inp = lambda tag, s: checks.append(("마스킹 " + tag, s,
+                                             s if s in text else "논문에 없음"))
+        _inp("무마스킹 평균", "| %s | %s | %s |" % tuple(_pp(x) for x in _avg["plain"]))
+        _inp("마스킹 평균", "| %s | %s | %s |" % tuple(_pp(x) for x in _avg["mask"]))
+        _d = [_avg["mask"][k] - _avg["plain"][k] for k in range(3)]
+        # 논문은 식자용 마이너스(U+2212)를 쓴다 — ASCII 로 만들면 늘 «없음» 이 된다
+        _inp("차이 행", ("| **%+.1f%%p** | **%+.1f%%p** | **%+.1f%%p** |"
+                        % (100 * _d[0], 100 * _d[1], 100 * _d[2])).replace("-", chr(8722)))
+        # 전이표·짝검정
+        _T, _b, _c = {}, 0, 0
+        for _s in (1, 2):
+            _pe = {e["scenario"]: e for e in _r[("plain", _s)]["per_episode"]}
+            _me = {e["scenario"]: e for e in _r[("mask", _s)]["per_episode"]}
+            for _sc in sorted(set(_pe) & set(_me)):
+                _k = (_pe[_sc]["flag"], _me[_sc]["flag"])
+                _T[_k] = _T.get(_k, 0) + 1
+                _b += int(_pe[_sc]["success"] and not _me[_sc]["success"])
+                _c += int(_me[_sc]["success"] and not _pe[_sc]["success"])
+        _out = sum(v for (a, _), v in _T.items() if a == 2)
+        _cr = sum(v for (a, _), v in _T.items() if a == 1)
+        _inp("이탈→성공", "이탈 %d건 중 **%d건(%.0f%%)**"
+             % (_out, _T.get((2, 3), 0), 100.0 * _T.get((2, 3), 0) / _out))
+        _inp("충돌→성공", "%d건 중 %d건(%.0f%%)"
+             % (_cr, _T.get((1, 3), 0), 100.0 * _T.get((1, 3), 0) / _cr))
+        _inp("잔존 충돌", "충돌이 %d건 남는다" % sum(v for (_, b2), v in _T.items() if b2 == 1))
+        _inp("짝검정 불일치쌍", "성공→실패 %d 대 실패→성공 %d" % (_b, _c))
+        # 재현: 구판 총계와 같은가 (결정론 평가가 깨지면 위 전부가 무의미하다)
+        _old = {}
+        for _m, _f2 in (("plain", "sup2"), ("mask", "sup2mask")):
+            for _s in (1, 2):
+                with open(_os4.path.join(_os4.path.dirname(_md), "support_fixed",
+                                         "eval_md__%s_s%d.json" % (_f2, _s)),
+                          encoding="utf-8") as _f:
+                    _old[(_m, _s)] = json.load(_f)[0]["success_rate"]
+        _same = all(abs(_old[k] - _r[k]["success_rate"]) < 1e-9 for k in _old)
+        checks.append(("마스킹 구판 재현", "예", "예" if _same else "아니오"))
+    except Exception as _e:
+        _skip("마스킹 기제 분해", _e)
+
     # §8 (9) 인지 노이즈 사전 감도 (2026-09-16) — 원자료에서 재추출해 논문 서술과 대조.
     # 이 항목은 «실험을 안 했다» 가 아니라 «재학습 전에 재어 보니 설계가 성립하지 않는다»
     # 라는 주장이므로, 근거 수치가 논문과 어긋나면 주장 자체가 무너진다.
