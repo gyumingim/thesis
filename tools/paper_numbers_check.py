@@ -350,6 +350,45 @@ def main():
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
+    # §6.3 DPC 신뢰도 (2026-09-16) — 「널이 측정 잡음의 산물이 아니다」의 근거.
+    # 타깃 쪽은 여기서 다시 계산하고(1초), 소스 쪽은 텐서보드 로딩이 20초 넘어
+    # 기록 파일과 대조한다. 기록이 낡았으면 **타깃 값이 어긋나** 발각된다.
+    try:
+        import sys as _sys7
+        _sys7.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from dpc_reliability import measure_target as _mt
+        _sb = [x[2] for x in _mt(300)]
+        _sbm = sum(_sb) / len(_sb)
+        # 몬테카를로라 정확히 같을 수 없다 — 허용오차 안이면 «일치» 로 만든다.
+        _exp = "논문 0.482 ±0.02"
+        checks.append(("DPC 타깃 신뢰도", _exp,
+                       _exp if abs(_sbm - 0.482) < 0.02 else "%.3f (벗어남)" % _sbm))
+        _mk4 = lambda tag, v: checks.append(("DPC " + tag, v,
+                                             v if v in text else "논문에 없음"))
+        _mk4("시드 범위", "(시드 범위 %.2f~%.2f)" % (min(_sb), max(_sb)))
+        _rel = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 "bench_results", "clean_perep", "reliability.txt"),
+                    encoding="utf-8").read()
+        # 기록 파일이 이번 계산과 같은 자료에서 나왔는지 — 타깃 평균으로 확인
+        _m8 = re.search(r"평균\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)", _rel)
+        _fresh = _m8 is not None and abs(float(_m8.group(3)) - _sbm) < 0.02
+        checks.append(("DPC 기록 최신", "이번 계산과 일치",
+                       "이번 계산과 일치" if _fresh else
+                       "기록 %s 대 계산 %.3f — 낡았다"
+                       % (_m8.group(3) if _m8 else "?", _sbm)))
+        # 논문이 인용한 타깃 신뢰도도 기록과 대조한다. 기록의 최신성은 위에서 확인했으므로
+        # 이 둘을 합치면 «계산 → 기록 → 논문» 사슬이 끊긴 곳이 반드시 걸린다.
+        if _m8:
+            _mk4("타깃 신뢰도(논문)", "보정 **%s**" % _m8.group(3))
+        _m9 = re.search(r"시간 분할\(보수적\) 평균 ([0-9.]+)", _rel)
+        _m10 = re.search(r"sqrt\(r_소스 × r_타깃\) = \*\*([0-9.]+)\*\*", _rel)
+        if _m9:
+            _mk4("소스 신뢰도(보수)", "**%s**" % _m9.group(1))
+        if _m10:
+            _mk4("감쇠 상한", "**%s**" % _m10.group(1))
+    except Exception as _e:
+        _skip("DPC 신뢰도", _e)
+
     # §7 (5) 급내 상관 실측 (2026-09-16) — 원자료에서 재계산해 본문과 대조.
     # 판정이 «가정한 ρ 격자» 에서 «실측 ρ» 로 바뀌었으므로, 이 수치가 근거의 전부다.
     try:
