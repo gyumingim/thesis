@@ -350,6 +350,50 @@ def main():
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
+    # §7 (5) 급내 상관 실측 (2026-09-16) — 원자료에서 재계산해 본문과 대조.
+    # 판정이 «가정한 ρ 격자» 에서 «실측 ρ» 로 바뀌었으므로, 이 수치가 근거의 전부다.
+    try:
+        import sys as _sys6
+        _sys6.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import subprocess
+        from scenario_icc import measure as _icc_measure
+        _tet, _ic, _cr, _rb, _np2 = _icc_measure()
+        _mk3 = lambda tag, v: checks.append(("급내상관 " + tag, v,
+                                             v if v in text else "논문에 없음"))
+        _mk3("시드내 ρ_w", "**ρ_w=%.3f**" % (sum(_tet) / len(_tet)))
+        _mk3("시드 범위", "(시드 범위 %.2f~%.2f)" % (min(_tet), max(_tet)))
+        _mk3("시드간 ρ_b", "**ρ_b=%.3f**" % _cr)
+        checks.append(("급내상관 구판 재현", "불일치 0", "불일치 %d" % _rb))
+        # 방향 자체도 지킨다 — 시드 간이 시드 내보다 낮아야 «정책마다 다르다» 가 성립한다
+        checks.append(("급내상관 ρ_b<ρ_w", "예",
+                       "예" if _cr < sum(_tet) / len(_tet) else "아니오"))
+        # oracle_bias.py 는 실측값을 **상수로** 들고 있다 — 재측정하면 어긋날 수 있으므로
+        # 소스에서 읽어 대조한다. 이런 상수는 조용히 낡는 전형적인 자리다.
+        _ob = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "oracle_bias.py"), encoding="utf-8").read()
+        _m6 = re.search(r"RHO_W, RHO_B = ([0-9.]+), ([0-9.]+)", _ob)
+        checks.append(("급내상관 oracle_bias 상수",
+                       "%.3f/%.3f" % (sum(_tet) / len(_tet), _cr),
+                       "%.3f/%.3f" % (float(_m6.group(1)), float(_m6.group(2)))
+                       if _m6 else "상수를 못 찾음"))
+        # 실측 구조 널의 출력(60.5%[52.7,68.0], 편향 몫 73%)도 논문이 인용한다.
+        # 몬테카를로지만 seed 0 고정이라 결정론이다 — 실제로 돌려서 대조한다.
+        _root6 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        _o6 = subprocess.run(
+            [os.path.abspath(os.path.join(_root6, ".venv/Scripts/python.exe")),
+             os.path.abspath(os.path.join(_root6, "tools/oracle_bias.py"))],
+            capture_output=True, text=True, encoding="utf-8",
+            env=dict(os.environ, PYTHONUTF8="1"), cwd=_root6, timeout=300).stdout
+        _m7 = re.search(r"널 오라클 ([0-9.]+)%\s+95% 구간 \[([0-9.]+), ([0-9.]+)\]\s+편향 몫 [0-9.]+%p \(([0-9]+)%\)", _o6)
+        if _m7:
+            _mk3("널 오라클", "오라클 기대값은 %s%%[%s, %s]"
+                 % (_m7.group(1), _m7.group(2), _m7.group(3)))
+            _mk3("편향 몫", "편향 몫 %s%%" % _m7.group(4))
+        else:
+            checks.append(("급내상관 널 출력", "찾음", "oracle_bias 출력 형식 불일치"))
+    except Exception as _e:
+        _skip("급내 상관", _e)
+
     # §7 장면 난이도 (2026-09-16) — 원자료에서 재계산해 본문과 대조.
     # 주장이 «격차는 소수 장면이 아니라 분포 전체의 이동» 이므로 전멸 수와 상관이 근거다.
     try:

@@ -95,8 +95,34 @@ def main():
         print("    %5.2f %11.1f%% %11.1f%%p %s"
               % (rho, acc.mean(), nb,
                  "%.0f%%" % (100 * nb / gain) if gain else "-"))
-    print("  ρ 가 커질수록 편향 몫이 줄어든다. ρ 를 자료에서 추정하려면 **에피소드 단위**")
-    print("  결과가 필요한데 현재 평가는 집계값만 남긴다 — 이 표는 민감도이지 추정이 아니다.")
+    print("  ρ 가 커질수록 편향 몫이 줄어든다. 위 표는 **가정한 격자**다 — 아래에서 잰다.")
+
+    # --- 실측 ρ 로 다시 (2026-09-16) -----------------------------------------
+    # tools/scenario_icc.py 가 에피소드 단위 결과에서 사분상관을 쟀다. 구조가 하나가
+    # 아니라 **둘**이었다: 같은 시드의 체크포인트끼리 ρ_w=0.612, 다른 시드끼리는
+    # ρ_b=0.139. 즉 장면 난이도의 대부분은 **정책마다 다르다**(내재 난이도가 아니다).
+    # 위 표의 한 모수 모형은 둘을 같다고 놓은 것이라 구조를 틀리게 본다.
+    #   잠재 = sqrt(ρ_b)·u(장면)  +  sqrt(ρ_w−ρ_b)·v(시드,장면)  +  sqrt(1−ρ_w)·ε
+    RHO_W, RHO_B = 0.612, 0.139            # scenario_icc.py 실측 (5시드 × 12ckpt × 30장면)
+    print("")
+    print("  **실측 구조**로 다시 — 시드 내 ρ_w=%.3f, 시드 간 ρ_b=%.3f (scenario_icc.py)"
+          % (RHO_W, RHO_B))
+    cb, cw, ce = math.sqrt(RHO_B), math.sqrt(RHO_W - RHO_B), math.sqrt(1 - RHO_W)
+    acc = np.empty(n_mc2)
+    for i in range(n_mc2):
+        u = rng.standard_normal(N_EP)                       # 내재 장면 난이도
+        v = rng.standard_normal((n_seed, N_EP))             # 정책별 장면 난이도
+        e = rng.standard_normal((n_seed, n_ck, N_EP))       # 평가 잡음
+        lat = cb * u + cw * v[:, None, :] + ce * e
+        acc[i] = (lat < thr).mean(axis=2).max(axis=1).mean() * 100
+    nlo, nhi = np.percentile(acc, [2.5, 97.5])
+    nb = acc.mean() - 100 * p
+    print("    널 오라클 %.1f%%  95%% 구간 [%.1f, %.1f]  편향 몫 %.1f%%p (%.0f%%)"
+          % (acc.mean(), nlo, nhi, nb, 100 * nb / gain if gain else 0))
+    print("    관측 오라클 %.1f%% → %s"
+          % (obs, "널 구간 **안**" if nlo <= obs <= nhi else "널 구간 밖"))
+    print("  가정이 아니라 측정으로 같은 판정에 도달한다. 한 모수 격자에서 ρ=0.6 근방을",)
+    print("  읽던 것과 결론은 같지만, 근거가 «어느 ρ 에서도» 에서 «잰 ρ 에서» 로 바뀐다.")
     return 0
 
 
