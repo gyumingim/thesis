@@ -350,6 +350,43 @@ def main():
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
+    # §2.5 분산 성분 (2026-09-16) — 「팔당 25 → 10시드」 주장의 근거.
+    # 표의 네 값과, 방법 검산(논문 원래 표적에서 25시드가 재현되는가)까지 건다.
+    try:
+        import sys as _sys8
+        _sys8.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from variance_components import table as _vt, decompose as _vd, ARMS as _VA
+        from variance_components import seeds_for as _vs, ROOT as _VR, N_EP as _VN
+        _bl = sorted({int(os.path.basename(_f).split("__b")[1][:-5])
+                      for _f in glob.glob("%s/*.json" % _VR)})
+        _mk5 = lambda tag, v: checks.append(("분산성분 " + tag, v,
+                                             v if v in text else "논문에 없음"))
+        _sds, _sd1 = [], []
+        for _arm, _tags in _VA.items():
+            _Y = _vt(_tags, _bl)
+            _vp, _vb, _ve = _vd(_Y)
+            _pr = _Y / 100.0
+            _fl = float(np.mean(_pr * (1 - _pr)) / _VN) * 100.0 ** 2
+            _mk5("표 %s 행" % _arm, "| %s | %.1f%%p | %.1f%%p | %.1f%%p | %.1f%%p |"
+                 % (_arm, _vp ** 0.5, _vb ** 0.5, _ve ** 0.5, _fl ** 0.5))
+            _sds.append((_vp ** 0.5, _ve ** 0.5))
+            _sd1.append((float(np.mean([np.std(_Y[:, _q], ddof=1)
+                                        for _q in range(_Y.shape[1])])), 0.0))
+        # 몬테카를로라 ±1 시드는 흔들릴 수 있다 — 허용치를 두되 «논문과 같은 값» 을 요구한다.
+        for _lab, _d, _s, _B, _exp in (("검산 25시드", 12.7, _sd1, 1, 26),
+                                       ("12시드", 19.7, _sd1, 1, 12),
+                                       ("10시드", 19.7, _sds, 8, 10)):
+            _n = _vs(_d, _s, _B)[0]
+            checks.append(("분산성분 " + _lab, "%d±1" % _exp,
+                           "%d±1" % _exp if abs(_n - _exp) <= 1 else "%d (벗어남)" % _n))
+        # ↑ 는 «계산이 기대와 맞는가» 만 본다. 논문 문장이 따로 흘러가는 것을 막으려면
+        #   본문에 그 숫자가 실제로 적혀 있는지도 봐야 한다.
+        _mk5("논문 12시드", "**팔당 12시드**")
+        _mk5("논문 10시드", "**팔당 10시드**")
+        _mk5("논문 26시드 검산", "26시드가 나와")
+    except Exception as _e:
+        _skip("분산 성분", _e)
+
     # §6.3 DPC 신뢰도 (2026-09-16) — 「널이 측정 잡음의 산물이 아니다」의 근거.
     # 타깃 쪽은 여기서 다시 계산하고(1초), 소스 쪽은 텐서보드 로딩이 20초 넘어
     # 기록 파일과 대조한다. 기록이 낡았으면 **타깃 값이 어긋나** 발각된다.
