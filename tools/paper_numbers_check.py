@@ -350,6 +350,41 @@ def main():
     NOT_CITED = ("피크 체크포인트", "이탈 종점(t3300)", "충돌 시작(t300)", "충돌 종점(t3300)")
 
     bad = 0
+    # §7 배치 효과 (2026-09-17) — 「묶은 p=0.020 은 쓸 수 없다」의 근거.
+    # 처리량 표 두 행과 배치별 격차가 근거 전부이므로 원자료에서 재계산해 본문과 맞춘다.
+    try:
+        import sys as _sys9
+        _sys9.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import statistics as _st9
+        from batch_effect import BATCH as _BE, block_mean as _bm, msteps as _ms, welch as _we
+        _mk6 = lambda tag, v: checks.append(("배치 " + tag, v,
+                                             v if v in text else "논문에 없음"))
+        for _arm in ("경량", "네이티브"):
+            _a = [_ms(_arm, t) for t in _BE["8월"][_arm]]
+            _b = [_ms(_arm, t) for t in _BE["9월"][_arm]]
+            _mk6("처리량 %s 행" % _arm,
+                 "| %s | %.2f ± %.2f | %.2f ± %.2f | **%+.1f%%** |"
+                 % (_arm, _st9.mean(_a), _st9.stdev(_a), _st9.mean(_b), _st9.stdev(_b),
+                    100 * (_st9.mean(_b) / _st9.mean(_a) - 1)))
+        _g = {}
+        for _bt in ("8월", "9월"):
+            _L = [_bm(t) for t in _BE[_bt]["경량"]]
+            _N = [_bm(t) for t in _BE[_bt]["네이티브"]]
+            _d, _t9, _df9, _p9, _ci = _we(_L, _N)
+            _g[_bt] = _d
+            _mk6("%s 격차" % _bt,
+                 ("**%s %+.1f%%p**(p=%.3f)" % (_bt, _d, _p9)).replace("-", chr(8722)))
+        _mk6("상호작용", "**상호작용이 %+.1f%%p**" % (_g["9월"] - _g["8월"]))
+        # 묶은 값도 본문과 맞는지 — 숨기지 않기로 했으므로 감시도 건다
+        _LL = [_bm(t) for _bt in _BE for t in _BE[_bt]["경량"]]
+        _NN = [_bm(t) for _bt in _BE for t in _BE[_bt]["네이티브"]]
+        _d, _t9, _df9, _p9, _ci = _we(_LL, _NN)
+        _mk6("묶은 값",
+             ("격차 **%+.1f%%p**(Welch t=%.2f, df=%.1f, **p=%.3f**,"
+              % (_d, abs(_t9), _df9, _p9)).replace("-", chr(8722)))
+    except Exception as _e:
+        _skip("배치 효과", _e)
+
     # §2.5 분산 성분 (2026-09-16) — 「팔당 25 → 10시드」 주장의 근거.
     # 표의 네 값과, 방법 검산(논문 원래 표적에서 25시드가 재현되는가)까지 건다.
     try:

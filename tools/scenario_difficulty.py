@@ -26,8 +26,17 @@ import statistics as st
 import sys
 
 ROOT = "bench_results/scenario_blocks"
-LIGHT = ["clean_s%d" % s for s in (1, 2, 3, 4, 5)]
-NATIVE = ["nd_s%d" % s for s in (2, 3, 4, 5, 6)]
+# 시드 목록 — 2026-09-17 에 팔당 5 → 10 으로 보강했다(bench/run_seeds6to10.sh).
+# ARM_SEEDS=5 로 옛 표본을 그대로 재현할 수 있게 남겨 둔다 — 논문이 n=5 행과 n=10 행을
+# 나란히 싣기 때문이고, 「바뀐 것은 표본뿐」임을 언제든 다시 보일 수 있어야 한다.
+# ★ 기본값은 **5(8월 배치)** 다. 2026-09-17 에 팔당 10시드를 채웠지만 9월 배치는
+#   처리량이 다르고(경량 +15.3%, 네이티브 +7.3%) 그 차이가 팔마다 다르므로, 묶으면
+#   조건 효과가 섞인다(§7 배치 효과, tools/batch_effect.py). 조건이 통제된 표본은
+#   **8월 배치**이고 논문의 모든 수치가 그것이다. ARM_SEEDS=10 은 묶은 값을 보고
+#   싶을 때만 쓰며, 그 값은 헤드라인으로 쓸 수 없다.
+_NS = int(os.environ.get("ARM_SEEDS", "5"))
+LIGHT = ["clean_s%d" % s for s in range(1, 1 + _NS)]
+NATIVE = ["nd_s%d" % s for s in range(2, 2 + _NS)]
 FLAG = {1: "충돌", 2: "이탈", 3: "성공", 4: "타임아웃"}
 
 
