@@ -382,6 +382,25 @@ def main():
         _mk6("묶은 값",
              ("격차 **%+.1f%%p**(Welch t=%.2f, df=%.1f, **p=%.3f**,"
               % (_d, abs(_t9), _df9, _p9)).replace("-", chr(8722)))
+        # 스텝 정렬 비교(§7) — 「처리량은 일부만 설명한다」의 근거 표 두 행.
+        from scipy import stats as _sps
+        from steps_vs_batch import SRC as _SV, curve as _cv, at as _sat
+        for _arm in ("경량", "네이티브"):
+            _A = [c for c in (_cv(_SV[(_arm, "8월")][0] % s)
+                              for s in _SV[(_arm, "8월")][1]) if c]
+            _B = [c for c in (_cv(_SV[(_arm, "9월")][0] % s)
+                              for s in _SV[(_arm, "9월")][1]) if c]
+            _hi = min(min(c[0][-1] for c in _A), min(c[0][-1] for c in _B))
+            _ea = [c[1][-1] for c in _A]
+            _eb = [c[1][-1] for c in _B]
+            _va = [v for v in (_sat(*c, _hi) for c in _A) if v is not None]
+            _vb = [v for v in (_sat(*c, _hi) for c in _B) if v is not None]
+            _pu = _sps.ttest_ind(_eb, _ea, equal_var=False).pvalue
+            _pa = _sps.ttest_ind(_vb, _va, equal_var=False).pvalue
+            _row = ("| %s | %+.1f%%p (p=%.3f) | %+.1f%%p (p=%.3f) |"
+                    % (_arm, _st9.mean(_eb) - _st9.mean(_ea), _pu,
+                       _st9.mean(_vb) - _st9.mean(_va), _pa))
+            _mk6("스텝정렬 %s 행" % _arm, _row)
     except Exception as _e:
         _skip("배치 효과", _e)
 
