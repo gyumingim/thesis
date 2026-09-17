@@ -1,0 +1,228 @@
+[
+  {
+    "ckpt": "t002700.pt",
+    "elapsed_s": 2700.193632364273,
+    "global_step": 122683392,
+    "target": "metadrive",
+    "episodes": 30,
+    "success_rate": 0.5666666666666667,
+    "crash_rate": 0.2,
+    "out_of_road_rate": 0.23333333333333334,
+    "timeout_rate": 0.0,
+    "mean_return": 94.12538519227671,
+    "mean_length": 107.56666666666666,
+    "eval_seed": 510000,
+    "per_episode": [
+      {
+        "scenario": 510000,
+        "flag": 3,
+        "success": 1,
+        "ret": 109.405,
+        "length": 114
+      },
+      {
+        "scenario": 510001,
+        "flag": 3,
+        "success": 1,
+        "ret": 126.633,
+        "length": 118
+      },
+      {
+        "scenario": 510002,
+        "flag": 3,
+        "success": 1,
+        "ret": 122.12,
+        "length": 144
+      },
+      {
+        "scenario": 510003,
+        "flag": 3,
+        "success": 1,
+        "ret": 121.839,
+        "length": 145
+      },
+      {
+        "scenario": 510004,
+        "flag": 2,
+        "success": 0,
+        "ret": 63.39,
+        "length": 89
+      },
+      {
+        "scenario": 510005,
+        "flag": 3,
+        "success": 1,
+        "ret": 126.435,
+        "length": 145
+      },
+      {
+        "scenario": 510006,
+        "flag": 3,
+        "success": 1,
+        "ret": 126.93,
+        "length": 117
+      },
+      {
+        "scenario": 510007,
+        "flag": 2,
+        "success": 0,
+        "ret": 62.852,
+        "length": 88
+      },
+      {
+        "scenario": 510008,
+        "flag": 3,
+        "success": 1,
+        "ret": 126.863,
+        "length": 109
+      },
+      {
+        "scenario": 510009,
+        "flag": 3,
+        "success": 1,
+        "ret": 125.369,
+        "length": 140
+      },
+      {
+        "scenario": 510010,
+        "flag": 2,
+        "success": 0,
+        "ret": 63.007,
+        "length": 78
+      },
+      {
+        "scenario": 510011,
+        "flag": 2,
+        "success": 0,
+        "ret": 35.893,
+        "length": 54
+      },
+      {
+        "scenario": 510012,
+        "flag": 2,
+        "success": 0,
+        "ret": 62.849,
+        "length": 84
+      },
+      {
+        "scenario": 510013,
+        "flag": 3,
+        "success": 1,
+        "ret": 127.194,
+        "length": 110
+      },
+      {
+        "scenario": 510014,
+        "flag": 2,
+        "success": 0,
+        "ret": 64.175,
+        "length": 89
+      },
+      {
+        "scenario": 510015,
+        "flag": 1,
+        "success": 0,
+        "ret": 64.319,
+        "length": 80
+      },
+      {
+        "scenario": 510016,
+        "flag": 3,
+        "success": 1,
+        "ret": 112.337,
+        "length": 113
+      },
+      {
+        "scenario": 510017,
+        "flag": 3,
+        "success": 1,
+        "ret": 125.027,
+        "length": 147
+      },
+      {
+        "scenario": 510018,
+        "flag": 2,
+        "success": 0,
+        "ret": 63.386,
+        "length": 80
+      },
+      {
+        "scenario": 510019,
+        "flag": 3,
+        "success": 1,
+        "ret": 123.213,
+        "length": 145
+      },
+      {
+        "scenario": 510020,
+        "flag": 1,
+        "success": 0,
+        "ret": 55.452,
+        "length": 72
+      },
+      {
+        "scenario": 510021,
+        "flag": 3,
+        "success": 1,
+        "ret": 126.614,
+        "length": 138
+      },
+      {
+        "scenario": 510022,
+        "flag": 1,
+        "success": 0,
+        "ret": 63.963,
+        "length": 84
+      },
+      {
+        "scenario": 510023,
+        "flag": 1,
+        "success": 0,
+        "ret": 61.442,
+        "length": 82
+      },
+      {
+        "scenario": 510024,
+        "flag": 3,
+        "success": 1,
+        "ret": 109.12,
+        "length": 111
+      },
+      {
+        "scenario": 510025,
+        "flag": 3,
+        "success": 1,
+        "ret": 126.792,
+        "length": 161
+      },
+      {
+        "scenario": 510026,
+        "flag": 1,
+        "success": 0,
+        "ret": 32.52,
+        "length": 55
+      },
+      {
+        "scenario": 510027,
+        "flag": 3,
+        "success": 1,
+        "ret": 110.867,
+        "length": 102
+      },
+      {
+        "scenario": 510028,
+        "flag": 3,
+        "success": 1,
+        "ret": 124.157,
+        "length": 151
+      },
+      {
+        "scenario": 510029,
+        "flag": 1,
+        "success": 0,
+        "ret": 59.601,
+        "length": 82
+      }
+    ]
+  }
+]

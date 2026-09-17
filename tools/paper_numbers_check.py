@@ -382,25 +382,30 @@ def main():
         _mk6("묶은 값",
              ("격차 **%+.1f%%p**(Welch t=%.2f, df=%.1f, **p=%.3f**,"
               % (_d, abs(_t9), _df9, _p9)).replace("-", chr(8722)))
-        # 스텝 정렬 비교(§7) — 「처리량은 일부만 설명한다」의 근거 표 두 행.
+        # 스텝 정렬 8블록(§7) — 「처리량이 과반을 설명한다」의 근거 표 두 행.
+        # 09-17 에 단일 블록판을 8블록판으로 갈아치웠다(결론이 뒤집혔다).
         from scipy import stats as _sps
-        from steps_vs_batch import SRC as _SV, curve as _cv, at as _sat
-        for _arm in ("경량", "네이티브"):
-            _A = [c for c in (_cv(_SV[(_arm, "8월")][0] % s)
-                              for s in _SV[(_arm, "8월")][1]) if c]
-            _B = [c for c in (_cv(_SV[(_arm, "9월")][0] % s)
-                              for s in _SV[(_arm, "9월")][1]) if c]
-            _hi = min(min(c[0][-1] for c in _A), min(c[0][-1] for c in _B))
-            _ea = [c[1][-1] for c in _A]
-            _eb = [c[1][-1] for c in _B]
-            _va = [v for v in (_sat(*c, _hi) for c in _A) if v is not None]
-            _vb = [v for v in (_sat(*c, _hi) for c in _B) if v is not None]
-            _pu = _sps.ttest_ind(_eb, _ea, equal_var=False).pvalue
-            _pa = _sps.ttest_ind(_vb, _va, equal_var=False).pvalue
-            _row = ("| %s | %+.1f%%p (p=%.3f) | %+.1f%%p (p=%.3f) |"
-                    % (_arm, _st9.mean(_eb) - _st9.mean(_ea), _pu,
-                       _st9.mean(_vb) - _st9.mean(_va), _pa))
-            _mk6("스텝정렬 %s 행" % _arm, _row)
+        from step_aligned_analysis import measure as _sam, NAME as _SN
+        _A, _F, _stp = _sam()
+        for _tg in ("clean", "nd"):
+            _pa = _sps.ttest_ind(_A[(_tg, "9월")], _A[(_tg, "8월")],
+                                 equal_var=False).pvalue
+            _pf = _sps.ttest_ind(_F[(_tg, "9월")], _F[(_tg, "8월")],
+                                 equal_var=False).pvalue
+            _df = _st9.mean(_F[(_tg, "9월")]) - _st9.mean(_F[(_tg, "8월")])
+            _da = _st9.mean(_A[(_tg, "9월")]) - _st9.mean(_A[(_tg, "8월")])
+            _bold = "**p=%.3f**" % _pf if _pf < 0.05 else "p=%.3f" % _pf
+            _row = ("| %s | %+.1f%%p (%s) | %+.1f%%p (p=%.3f) | %s%.0f%%%s |"
+                    % (_SN[_tg], _df, _bold, _da, _pa,
+                       "**" if _tg == "clean" else "", 100 * (1 - _da / _df),
+                       "**" if _tg == "clean" else ""))
+            _mk6("스텝정렬 %s 행" % _SN[_tg], _row)
+        # 상호작용도 정렬 전후로 건다 — 이 문단의 핵심 주장이다
+        _gi = []
+        for _D in (_F, _A):
+            _gi.append((_st9.mean(_D[("clean", "9월")]) - _st9.mean(_D[("nd", "9월")]))
+                       - (_st9.mean(_D[("clean", "8월")]) - _st9.mean(_D[("nd", "8월")])))
+        _mk6("상호작용 정렬", "**%+.1f → %+.1f%%p**" % (_gi[0], _gi[1]))
     except Exception as _e:
         _skip("배치 효과", _e)
 
