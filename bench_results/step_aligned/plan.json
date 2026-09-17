@@ -1,0 +1,142 @@
+[
+ {
+  "tag": "clean",
+  "batch": "8월",
+  "seed": 1,
+  "ckpt": "t003300.pt",
+  "step": 124518400
+ },
+ {
+  "tag": "clean",
+  "batch": "8월",
+  "seed": 2,
+  "ckpt": "t003300.pt",
+  "step": 128516096
+ },
+ {
+  "tag": "clean",
+  "batch": "8월",
+  "seed": 3,
+  "ckpt": "t003300.pt",
+  "step": 123469824
+ },
+ {
+  "tag": "clean",
+  "batch": "8월",
+  "seed": 4,
+  "ckpt": "t003000.pt",
+  "step": 128581632
+ },
+ {
+  "tag": "clean",
+  "batch": "8월",
+  "seed": 5,
+  "ckpt": "t003000.pt",
+  "step": 119472128
+ },
+ {
+  "tag": "clean",
+  "batch": "9월",
+  "seed": 6,
+  "ckpt": "t002700.pt",
+  "step": 123666432
+ },
+ {
+  "tag": "clean",
+  "batch": "9월",
+  "seed": 7,
+  "ckpt": "t002700.pt",
+  "step": 122748928
+ },
+ {
+  "tag": "clean",
+  "batch": "9월",
+  "seed": 8,
+  "ckpt": "t002700.pt",
+  "step": 122421248
+ },
+ {
+  "tag": "clean",
+  "batch": "9월",
+  "seed": 9,
+  "ckpt": "t002700.pt",
+  "step": 122552320
+ },
+ {
+  "tag": "clean",
+  "batch": "9월",
+  "seed": 10,
+  "ckpt": "t002700.pt",
+  "step": 122683392
+ },
+ {
+  "tag": "nd",
+  "batch": "8월",
+  "seed": 2,
+  "ckpt": "t003300.pt",
+  "step": 3548160
+ },
+ {
+  "tag": "nd",
+  "batch": "8월",
+  "seed": 3,
+  "ckpt": "t003300.pt",
+  "step": 3640320
+ },
+ {
+  "tag": "nd",
+  "batch": "8월",
+  "seed": 4,
+  "ckpt": "t003300.pt",
+  "step": 3643392
+ },
+ {
+  "tag": "nd",
+  "batch": "8월",
+  "seed": 5,
+  "ckpt": "t003300.pt",
+  "step": 3631104
+ },
+ {
+  "tag": "nd",
+  "batch": "8월",
+  "seed": 6,
+  "ckpt": "t003300.pt",
+  "step": 3631104
+ },
+ {
+  "tag": "nd",
+  "batch": "9월",
+  "seed": 7,
+  "ckpt": "t003000.pt",
+  "step": 3532800
+ },
+ {
+  "tag": "nd",
+  "batch": "9월",
+  "seed": 8,
+  "ckpt": "t003000.pt",
+  "step": 3563520
+ },
+ {
+  "tag": "nd",
+  "batch": "9월",
+  "seed": 9,
+  "ckpt": "t003000.pt",
+  "step": 3554304
+ },
+ {
+  "tag": "nd",
+  "batch": "9월",
+  "seed": 10,
+  "ckpt": "t003000.pt",
+  "step": 3486720
+ },
+ {
+  "tag": "nd",
+  "batch": "9월",
+  "seed": 11,
+  "ckpt": "t003000.pt",
+  "step": 3505152
+ }
+]

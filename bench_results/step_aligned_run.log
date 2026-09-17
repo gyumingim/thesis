@@ -1,0 +1,132 @@
+Exception in thread Thread-1 (_readerthread):
+Traceback (most recent call last):
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 1599, in _readerthread
+    buffer.append(fh.read())
+                  ^^^^^^^^^
+UnicodeDecodeError: 'cp949' codec can't decode byte 0xec in position 45: illegal multibyte sequence
+[clean] 공통 스텝 예산 123.5 Msteps
+  clean  8월   s1  → t003300.pt (124.5M, 예산 대비 +1.0M)
+  clean  8월   s2  → t003300.pt (128.5M, 예산 대비 +5.0M)
+  clean  8월   s3  → t003300.pt (123.5M, 예산 대비 +0.0M)
+  clean  8월   s4  → t003000.pt (128.6M, 예산 대비 +5.1M)
+  clean  8월   s5  → t003000.pt (119.5M, 예산 대비 -4.0M)
+  clean  9월   s6  → t002700.pt (123.7M, 예산 대비 +0.2M)
+  clean  9월   s7  → t002700.pt (122.7M, 예산 대비 -0.7M)
+  clean  9월   s8  → t002700.pt (122.4M, 예산 대비 -1.0M)
+  clean  9월   s9  → t002700.pt (122.6M, 예산 대비 -0.9M)
+  clean  9월   s10 → t002700.pt (122.7M, 예산 대비 -0.8M)
+[nd] 공통 스텝 예산 3.5 Msteps
+  nd     8월   s2  → t003300.pt (3.5M, 예산 대비 +0.0M)
+  nd     8월   s3  → t003300.pt (3.6M, 예산 대비 +0.1M)
+  nd     8월   s4  → t003300.pt (3.6M, 예산 대비 +0.1M)
+  nd     8월   s5  → t003300.pt (3.6M, 예산 대비 +0.1M)
+  nd     8월   s6  → t003300.pt (3.6M, 예산 대비 +0.1M)
+  nd     9월   s7  → t003000.pt (3.5M, 예산 대비 -0.0M)
+  nd     9월   s8  → t003000.pt (3.6M, 예산 대비 +0.0M)
+  nd     9월   s9  → t003000.pt (3.6M, 예산 대비 +0.0M)
+  nd     9월   s10 → t003000.pt (3.5M, 예산 대비 -0.1M)
+  nd     9월   s11 → t003000.pt (3.5M, 예산 대비 -0.0M)
+
+평가 140회 (런 20 × 블록 7). b500000 은 이미 있으므로 제외.
+  clean s1 b510000 OK (1/140)
+Exception in thread Thread-3 (_readerthread):
+Traceback (most recent call last):
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 1599, in _readerthread
+    buffer.append(fh.read())
+                  ^^^^^^^^^
+UnicodeDecodeError: 'cp949' codec can't decode byte 0xec in position 45: illegal multibyte sequence
+  clean s1 b520000 OK (2/140)
+Exception in thread Thread-5 (_readerthread):
+Traceback (most recent call last):
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 1599, in _readerthread
+    buffer.append(fh.read())
+                  ^^^^^^^^^
+UnicodeDecodeError: 'cp949' codec can't decode byte 0xec in position 45: illegal multibyte sequence
+  clean s1 b530000 OK (3/140)
+Exception in thread Thread-7 (_readerthread):
+Traceback (most recent call last):
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 1599, in _readerthread
+    buffer.append(fh.read())
+                  ^^^^^^^^^
+UnicodeDecodeError: 'cp949' codec can't decode byte 0xec in position 45: illegal multibyte sequence
+  clean s1 b540000 OK (4/140)
+Exception in thread Thread-9 (_readerthread):
+Traceback (most recent call last):
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 1599, in _readerthread
+    buffer.append(fh.read())
+                  ^^^^^^^^^
+UnicodeDecodeError: 'cp949' codec can't decode byte 0xec in position 45: illegal multibyte sequence
+  clean s1 b550000 OK (5/140)
+Exception in thread Thread-11 (_readerthread):
+Traceback (most recent call last):
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 1599, in _readerthread
+    buffer.append(fh.read())
+                  ^^^^^^^^^
+UnicodeDecodeError: 'cp949' codec can't decode byte 0xec in position 45: illegal multibyte sequence
+  clean s1 b560000 OK (6/140)
+Exception in thread Thread-13 (_readerthread):
+Traceback (most recent call last):
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 1045, in _bootstrap_inner
+    self.run()
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\threading.py", line 982, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\a3162\AppData\Local\Programs\Python\Python311\Lib\subprocess.py", line 1599, in _readerthread
+    buffer.append(fh.read())
+                  ^^^^^^^^^
+UnicodeDecodeError: 'cp949' codec can't decode byte 0xec in position 45: illegal multibyte sequence
+  clean s1 b570000 OK (7/140)
+[clean] 공통 스텝 예산 123.5 Msteps
+  clean  8월   s1  → t003300.pt (124.5M, 예산 대비 +1.0M)
+  clean  8월   s2  → t003300.pt (128.5M, 예산 대비 +5.0M)
+  clean  8월   s3  → t003300.pt (123.5M, 예산 대비 +0.0M)
+  clean  8월   s4  → t003000.pt (128.6M, 예산 대비 +5.1M)
+  clean  8월   s5  → t003000.pt (119.5M, 예산 대비 -4.0M)
+  clean  9월   s6  → t002700.pt (123.7M, 예산 대비 +0.2M)
+  clean  9월   s7  → t002700.pt (122.7M, 예산 대비 -0.7M)
+  clean  9월   s8  → t002700.pt (122.4M, 예산 대비 -1.0M)
+  clean  9월   s9  → t002700.pt (122.6M, 예산 대비 -0.9M)
+  clean  9월   s10 → t002700.pt (122.7M, 예산 대비 -0.8M)
+[nd] 공통 스텝 예산 3.5 Msteps
+  nd     8월   s2  → t003300.pt (3.5M, 예산 대비 +0.0M)
+  nd     8월   s3  → t003300.pt (3.6M, 예산 대비 +0.1M)
+  nd     8월   s4  → t003300.pt (3.6M, 예산 대비 +0.1M)
+  nd     8월   s5  → t003300.pt (3.6M, 예산 대비 +0.1M)
+  nd     8월   s6  → t003300.pt (3.6M, 예산 대비 +0.1M)
+  nd     9월   s7  → t003000.pt (3.5M, 예산 대비 -0.0M)
+  nd     9월   s8  → t003000.pt (3.6M, 예산 대비 +0.0M)
+  nd     9월   s9  → t003000.pt (3.6M, 예산 대비 +0.0M)
+  nd     9월   s10 → t003000.pt (3.5M, 예산 대비 -0.1M)
+  nd     9월   s11 → t003000.pt (3.5M, 예산 대비 -0.0M)
+
+평가 140회 (런 20 × 블록 7). b500000 은 이미 있으므로 제외.
+  clean s2 b510000 OK (8/140)
+  clean s2 b520000 OK (9/140)
+  clean s2 b530000 OK (10/140)
+  clean s2 b540000 OK (11/140)
+  clean s2 b550000 OK (12/140)
+  clean s2 b560000 OK (13/140)
+  clean s2 b570000 OK (14/140)
