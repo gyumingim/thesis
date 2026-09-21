@@ -1,0 +1,38 @@
+  align_audit.py               OK
+  batch_effect.py              OK
+  carla_ab_analysis.py         OK
+  carla_cluster_ci.py          OK
+  carla_numbers_check.py       OK
+  crossing_test.py             OK
+  dpc_defense.py               OK (인자 필요 — 사용법 출력)
+  dpc_metric.py                OK (인자 필요 — 사용법 출력)
+  dpc_recompute.py             OK
+  dpc_reliability.py           OK
+  early_stop_analysis.py       OK
+  entropy_collapse.py          OK
+  export_policy.py             건너뜀 — 인자 필요 + npz 를 쓴다
+  failure_mode_trend.py        OK
+  headline_compare.py          OK
+  lane_margin_probe.py         OK (인자 필요 — 사용법 출력)
+  mask_mechanism.py            OK
+  ood_analysis.py              OK
+  oracle_bias.py               OK
+  paper_numbers_check.py       OK
+  percept_ft.py                건너뜀 — 미세조정 — 소요 미측정(추정만으로 제외한다고 적어 둔다)
+  percept_prep.py              건너뜀 — 원자료 준비 단계 — 파일을 쓴다
+  percept_run.py               건너뜀 — CARLA 서버 필요
+  plate_composite.py           건너뜀 — 이미지를 쓴다
+  power_mde.py                 OK
+  scenario_axis.py             OK
+  scenario_difficulty.py       OK
+  scenario_icc.py              OK
+  smoke_all.py                 건너뜀 — 자기 자신
+  step_aligned_analysis.py     OK
+  steps_vs_batch.py            OK
+  table5_filters.py            OK
+  tesla_dashboard.py           건너뜀 — 그림을 쓴다(figs/ 를 흔든다)
+  time_to_threshold.py         OK (인자 필요 — 사용법 출력)
+  variance_components.py       OK
+  viz_dashboard.py             건너뜀 — 그림을 쓴다(figs/ 를 흔든다)
+
+성공 28 · 실패 0 · 건너뜀 8 (전체 36)

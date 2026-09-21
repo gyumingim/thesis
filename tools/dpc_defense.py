@@ -62,4 +62,9 @@ def main(tb_dir, ev_dir):
 
 
 if __name__ == "__main__":
+    # 인자 없이 부르면 IndexError 가 났다. 논문이 이 경로를 인용하므로,
+    # 심사자가 그대로 실행했을 때 처음 보는 것이 트레이스백이어서는 안 된다.
+    if len(sys.argv) < 3:
+        print((__doc__ or '').strip())
+        sys.exit(2)
     main(sys.argv[1], sys.argv[2])
