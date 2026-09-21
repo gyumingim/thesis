@@ -446,6 +446,33 @@ def main():
     except Exception as _e:
         _skip("분산 성분", _e)
 
+    # §6.3 DPC 독립 재현 (2026-09-21) — 9월 배치 표 한 행. 원자료에서 다시 산출한다.
+    # 서브프로세스로 부르는 이유: dpc_recompute 는 DPC_SRC 환경변수로 표본을 고르고
+    # 텐서보드를 읽는다(본 프로세스에서 import 하면 기본값 표본이 캐시된다).
+    try:
+        import subprocess as _sp2
+        _r2 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        _o2 = _sp2.run(
+            [os.path.abspath(os.path.join(_r2, ".venv/Scripts/python.exe")),
+             os.path.abspath(os.path.join(_r2, "tools/dpc_recompute.py"))],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=dict(os.environ, PYTHONUTF8="1", DPC_SRC="sep"), cwd=_r2,
+            timeout=600).stdout
+        _m11 = re.search(r"전 구간 ([-+0-9.]+) \(순열 p=([0-9.]+)\)", _o2)
+        _m12 = re.search(r"전반\(≤30분\) ([-+0-9.]+) \(p=([0-9.]+)\) \| "
+                         r"후반\(>30분\) ([-+0-9.]+) \(p=([0-9.]+)\) \| Δτ=([-+0-9.]+)", _o2)
+        if _m11 and _m12:
+            _row2 = ("| **9월 (독립)** | **%s (p=%s)** | %s (p=%s) | %s (p=%s) | %s |"
+                     % (_m11.group(1), _m11.group(2), _m12.group(1), _m12.group(2),
+                        _m12.group(3), _m12.group(4), _m12.group(5)))
+            _row2 = _row2.replace("-", chr(8722))
+            checks.append(("DPC 9월 행", _row2,
+                           _row2 if _row2 in text else "논문에 없음"))
+        else:
+            checks.append(("DPC 9월 행", "찾음", "dpc_recompute 출력 형식 불일치"))
+    except Exception as _e:
+        _skip("DPC 독립 재현", _e)
+
     # §6.3 DPC 신뢰도 (2026-09-16) — 「널이 측정 잡음의 산물이 아니다」의 근거.
     # 타깃 쪽은 여기서 다시 계산하고(1초), 소스 쪽은 텐서보드 로딩이 20초 넘어
     # 기록 파일과 대조한다. 기록이 낡았으면 **타깃 값이 어긋나** 발각된다.

@@ -87,7 +87,13 @@ def perm_p(seeds, observed):
 
 def main():
     pairs = []
-    for ev in sorted(glob.glob("bench_results/clean/eval_md__clean_s*.json")):
+    # 기본은 8월 배치(논문의 확정 정숙 조건). DPC_SRC=sep 으로 **9월 배치**를 부르면
+    # §8 (4) 가 요구한 **독립 재현**이 된다 — 다른 시드·다른 시점·더 안정적인 처리량
+    # (σ 7.99 → 0.74)이고 재학습은 필요 없다. 논문 수치를 흔들지 않도록 기본값은 그대로 둔다.
+    _src = ("bench_results/seeds6to10/eval_md__clean_s*.json"
+            if os.environ.get("DPC_SRC") == "sep"
+            else "bench_results/clean/eval_md__clean_s*.json")
+    for ev in sorted(glob.glob(_src)):
         s = re.search(r"_s(\d+)\.json$", ev).group(1)
         runs = glob.glob("runs/Intersection__clean_custom__%s__*" % s)
         if not runs:
@@ -101,7 +107,9 @@ def main():
         print("자료 없음")
         return 2
 
-    print("확정 정숙 조건(136M) DPC 재산출 — 시드 %d개" % len(pairs))
+    print("%s DPC 산출 — 시드 %d개"
+          % ("**9월 배치(독립 재현)**" if os.environ.get("DPC_SRC") == "sep"
+             else "확정 정숙 조건(136M)", len(pairs)))
     seeds_all, seeds_early, seeds_late = [], [], []
     for s, L, M, T in pairs:
         t, p = kendalltau(L, M)
@@ -120,8 +128,11 @@ def main():
     tau_l = stratified_tau(seeds_late)
     print()
     print("  층화 τ-b  전 구간 %+.3f (순열 p=%.3f)" % (tau_all, perm_p(seeds_all, tau_all)))
-    print("           전반(≤30분) %+.3f | 후반(>30분) %+.3f | Δτ=%+.3f"
-          % (tau_e, tau_l, tau_e - tau_l))
+    # 창별 순열 p 도 찍는다 — 논문 표(전반 p=0.422, 후반 p=0.804)가 인용하는 값인데
+    # 이 도구는 전 구간만 찍고 있었다. 배치 간 비교를 하려면 같은 자리에 있어야 한다.
+    print("           전반(≤30분) %+.3f (p=%.3f) | 후반(>30분) %+.3f (p=%.3f) | Δτ=%+.3f"
+          % (tau_e, perm_p(seeds_early, tau_e), tau_l, perm_p(seeds_late, tau_l),
+             tau_e - tau_l))
     print()
     print("  해석 기준: |τ| < 0.2 면 예측력 부재로 읽는다. Δτ 가 크고 전반 τ 가 유의하면")
     print("  '신뢰 창(trust horizon)'이 존재한다는 뜻이고, 둘 다 0 부근이면 경량 신호로는")
