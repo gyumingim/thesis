@@ -259,7 +259,7 @@ Pearson 상관)로 측정했다 — "낮은 상관의 시뮬레이터로는 의�
 d=0.83(pooled SD 15.3%p)이고, 이 크기가 참값이라도 **팔당 5시드의 검정력은 0.19** 다 —
 효과가 실재해도 다섯 번 중 네 번은 "유의하지 않음"이 나오는 설계다. 같은 n=5 에서 80%
 검정력으로 검출 가능한 최소 격차는 **31.9%p**(관측치의 2.5배)이며, 관측 격차를 80% 로
-검출하려면 **팔당 25시드(총 50시간)** 가 필요하다. 반대 방향의 주장도 막힌다: TOST 경계가
+검출하려면 **팔당 25시드(총 50시간)** 가 필요하다(**아래에서 다시 센다 — 표적을 블록 평균 격차로 바꾸고 σ 를 성분 분해하면 팔당 10시드다**). 반대 방향의 주장도 막힌다: TOST 경계가
 [−5.3, +30.7]%p 이므로 "두 팔이 ±Δ 안에서 같다"를 말하려면 Δ≥30.7%p 여야 하는데 그 폭이
 격차 자체보다 크다. 즉 **동등성도 주장할 수 없다.** 비유의는 "같다"가 아니라 **"이 표본으로는
 구별하지 못한다"** 이다.
@@ -657,7 +657,11 @@ Welch p=0.071)다(§7 표 6). 헤드라인으로 쓰는 수치가 표본 선택�
 **다만 이것을 "표본을 늘려도 유의해지지 않을 것"으로 읽어서는 안 된다** — 그것은 관측된
 p 값에서 미래 검정력을 역추론하는 오류이고, 실제로 이 설계의 사전 검정력은 관측 효과크기
 (d=0.83)에서조차 **0.19** 에 불과하다(§2.5, `tools/power_mde.py`). 유의성을 판정하려면
-팔당 25시드가 필요하다. 12.7%p 를 "실질적으로 의미 있는 차이"로 볼지는 통계가 아니라
+팔당 25시드가 필요하다 — **단, 이 25 는 b500000 한 블록의 12.7%p 를 표적으로 한 값이며,
+블록 평균 격차 19.7%p 를 표적으로 σ 를 성분 분해하면 팔당 10시드로 내려간다(§2.5 재계산).
+그리고 그 10시드는 «한 번에 이어서 도는» 10시드여야 한다 — 나눠 도는 순간 배치가 붙고,
+실제로 붙었다(§7 배치 효과).** 시드를 3에서 5로 늘려도, 또 한 배치 안에서 5시드로 다시
+재현해도(9월 배치 −9.1%p, p=0.095) 비유의라는 결론은 바뀌지 않았다. 12.7%p 를 "실질적으로 의미 있는 차이"로 볼지는 통계가 아니라
 응용이 정할 문제이며, 현재 자료가 지지하는 서술은 **"이 표본으로는 구별하지 못한다"**
 까지다(동등성도 주장할 수 없다 — TOST 경계 ±30.7%p).
 
@@ -1890,7 +1894,19 @@ gaps range -12.7 to -29.3pp, mean -19.7pp (seed-unit -19.8pp, Welch p = 0.071), 
 than seed-axis variance (ratio 0.34-0.70), so the direction is stable. Scene difficulty
 correlates across arms (Kendall tau-b = +0.414, n = 240 scenes) and no scene defeats both
 arms, so the gap is a broad shift rather than a few lightweight-specific failures.
-(iv) An
+(iv) We then doubled the seed axis to 10 per arm on the same machine with byte-identical
+training code. Pooled, the gap becomes significant for the first time (-14.4pp, Welch
+p = 0.020); we report that number but do not use it. The added seeds were run three weeks
+later and completed 15.3% (lightweight) and 7.3% (native) more environment steps in the
+same wall-clock hour, so the two batches are not exchangeable in precisely the quantity a
+fixed-time protocol measures. Analysed within batch the gap is -19.8pp (p = 0.071) and
+-9.1pp (p = 0.095): the direction replicates in an independent batch, and neither batch
+is significant on its own. Aligning checkpoints at matched step counts removes most of the
+batch difference (59% lightweight, 37% native) but not all of it, and the residual is not
+distinguishable from zero at n = 5. The practical rule we draw is that seed counts carry a
+timestamp: run them contiguously, and if you cannot, put batch in the design and log
+throughput as a diagnostic (Section 7).
+(v) An
 earlier version of this comparison was cross-machine -- the 68%+/-9% baseline was measured
 on a laptop (RTX 4060) while the then-current desktop figure was 48.9% (n=3, RTX 5080); the
 matched-hardware baseline reported here replaces it (Section 7).
