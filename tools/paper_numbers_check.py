@@ -686,6 +686,19 @@ def main():
     except Exception as _e:
         _skip("노이즈 사전 감도", _e)
 
+    # 배치가 둘이 된 뒤로 «각 5시드» 는 더 이상 자명하지 않다 — 어느 배치인지 말해야
+    # 한다. 헤드라인·그림 캡션이 가장 먼저 읽히는 자리이므로 거기부터 건다.
+    for _tag, _need in (("**핵심 실증 결과**", "8월 배치"),
+                        ("**그림 5.**", "8월 배치"),
+                        ("**그림 1.**", "8월 배치")):
+        _pos = text.find(_tag)
+        if _pos < 0:
+            checks.append(("배치 명시 " + _tag, "있음", "문구를 못 찾음"))
+        else:
+            _seg = text[_pos:_pos + 400]
+            checks.append(("배치 명시 " + _tag, _need,
+                           _need if _need in _seg else "배치 미명시"))
+
     for name, expected, actual in checks:
         ok = expected == actual
         bad += not ok
