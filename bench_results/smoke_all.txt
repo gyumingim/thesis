@@ -1,3 +1,8 @@
+파이썬 구문 검사 89개 — 오류 0건
+셸 문법 검사 32개 — 오류 0건
+스크립트가 가리키는 고정 입력 경로 3개 — 없음 0건
+셸 스크립트 줄 중간 리터럴 backslash-n: 없음
+
   align_audit.py               OK
   batch_effect.py              OK
   carla_ab_analysis.py         OK

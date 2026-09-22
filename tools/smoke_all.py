@@ -10,6 +10,7 @@ DPC_SRC, --fast, --reuse, --plan-only) 시드 목록 기본값도 한 번 바꿨
 
 실행: .venv/Scripts/python.exe tools/smoke_all.py
 """
+import glob
 import io
 import os
 import subprocess
@@ -61,6 +62,70 @@ def py_syntax():
     return len(bad)
 
 
+def sh_syntax():
+    """셸 스크립트 `bash -n` — 문법만. 리터럴 backslash-n 은 여기서 안 걸린다(문법은 맞다).
+
+    두 검사는 서로를 대신하지 못한다. carla_seed_sweep.sh 는 `bash -n` 을 통과하면서도
+    3주 동안 돌지 않았다(2026-09-22).
+    """
+    import glob
+    import shutil
+    bash = shutil.which("bash") or "C:/Program Files/Git/usr/bin/bash.exe"
+    if not os.path.exists(bash):
+        print("셸 문법 검사 건너뜀 — bash 를 찾지 못했다 (%s)" % bash)
+        return 0
+    files = [f for f in sorted(glob.glob(os.path.join(ROOT, "**", "*.sh"), recursive=True))
+             if ".venv" not in f]
+    bad = []
+    for f in files:
+        r = subprocess.run([bash, "-n", f], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            bad.append((os.path.relpath(f, ROOT),
+                        ((r.stderr or "").strip().split(chr(10)) or [""])[0][:80]))
+    print("셸 문법 검사 %d개 — 오류 %d건" % (len(files), len(bad)))
+    for f, m in bad:
+        print("  **%s** %s" % (f, m))
+    return len(bad)
+
+
+def ref_inputs():
+    """스크립트가 **입력으로 지정한 절대 경로**가 실재하는가.
+
+    출력 경로는 아직 없는 것이 정상이므로 구분이 필요하다. 의미가 분명한 세 패턴만 본다:
+    `--policy "<path>"`, `-script="<path> <args>"`, 그리고 `.uproject`.
+
+    ★ 패턴마다 뒤처리가 다르다. `-script=` 는 경로 뒤에 인자가 붙으므로 첫 낱말만 쓰고,
+      `.uproject` 는 경로 자체에 공백이 있다("Unreal Projects"). 첫 판은 둘을 같게
+      다루어 오탐을 냈다 — 한 번은 인자 때문에, 고친 뒤엔 공백 때문에.
+    """
+    import glob
+    import re as _re
+    # (정규식, 첫 낱말만 쓸 것인가)
+    pats = [(_re.compile(r'--policy[= ]"([^"]+)"'), False),
+            (_re.compile(r'-script="([^"]+)"'), True),
+            (_re.compile(r'"([^"]*[.]uproject)"'), False)]
+    seen, missing = set(), []
+    for f in sorted(glob.glob(os.path.join(ROOT, "**", "*.sh"), recursive=True)):
+        if ".venv" in f:
+            continue
+        txt = io.open(f, encoding="utf-8", errors="replace").read()
+        for pat, first_word in pats:
+            for m in pat.finditer(txt):
+                raw = m.group(1)
+                if first_word:
+                    raw = raw.split(" ")[0]
+                if "$" in raw:              # 변수가 든 경로는 정적으로 못 푼다
+                    continue
+                seen.add(raw)
+                if not os.path.exists(raw):
+                    missing.append((os.path.relpath(f, ROOT), raw))
+    print("스크립트가 가리키는 고정 입력 경로 %d개 — 없음 %d건" % (len(seen), len(missing)))
+    for f, raw in missing:
+        print("  **%s** → %s" % (f, raw))
+    return len(missing)
+
+
 def sh_lint():
     """셸 스크립트의 **줄 중간 리터럴 backslash-n** 을 잡는다.
 
@@ -92,6 +157,8 @@ def sh_lint():
 
 def main():
     n_py = py_syntax()
+    n_bash = sh_syntax()
+    n_ref = ref_inputs()
     n_sh = sh_lint()
     print("")
     files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(ROOT, "tools", "*.py")))
@@ -140,7 +207,7 @@ def main():
         print("")
         print("※ 인자가 꼭 필요한 도구라면 SKIP 에 이유와 함께 넣는다. 그냥 두면")
         print("  다음 점검에서 또 «실패» 로 뜨고, 진짜 고장과 구분이 안 된다.")
-    return 1 if (bad or n_sh or n_py) else 0
+    return 1 if (bad or n_sh or n_py or n_bash or n_ref) else 0
 
 
 if __name__ == "__main__":
