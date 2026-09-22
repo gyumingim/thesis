@@ -686,6 +686,29 @@ def main():
     except Exception as _e:
         _skip("노이즈 사전 감도", _e)
 
+    # §8 (9) 슬롯 절제 (2026-09-23) — 「무작위화 상한 2.2%p」와 「제거 −34.3%p」가
+    # 결론의 근거다. 표 세 행을 기록에서 뽑아 본문과 맞춘다.
+    try:
+        _sp4 = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "bench_results", "noise_sensitivity", "slot_ablation.txt")
+        _st4 = open(_sp4, encoding="utf-8").read()
+        _mk10 = lambda tag, v: checks.append(("슬롯절제 " + tag, v,
+                                              v if v in text else "논문에 없음"))
+        _base = re.search(r"원본\s+([0-9.]+)%\s+—\s+([0-9.]+)%", _st4)
+        _mk10("원본 행", "| 원본 | %s%% | — | %s%% |" % (_base.group(1), _base.group(2)))
+        _z = re.search(r"슬롯 제거\(전부 0\)\s+([0-9.]+)%\s+([-+0-9.]+)\s+([0-9.]+)%", _st4)
+        _mk10("제거 행", "| 슬롯 **제거**(전부 0) | %s%% | **%s%%p** | %s%% |"
+              % (_z.group(1), _z.group(2).replace("-", chr(8722)), _z.group(3)))
+        _r = re.search(r"슬롯 무작위\s+([0-9.]+)%\s+([-+0-9.]+)\s+([0-9.]+)%", _st4)
+        _mk10("무작위 행", "| 슬롯 **무작위**(점유 유지) | %s%% | %s%%p | %s%% |"
+              % (_r.group(1), _r.group(2).replace("-", chr(8722)), _r.group(3)))
+        # 결론의 방향 자체 — 제거가 무작위화보다 훨씬 크게 다쳐야 «점유를 읽는다» 가 성립
+        checks.append(("슬롯절제 제거>무작위", "예",
+                       "예" if abs(float(_z.group(2))) > 5 * abs(float(_r.group(2)))
+                       else "아니오"))
+    except Exception as _e:
+        _skip("슬롯 절제", _e)
+
     # §8 (9) 결합 주입 (2026-09-23) — 「(b) 도 닫힌다」의 근거 표 두 행.
     try:
         _jp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
