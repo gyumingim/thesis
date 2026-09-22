@@ -686,6 +686,27 @@ def main():
     except Exception as _e:
         _skip("노이즈 사전 감도", _e)
 
+    # §8 (9) V 스윕 (2026-09-22) — 「V 상향은 탈락」의 근거 표 세 행.
+    # 기록 파일과 대조한다(재측정은 환경 롤아웃이라 감시에 넣기엔 무겁다).
+    try:
+        _vp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "bench_results", "noise_sensitivity", "vsweep.txt")
+        _vt = open(_vp, encoding="utf-8").read()
+        _blocks = _vt.split("############ V=")[1:]
+        _mk7 = lambda tag, v: checks.append(("V스윕 " + tag, v,
+                                             v if v in text else "논문에 없음"))
+        for _b in _blocks:
+            _v = _b.split(" ")[0]
+            _occ = re.search(r"비율 평균 ([0-9.]+)%", _b).group(1)
+            _rat = re.search(r"^  1\.0\s+[0-9.]+\s+([0-9.]+)", _b, re.M).group(1)
+            _base = re.search(r"0 \(무주입\)\s+([0-9.]+)%", _b).group(1)
+            _lab = "3 (학습 조건)" if _v == "3" else _v
+            _bold = "**%s%%**" % _base if float(_base) < 50 else "%s%%" % _base
+            _mk7("V=%s 행" % _v,
+                 "| %s | %s%% | %s | %s |" % (_lab, _occ, _rat, _bold))
+    except Exception as _e:
+        _skip("V 스윕", _e)
+
     # 배치가 둘이 된 뒤로 «각 5시드» 는 더 이상 자명하지 않다 — 어느 배치인지 말해야
     # 한다. 헤드라인·그림 캡션이 가장 먼저 읽히는 자리이므로 거기부터 건다.
     for _tag, _need in (("**핵심 실증 결과**", "8월 배치"),
