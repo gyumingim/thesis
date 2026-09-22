@@ -702,6 +702,12 @@ def main():
         _r = re.search(r"슬롯 무작위\s+([0-9.]+)%\s+([-+0-9.]+)\s+([0-9.]+)%", _st4)
         _mk10("무작위 행", "| 슬롯 **무작위**(점유 유지) | %s%% | %s%%p | %s%% |"
               % (_r.group(1), _r.group(2).replace("-", chr(8722)), _r.group(3)))
+        for _k, _lab in (("navi 무작위", "navi 블록 무작위"),
+                         ("ego 무작위", "ego 블록 무작위")):
+            _m5 = re.search(_k + r"\s+([0-9.]+)%\s+([-+0-9.]+)\s+([0-9.]+)%", _st4)
+            _mk10("%s 행" % _k, "| %s | %s%% | %s%%p | %s%% |"
+                  % (_lab, _m5.group(1), _m5.group(2).replace("-", chr(8722)),
+                     _m5.group(3)))
         # 결론의 방향 자체 — 제거가 무작위화보다 훨씬 크게 다쳐야 «점유를 읽는다» 가 성립
         checks.append(("슬롯절제 제거>무작위", "예",
                        "예" if abs(float(_z.group(2))) > 5 * abs(float(_r.group(2)))

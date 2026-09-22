@@ -36,7 +36,11 @@ from evaluate import load_agent, _act
 from obs_noise import OTHER_BASE, OTHER_DIM, N_OTHERS
 
 
-def mutate(obs, mode, rng):
+EGO_SLICE = slice(0, 9)
+NAVI_SLICE = slice(9, 19)
+
+
+def mutate(obs, mode, rng, ranges=None):
     if mode == "keep":
         return obs
     out = obs.copy()
@@ -53,7 +57,38 @@ def mutate(obs, mode, rng):
     return out
 
 
-def run(agent, mean, std, device, episodes, envs, n_vehicles, seed, mode):
+def mutate_block(obs, sl, rng, ranges):
+    """한 블록을 **관측된 범위 안** 균등난수로 — 지지집합은 지키고 정보만 파괴한다.
+
+    ★ ego/navi 를 0 으로 만드는 것은 안 된다. 학습 중 ego 가 전부 0 인 적이 없으므로
+      분포 밖 충격과 정보 제거가 섞인다(§5 가 말하는 바로 그 혼동). 차원별 최소~최대
+      안에서 다시 뽑으면 주변분포는 유지되고 «정보» 만 사라진다.
+    """
+    out = obs.copy()
+    lo, hi = ranges
+    n = out.shape[0]
+    cols = np.arange(sl.start, sl.stop)
+    out[:, sl] = (lo[cols] + rng.random((n, len(cols))).astype(np.float32)
+                  * (hi[cols] - lo[cols]))
+    return out
+
+
+def observed_ranges(n_vehicles, seed, envs=64, steps=300):
+    """차원별 관측 범위(최소~최대) — «지지집합 안에서» 무작위화하기 위한 사전 조사."""
+    from env_numba import IntersectionEnv
+    env = IntersectionEnv(envs, n_vehicles, seed=seed)
+    rng = np.random.default_rng(7)
+    obs = env.obs.copy()
+    lo = obs.min(0).copy()
+    hi = obs.max(0).copy()
+    for _ in range(steps):
+        obs = env.step(rng.uniform(-1, 1, (envs, 2)).astype(np.float32))[0]
+        lo = np.minimum(lo, obs.min(0))
+        hi = np.maximum(hi, obs.max(0))
+    return lo, hi
+
+
+def run(agent, mean, std, device, episodes, envs, n_vehicles, seed, mode, ranges=None):
     from env_numba import IntersectionEnv
     E = min(envs, episodes)
     env = IntersectionEnv(E, n_vehicles, seed=seed)
@@ -61,7 +96,13 @@ def run(agent, mean, std, device, episodes, envs, n_vehicles, seed, mode):
     obs = env.obs.copy()
     done = succ = crash = 0
     while done < episodes:
-        o, r, tm, tr, fl = env.step(_act(agent, mutate(obs, mode, rng), mean, std, device))
+        if mode == "ego":
+            fed = mutate_block(obs, EGO_SLICE, rng, ranges)
+        elif mode == "navi":
+            fed = mutate_block(obs, NAVI_SLICE, rng, ranges)
+        else:
+            fed = mutate(obs, mode, rng)
+        o, r, tm, tr, fl = env.step(_act(agent, fed, mean, std, device))
         for e in np.nonzero(tm | tr)[0]:
             if done < episodes:
                 done += 1
@@ -88,8 +129,10 @@ def main():
     ap.add_argument("--arm", default="clean_custom")
     a = ap.parse_args()
     device = torch.device("cpu")
-    res = {m: [] for m in ("keep", "zero", "rand")}
-    crashes = {m: [] for m in ("keep", "zero", "rand")}
+    MODES = ("keep", "zero", "rand", "navi", "ego")
+    res = {m: [] for m in MODES}
+    crashes = {m: [] for m in MODES}
+    ranges = observed_ranges(a.vehicles, 3000)
     for s in [int(x) for x in a.seeds.split(",")]:
         d = sorted(glob.glob("runs/Intersection__%s__%d__*" % (a.arm, s)))
         if not d:
@@ -98,9 +141,9 @@ def main():
         if not os.path.exists(ck):
             continue
         agent, mean, std, _ = load_agent(ck, device)
-        for m in ("keep", "zero", "rand"):
+        for m in MODES:
             sr, cr = run(agent, mean, std, device, a.episodes, a.envs,
-                         a.vehicles, 3000 + s, m)
+                         a.vehicles, 3000 + s, m, ranges)
             res[m].append(sr)
             crashes[m].append(cr)
         print("  시드 %d 완료" % s, flush=True)
@@ -111,7 +154,8 @@ def main():
           % ("조건", "성공률", "Δ(%p)", "충돌률", "부호순열 p"))
     base = np.array(res["keep"])
     for m, lab in (("keep", "원본"), ("zero", "슬롯 제거(전부 0)"),
-                   ("rand", "슬롯 무작위")):
+                   ("rand", "슬롯 무작위"), ("navi", "navi 무작위"),
+                   ("ego", "ego 무작위")):
         v = np.array(res[m])
         c = np.array(crashes[m])
         if m == "keep":
@@ -125,13 +169,23 @@ def main():
     print("  시드별 원본 성공률: " + " ".join("%.0f%%" % (100 * x) for x in base))
     print("")
     dz = 100 * (np.array(res["zero"]) - base).mean()
-    print("판정: 슬롯을 통째로 지웠을 때 %+.1f%%p." % dz)
-    if abs(dz) < 5:
-        print("  → **과제가 주변차 상태를 거의 쓰지 않는다**(위 (가)). 인지 오차가 무해한")
-        print("    것은 당연하며, 이 과제에서 「노이즈 주입」은 물을 것이 없다.")
-    else:
-        print("  → 정책은 주변차 정보를 **실제로 쓴다**(위 (나)). 그렇다면 §8 (9) 의 결론은")
-        print("    「이 정도 크기의 오차로는」 이라는 단서와 함께 읽어야 한다.")
+    dr = 100 * (np.array(res["rand"]) - base).mean()
+    dn = 100 * (np.array(res["navi"]) - base).mean()
+    de = 100 * (np.array(res["ego"]) - base).mean()
+    print("정책이 무엇을 읽는가 (클수록 의존이 크다)")
+    for lab, d in (("ego (자기 상태)", de), ("navi (경로)", dn),
+                   ("주변차 **점유**", dz), ("주변차 **위치값**", dr)):
+        print("  %-18s %+7.1f%%p" % (lab, d))
+    print("  → 주변차는 «있는가» 가 «어디에 있는가» 보다 %.0f배 중요하다."
+          % (abs(dz) / max(abs(dr), 1e-9)))
+    print("")
+    print("읽을 때의 단서 셋:")
+    print("  (1) 개입 크기가 서로 다르다 — ego 9차원·navi 10차원·주변차 32차원이다.")
+    print("      «블록을 파괴했을 때의 피해» 순서이지 정규화된 중요도가 아니다.")
+    print("  (2) 범위 안 무작위화는 **주변분포는 지키되 차원 간 상관을 깬다.** 잡음 주입")
+    print("      보다 강한 개입이며, 그래서 상한으로만 읽어야 한다.")
+    print("  (3) 범위는 무작위 행동으로 굴려 조사했다. 학습된 정책이 실제로 지나는")
+    print("      영역보다 넓을 수 있고, 그만큼 개입이 과해진다.")
     return 0
 
 
