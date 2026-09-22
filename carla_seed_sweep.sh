@@ -40,7 +40,8 @@ while [ $round -lt 6 ]; do
     tag="sw_r${round}_${pol}"
     echo "[$(date +%H:%M)] R$round $pol" >> $LOG
     PYTHONUTF8=1 $PY /c/Users/a3162/thesis/carla_drive.py --policy "C:/ue/policy_${pol}.npz" \
-      --episodes 20 --max-steps 500 --turn-kind 전체 --npc 3 --governor 0.8 --mask-degen \n      --seed $round \
+      --episodes 20 --max-steps 500 --turn-kind 전체 --npc 3 --governor 0.8 --mask-degen \
+      --seed $round \
       --out "$RES/$tag.json" > $RES/$tag.log 2>&1
     grep -E "=== 전체" $RES/$tag.log | sed "s/^/  [$tag] /" >> $LOG 2>/dev/null
   done

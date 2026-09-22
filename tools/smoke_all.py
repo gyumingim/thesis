@@ -10,7 +10,7 @@ DPC_SRC, --fast, --reuse, --plan-only) 시드 목록 기본값도 한 번 바꿨
 
 실행: .venv/Scripts/python.exe tools/smoke_all.py
 """
-import glob
+import io
 import os
 import subprocess
 import sys
@@ -36,7 +36,38 @@ SKIP = {
 }
 
 
+def sh_lint():
+    """셸 스크립트의 **줄 중간 리터럴 backslash-n** 을 잡는다.
+
+    2026-09-22 실측: `carla_seed_sweep.sh` 의 줄바꿈 이음이 리터럴 «backslash n» 으로
+    망가져 있었다(heredoc 편집 사고로 추정). bash 는 그것을 **낱말 `n`** 으로 읽으므로
+    argparse 가 「unrecognized arguments: n」 으로 죽는다 — 즉 그 스크립트는 망가진
+    2026-09-01 이후 **한 번도 돌지 않았다**(결과 파일이 전부 08-29 자다).
+    `bash -n` 은 문법이 맞으므로 잡지 못한다. 그래서 따로 본다.
+    """
+    import glob
+    BS = chr(92)
+    bad = []
+    for f in sorted(glob.glob(os.path.join(ROOT, "**", "*.sh"), recursive=True)):
+        if ".venv" in f:
+            continue
+        for i, line in enumerate(io.open(f, encoding="utf-8", errors="replace"), 1):
+            t = line.rstrip(chr(10))
+            j = t.find(BS + "n")
+            if j >= 0 and j != len(t) - 2:      # 줄 끝 «\» 는 정상 이음
+                bad.append((os.path.relpath(f, ROOT), i, t.strip()[:90]))
+    if bad:
+        print("셸 스크립트 줄 중간 리터럴 backslash-n — bash 가 낱말 n 으로 읽는다:")
+        for f, i, t in bad:
+            print("  %s:%d  %s" % (f, i, t))
+    else:
+        print("셸 스크립트 줄 중간 리터럴 backslash-n: 없음")
+    return len(bad)
+
+
 def main():
+    n_sh = sh_lint()
+    print("")
     files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(ROOT, "tools", "*.py")))
     ok = fail = skipped = 0
     bad = []
@@ -83,7 +114,7 @@ def main():
         print("")
         print("※ 인자가 꼭 필요한 도구라면 SKIP 에 이유와 함께 넣는다. 그냥 두면")
         print("  다음 점검에서 또 «실패» 로 뜨고, 진짜 고장과 구분이 안 된다.")
-    return 1 if bad else 0
+    return 1 if (bad or n_sh) else 0
 
 
 if __name__ == "__main__":
