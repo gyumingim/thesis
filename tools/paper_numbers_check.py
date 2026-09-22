@@ -686,6 +686,25 @@ def main():
     except Exception as _e:
         _skip("노이즈 사전 감도", _e)
 
+    # §5 이동×의존 (2026-09-23) — 표 세 행 + 점유 이동. 기록 파일과 대조한다.
+    try:
+        _bp = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "bench_results", "block_shift.txt")
+        _bt = open(_bp, encoding="utf-8").read()
+        _mk11 = lambda tag, v: checks.append(("이동×의존 " + tag, v,
+                                              v if v in text else "논문에 없음"))
+        for _k, _lab, _bold in (("ego", "ego", False), ("navi", "navi", False),
+                                ("주변차\(점유 슬롯\)", "주변차 위치값(점유 슬롯)", True)):
+            _m6 = re.search(_k + r"\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)", _bt)
+            _z = ("**%s**" % _m6.group(1)) if _bold else _m6.group(1)
+            _mk11("%s 행" % _lab,
+                  "| %s | %s | %s | **%s** |" % (_lab, _z, _m6.group(2), _m6.group(3)))
+        _m7 = re.search(r"소스 ([0-9.]+)% · 타깃 ([0-9.]+)% \(차이 ([-+0-9.]+)%p", _bt)
+        _mk11("점유 이동", "소스 %s%% 대 타깃 %s%%" % (_m7.group(1), _m7.group(2)))
+        _mk11("점유 차이", "(**%s%%p**)" % _m7.group(3).replace("-", chr(8722)))
+    except Exception as _e:
+        _skip("이동×의존", _e)
+
     # §8 (9) 슬롯 절제 (2026-09-23) — 「무작위화 상한 2.2%p」와 「제거 −34.3%p」가
     # 결론의 근거다. 표 세 행을 기록에서 뽑아 본문과 맞춘다.
     try:
