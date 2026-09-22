@@ -686,6 +686,31 @@ def main():
     except Exception as _e:
         _skip("노이즈 사전 감도", _e)
 
+    # §6.4 횡방향·요각 (2026-09-23) — 표 세 행을 원자료에서 다시 뽑아 대조한다.
+    # 서브프로세스로 부르는 이유: 500프레임을 읽는 계산이라 import 로 끌어오면
+    # 감시가 매번 그 비용을 치른다(약 2초). 출력 형식만 고정해 두면 충분하다.
+    try:
+        import subprocess as _sp3
+        _r3 = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        _o3 = _sp3.run(
+            [os.path.abspath(os.path.join(_r3, ".venv/Scripts/python.exe")),
+             os.path.abspath(os.path.join(_r3, "bench/percept_lateral.py"))],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=dict(os.environ, PYTHONUTF8="1"), cwd=_r3, timeout=300).stdout
+        _lat = re.findall(r"^  ([0-9]+~[0-9]+) m\s+\d+\s+([-+]?[0-9.]+)\s+([0-9.]+)"
+                          r"\s+([0-9.]+)$", _o3, re.M)
+        _yaw = re.findall(r"^  ([0-9]+~[0-9]+) m\s+\d+\s+([-+]?[0-9.]+)\s+([0-9.]+)$",
+                          _o3, re.M)
+        _mk8 = lambda tag, v: checks.append(("횡방향 " + tag, v,
+                                             v if v in text else "논문에 없음"))
+        for (_b, _m, _s, _c), (_b2, _ym, _ys) in zip(_lat, _yaw):
+            _row = ("| %s m | %+.2f m | %.2f m | %.2f | %+.1f° | %.1f° |"
+                    % (_b, float(_m), float(_s), float(_c), float(_ym), float(_ys)))
+            _mk8("%s 행" % _b, _row)
+        checks.append(("횡방향 표 행 수", "3", str(len(_lat))))
+    except Exception as _e:
+        _skip("횡방향·요각", _e)
+
     # §8 (9) V 스윕 (2026-09-22) — 「V 상향은 탈락」의 근거 표 세 행.
     # 기록 파일과 대조한다(재측정은 환경 롤아웃이라 감시에 넣기엔 무겁다).
     try:
