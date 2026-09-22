@@ -31,6 +31,15 @@ import numpy as np
 BANDS = ((15.0, -0.13, 1.10),
          (30.0, -0.55, 2.82),
          (1e9, -1.72, 5.10))
+# §6.4 «나머지 차원» 표 (2026-09-23, bench/percept_lateral.py) — **횡방향**.
+# (상한 m, 평균오차 m, σ m). 종방향과 같은 구간 경계를 쓴다.
+LAT_BANDS = ((15.0, 0.30, 0.72),
+             (30.0, 0.34, 1.25),
+             (1e9, 0.50, 2.00))
+# 두 차원은 독립이 아니다 — ŷ 가 d̂ 에서 파생되므로 |오차| 상관이 0.48~0.53 이었다.
+# 독립으로 넣으면 같은 거리 오차를 두 번 세는 셈이라 결합 모형으로 넣는다.
+LAT_RHO = 0.50
+
 EGO_DIM, NAVI_DIM, OTHER_DIM, N_OTHERS = 9, 10, 4, 8
 OTHER_BASE = EGO_DIM + NAVI_DIM          # 19
 EPS = 1e-6
@@ -49,10 +58,26 @@ def band_stats(dist):
     return bias, sd
 
 
-def inject(obs, rng, detect_radius=50.0, scale=1.0):
+def band_stats_lat(dist):
+    """거리(m) → (횡방향 편향, σ). 종방향과 같은 구간 경계."""
+    bias = np.zeros_like(dist)
+    sd = np.zeros_like(dist)
+    lo = 0.0
+    for hi, b, s_ in LAT_BANDS:
+        m = (dist >= lo) & (dist < hi)
+        bias[m] = b
+        sd[m] = s_
+        lo = hi
+    return bias, sd
+
+
+def inject(obs, rng, detect_radius=50.0, scale=1.0, lateral=False):
     """(E, 51) 정규화 관측의 주변차 **종방향** 성분에 인지 오차를 주입한다.
 
     scale 은 감도 분석용 배율(0 이면 무주입, 1 이면 실측값 그대로).
+    lateral=True 면 **횡방향도 함께** 주입한다 — 상관 LAT_RHO 를 넣은 결합 모형이다.
+    기본값 False: 논문의 §8 (9) 사전 감도 수치가 종방향 단독으로 산출됐으므로,
+    기본 동작을 바꾸면 그 수치가 조용히 달라진다.
     원본을 바꾸지 않고 사본을 돌려준다.
     """
     out = np.array(obs, dtype=np.float32, copy=True)
@@ -72,9 +97,18 @@ def inject(obs, rng, detect_radius=50.0, scale=1.0):
         lat = (2.0 * l_n[ok] - 1.0) * detect_radius
         rng_m = np.hypot(fwd, lat)                     # 추정기 오차는 «거리» 의 함수다
         bias, sd = band_stats(rng_m)
-        noisy = fwd + scale * (bias + sd * rng.standard_normal(fwd.shape).astype(np.float32))
+        z_lon = rng.standard_normal(fwd.shape).astype(np.float32)
+        noisy = fwd + scale * (bias + sd * z_lon)
         out[np.where(ok)[0], b + 0] = np.clip(
             (noisy / detect_radius + 1.0) / 2.0, 0.0, 1.0).astype(np.float32)
+        if lateral:
+            # 상관 ρ 를 가진 둘째 정규난수: z2 = ρ·z1 + sqrt(1−ρ²)·w
+            w = rng.standard_normal(fwd.shape).astype(np.float32)
+            z_lat = LAT_RHO * z_lon + (1.0 - LAT_RHO ** 2) ** 0.5 * w
+            lbias, lsd = band_stats_lat(rng_m)
+            lnoisy = lat + scale * (lbias + lsd * z_lat)
+            out[np.where(ok)[0], b + 1] = np.clip(
+                (lnoisy / detect_radius + 1.0) / 2.0, 0.0, 1.0).astype(np.float32)
     return out
 
 
@@ -130,6 +164,46 @@ def _selftest():
     print("  빈 슬롯·횡/속도 차원·ego/navi 불변, scale=0 무주입 — 전부 확인")
     print("종합: %s" % ("통과" if okall else "**분포 불일치**"))
     return 0 if okall else 1
+
+
+def _selftest_lat():
+    """결합 주입(lateral=True)이 §6.4 «나머지 차원» 표와 상관 ρ 를 재현하는가."""
+    rng = np.random.default_rng(1)
+    DR = 50.0
+    n = 200000
+    obs = np.zeros((n, 51), np.float32)
+    true_fwd = rng.uniform(2.0, 45.0, n).astype(np.float32)
+    true_lat = rng.uniform(-8.0, 8.0, n).astype(np.float32)
+    obs[:, OTHER_BASE + 0] = (true_fwd / DR + 1.0) / 2.0
+    obs[:, OTHER_BASE + 1] = (true_lat / DR + 1.0) / 2.0
+    obs[:, OTHER_BASE + 2] = 0.5
+    obs[:, OTHER_BASE + 3] = 0.5
+    out = inject(obs, rng, DR, lateral=True)
+    e_lon = (2.0 * out[:, OTHER_BASE + 0] - 1.0) * DR - true_fwd
+    e_lat = (2.0 * out[:, OTHER_BASE + 1] - 1.0) * DR - true_lat
+    rng_m = np.hypot(true_fwd, true_lat)
+    print("결합 주입 — 횡방향이 §6.4 «나머지 차원» 표를 재현하는가 (n=%d)" % n)
+    print("  %-10s %10s %10s | %10s %10s" % ("구간", "목표 평균", "실측", "목표 σ", "실측"))
+    ok = True
+    lo = 0.0
+    for hi, b, sd in LAT_BANDS:
+        m = (rng_m >= lo) & (rng_m < min(hi, 45.0))
+        if m.sum() > 100:
+            mu, sg = e_lat[m].mean(), e_lat[m].std()
+            good = abs(mu - b) < 0.05 and abs(sg - sd) < 0.06
+            ok &= good
+            print("  %-10s %10.2f %10.2f | %10.2f %10.2f  %s"
+                  % ("%g~%g m" % (lo, min(hi, 45.0)), b, mu, sd, sg,
+                     "OK" if good else "**차이**"))
+        lo = hi
+    r = float(np.corrcoef(e_lon, e_lat)[0, 1])
+    good_r = abs(r - LAT_RHO) < 0.05
+    ok &= good_r
+    print("  두 차원의 상관 %.3f (목표 %.2f) %s" % (r, LAT_RHO, "OK" if good_r else "**차이**"))
+    print("  ※ 여기 상관은 **주입된 잡음끼리**의 것이다. §6.4 가 잰 0.48~0.53 은")
+    print("    |오차| 끼리의 상관이라 정의가 다르다 — 같은 수를 재현하는 것이 아니다.")
+    print("종합: %s" % ("통과" if ok else "**불일치**"))
+    return 0 if ok else 1
 
 
 def _realtest(steps=300, envs=64, n_vehicles=3, seed=7):
@@ -190,6 +264,8 @@ def _realtest(steps=300, envs=64, n_vehicles=3, seed=7):
 if __name__ == "__main__":
     import sys
     rc = _selftest()
+    print()
+    rc |= _selftest_lat()
     print()
     if "--real" in sys.argv:
         rc |= _realtest()

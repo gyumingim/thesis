@@ -46,7 +46,7 @@ def _occ_frac(obs):
 
 
 def sensitivity(agent, mean, std, device, steps, envs, n_vehicles, seed,
-                scales=SCALES):
+                scales=SCALES, lateral=False):
     """(A) 궤적은 깨끗하게, 행동만 두 번 계산."""
     from env_numba import IntersectionEnv
     env = IntersectionEnv(envs, n_vehicles, seed=seed)
@@ -62,7 +62,8 @@ def sensitivity(agent, mean, std, device, steps, envs, n_vehicles, seed,
         occ += o_
         tot += n_
         for s in scales:
-            a_n = _act(agent, inject(obs, rng, 50.0, scale=s), mean, std, device)
+            a_n = _act(agent, inject(obs, rng, 50.0, scale=s, lateral=lateral),
+                       mean, std, device)
             d[s].append(np.abs(a_n - a))
         if prev is not None:
             step_delta.append(np.abs(a - prev))
@@ -78,7 +79,8 @@ def policy_std(agent):
         return torch.exp(agent.actor_logstd).cpu().numpy().reshape(-1)
 
 
-def zero_shot(agent, mean, std, device, episodes, envs, n_vehicles, seed, scale):
+def zero_shot(agent, mean, std, device, episodes, envs, n_vehicles, seed, scale,
+              lateral=False):
     """(B) 주입된 관측을 정책이 실제로 받는다."""
     from env_numba import IntersectionEnv
     E = min(envs, episodes)
@@ -87,7 +89,8 @@ def zero_shot(agent, mean, std, device, episodes, envs, n_vehicles, seed, scale)
     obs = env.obs.copy()
     done = succ = 0
     while done < episodes:
-        fed = obs if scale == 0.0 else inject(obs, rng, 50.0, scale=scale)
+        fed = (obs if scale == 0.0 else
+               inject(obs, rng, 50.0, scale=scale, lateral=lateral))
         o, r, tm, tr, fl = env.step(_act(agent, fed, mean, std, device))
         for e in np.nonzero(tm | tr)[0]:
             if done < episodes:
@@ -160,6 +163,8 @@ def main():
     ap.add_argument("--sweep", action="store_true",
                     help="체크포인트 시계열로 민감도를 만든다 (C)")
     ap.add_argument("--sweep-steps", type=int, default=150)
+    ap.add_argument("--lateral", action="store_true",
+                    help="횡방향도 함께 주입 (§6.4 나머지 차원, 상관 결합)")
     args = ap.parse_args()
     device = torch.device("cpu")
 
@@ -176,15 +181,18 @@ def main():
             continue
         agent, mean, std, _ = load_agent(ck, device)
         dl, sd, occ = sensitivity(agent, mean, std, device, args.steps,
-                                  args.envs, args.vehicles, seed=1000 + s)
+                                  args.envs, args.vehicles, seed=1000 + s,
+                                  lateral=args.lateral)
         occs.append(occ)
         rows_sens.append((s, {k: v.mean(0) for k, v in dl.items()}, sd.mean(0),
                           policy_std(agent)))
         zs = {0.0: zero_shot(agent, mean, std, device, args.episodes, args.envs,
-                             args.vehicles, 2000 + s, 0.0)}
+                             args.vehicles, 2000 + s, 0.0,
+                             lateral=args.lateral)}
         for sc in SCALES:
             zs[sc] = zero_shot(agent, mean, std, device, args.episodes, args.envs,
-                               args.vehicles, 2000 + s, sc)
+                               args.vehicles, 2000 + s, sc,
+                               lateral=args.lateral)
         rows_zs.append((s, zs))
         print("  시드 %d 완료 (점유·비포화 %.1f%%)" % (s, 100 * occ), flush=True)
 
