@@ -1,4 +1,11 @@
-"""
+r"""[사용 중지 — 2026-08-20 1단계 초안. 참조하는 곳이 없고 후속판으로 대체됐다:
+장면 생성은 ue/scene_build_cs.py, 검증은 ue/label_audit.py·ue/render_audit.py.]
+
+★ 이 파일은 커밋된 이래 **한 번도 파싱된 적이 없다**(2026-09-22 전수 구문 검사에서
+  발견). 아래 독스트링의 경로 "C:\ue\out" 에서 \u 가 유니코드
+  이스케이프로 읽혀 SyntaxError 가 났다. 독스트링을 raw 로 바꿔 파싱은 되게 했으나
+  **동작을 확인한 적은 없다** — 되살려 쓰려면 UE 에서 실제로 돌려 보고 딱지를 떼라.
+
 UE 5.8 headless data-gen stage 1: capture_check.py
 Run: UnrealEditor-Cmd.exe <proj> -run=pythonscript -script="capture_check.py"
 Read-only: /Game/Scenes 하위 레벨 목록 + C:\ue\out\scene_i.json 존재 여부만 출력.

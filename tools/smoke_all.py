@@ -36,6 +36,31 @@ SKIP = {
 }
 
 
+def py_syntax():
+    """저장소 전체 파이썬 **구문 검사** — 도는지 이전에 파싱은 되는가.
+
+    smoke 는 tools/ 만 실행한다. bench/·ue/·루트의 스크립트는 인자나 UE·CARLA 가 있어야
+    돌지만, **파싱은 아무 조건 없이 돼야 한다.** 2026-09-22 실측: `ue/capture_check.py`
+    가 커밋된 2026-08-20 이래 한 번도 파싱되지 않았다(독스트링 경로의 backslash-u 가
+    유니코드 이스케이프로 읽혀 SyntaxError). 참조가 없어 아무도 몰랐다.
+    """
+    import ast
+    import glob
+    bad = []
+    files = [f for f in glob.glob(os.path.join(ROOT, "**", "*.py"), recursive=True)
+             if ".venv" not in f]
+    for f in files:
+        try:
+            ast.parse(io.open(f, encoding="utf-8", errors="replace").read(), filename=f)
+        except SyntaxError as e:
+            bad.append((os.path.relpath(f, ROOT), e.lineno,
+                        str(e).split("(")[0].strip()[:70]))
+    print("파이썬 구문 검사 %d개 — 오류 %d건" % (len(files), len(bad)))
+    for f, ln, m in bad:
+        print("  **%s:%s** %s" % (f, ln, m))
+    return len(bad)
+
+
 def sh_lint():
     """셸 스크립트의 **줄 중간 리터럴 backslash-n** 을 잡는다.
 
@@ -66,6 +91,7 @@ def sh_lint():
 
 
 def main():
+    n_py = py_syntax()
     n_sh = sh_lint()
     print("")
     files = sorted(os.path.basename(f) for f in glob.glob(os.path.join(ROOT, "tools", "*.py")))
@@ -114,7 +140,7 @@ def main():
         print("")
         print("※ 인자가 꼭 필요한 도구라면 SKIP 에 이유와 함께 넣는다. 그냥 두면")
         print("  다음 점검에서 또 «실패» 로 뜨고, 진짜 고장과 구분이 안 된다.")
-    return 1 if (bad or n_sh) else 0
+    return 1 if (bad or n_sh or n_py) else 0
 
 
 if __name__ == "__main__":
