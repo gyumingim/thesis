@@ -28,6 +28,13 @@ sys.path.insert(0, os.path.join(ROOT, "bench"))
 EGO = slice(0, 9)
 NAVI = slice(9, 19)
 OTHER_BASE, OTHER_DIM, N_OTHERS = 19, 4, 8
+# ego/navi 차원 이름 — bench/env_numba.py 의 관측 채움 코드에서 가져왔다.
+# 「ego 가 중요하다」를 「어느 칸이 어긋났다」로 내리려면 이름이 있어야 한다.
+EGO_NAMES = ["0 좌측 가장자리까지", "1 우측 가장자리까지", "2 차선 대비 heading",
+             "3 속도", "4 직전 조향", "5 직전 조향(중복)", "6 직전 가속",
+             "7 heading 변화율", "8 차선중심 횡위치"]
+NAVI_NAMES = ["%d navi" % i for i in range(10)]
+
 # bench/slot_ablation.py 실측 (2026-09-23, V=3, 5시드)
 DEPEND = {"ego": 77.7, "navi": 58.7, "주변차 점유": 34.3, "주변차 위치값": 2.2}
 
@@ -108,6 +115,16 @@ def main():
             ("주변차(점유 슬롯)", occ_z, DEPEND["주변차 위치값"])]
     for name, zv, dep in rows:
         print("  %-16s %10.2f %12.1f %12.1f" % (name, zv, dep, zv * dep))
+    print("")
+    print("ego 차원별 이동 — 「어느 칸이 어긋났는가」")
+    zc = z.mean(axis=0)
+    order = np.argsort(-zc[EGO])
+    for i in order:
+        bar = "#" * int(round(zc[i] * 20))
+        print("  %-22s %6.2f  %s" % (EGO_NAMES[i], zc[i], bar))
+    print("  ※ 같은 블록 안에서도 칸마다 다르다. 위쪽 두세 칸이 ego 이동을 지배하면")
+    print("    정합의 표적은 «ego» 가 아니라 **그 칸들**이다.")
+
     print("")
     print("점유율 — 「있는가」 채널 자체의 이동")
     print("  소스 %.1f%% · 타깃 %.1f%% (차이 %+.1f%%p, 의존 Δ %.1f%%p)"

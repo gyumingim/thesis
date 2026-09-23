@@ -699,6 +699,12 @@ def main():
             _z = ("**%s**" % _m6.group(1)) if _bold else _m6.group(1)
             _mk11("%s 행" % _lab,
                   "| %s | %s | %s | **%s** |" % (_lab, _z, _m6.group(2), _m6.group(3)))
+        # ego 차원별 — 「현재 조향 0.01 대 직전 조향 0.76」이 구조적 주장의 근거다.
+        for _nm, _lab in (("7 heading 변화율", "요각속도"), ("5 직전 조향\(중복\)", "직전 조향"),
+                          ("4 직전 조향", "현재 조향")):
+            _m8 = re.search(r"^  " + _nm + r"\s+([0-9.]+)", _bt, re.M)
+            if _m8:
+                _mk11("ego %s" % _lab, "%s %s" % (_lab, _m8.group(1)))
         _m7 = re.search(r"소스 ([0-9.]+)% · 타깃 ([0-9.]+)% \(차이 ([-+0-9.]+)%p", _bt)
         _mk11("점유 이동", "소스 %s%% 대 타깃 %s%%" % (_m7.group(1), _m7.group(2)))
         _mk11("점유 차이", "(**%s%%p**)" % _m7.group(3).replace("-", chr(8722)))
